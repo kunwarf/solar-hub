@@ -719,7 +719,7 @@ tcp-keepalive 300
 supervised systemd
 pidfile /run/redis/redis-server.pid
 loglevel notice
-logfile /var/log/redis/redis-server.log
+# logfile /var/log/redis/redis-server.log  # Commented out - use systemd journal for better error visibility
 databases 16
 
 # Snapshotting
@@ -763,7 +763,8 @@ EOF
     
     # Test Redis configuration by trying to start it directly to capture errors
     log_info "Testing Redis configuration..."
-    REDIS_TEST_OUTPUT=$(timeout 3 sudo -u redis redis-server /etc/redis/redis.conf 2>&1 || true)
+    # Capture both stdout and stderr, run in background briefly to see startup errors
+    REDIS_TEST_OUTPUT=$(timeout 5 bash -c "sudo -u redis /usr/bin/redis-server /etc/redis/redis.conf 2>&1" || true)
     
     if echo "$REDIS_TEST_OUTPUT" | grep -qi "error\|fatal\|failed"; then
         log_error "Redis configuration has errors:"
@@ -803,7 +804,9 @@ EOF
             log_error "=== Systemd Status ==="
             systemctl status redis-server --no-pager -l || true
             log_error "=== Redis Direct Error Test ==="
-            sudo -u redis redis-server /etc/redis/redis.conf 2>&1 | head -30 || true
+            sudo -u redis /usr/bin/redis-server /etc/redis/redis.conf 2>&1 | head -30 || true
+            log_error "=== Redis Log File (if exists) ==="
+            tail -30 /var/log/redis/redis-server.log 2>/dev/null || echo "No log file found"
             log_error "=== Configuration File Check ==="
             log_error "Redis data directory setting:"
             grep "^dir " /etc/redis/redis.conf || echo "No dir setting found"
@@ -817,7 +820,9 @@ EOF
     else
         log_error "Failed to start Redis service via systemd"
         log_error "=== Direct Redis Start Test ==="
-        sudo -u redis redis-server /etc/redis/redis.conf 2>&1 | head -30 || true
+        sudo -u redis /usr/bin/redis-server /etc/redis/redis.conf 2>&1 | head -30 || true
+        log_error "=== Check Redis Log File ==="
+        tail -30 /var/log/redis/redis-server.log 2>/dev/null || echo "No log file found"
         exit 1
     fi
 }
