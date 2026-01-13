@@ -70,11 +70,13 @@ setup_system() {
     # Clean up any conflicting Docker repository configurations before updating package lists
     log_info "Cleaning up any conflicting repository configurations..."
     
-    # Remove all Docker-related repository files
+    # Remove all Docker-related repository files (both .list and .sources formats)
     rm -f /etc/apt/sources.list.d/docker*.list
     rm -f /etc/apt/sources.list.d/docker*.list.save
     rm -f /etc/apt/sources.list.d/docker*.list.dpkg-old
     rm -f /etc/apt/sources.list.d/docker*.list.dpkg-dist
+    rm -f /etc/apt/sources.list.d/docker*.sources
+    rm -f /etc/apt/sources.list.d/omvdocker.sources  # OpenMediaVault Docker sources
     
     # Remove all Docker GPG keys from various locations
     rm -f /etc/apt/keyrings/docker.asc
@@ -90,9 +92,18 @@ setup_system() {
         sed -i '/docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
     fi
     
-    # Remove Docker entries from any other sources files
+    # Remove Docker entries from any other sources files (.list format)
     find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/download\.docker\.com/d' {} \; 2>/dev/null || true
     find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/docker\.com/d' {} \; 2>/dev/null || true
+    
+    # Remove any .sources files that contain Docker references
+    for sources_file in /etc/apt/sources.list.d/*.sources; do
+        [ ! -e "$sources_file" ] && continue
+        if grep -qi "docker\|download.docker.com" "$sources_file" 2>/dev/null; then
+            log_warn "Removing Docker .sources file: $sources_file"
+            rm -f "$sources_file"
+        fi
+    done
     
     log_info "Repository cleanup completed"
 
@@ -196,11 +207,13 @@ install_docker() {
         # Clean up any existing Docker repository configurations to avoid conflicts
         log_info "Cleaning up any existing Docker repository configurations..."
         
-        # Remove all Docker-related repository files
+        # Remove all Docker-related repository files (both .list and .sources formats)
         rm -f /etc/apt/sources.list.d/docker*.list
         rm -f /etc/apt/sources.list.d/docker*.list.save
         rm -f /etc/apt/sources.list.d/docker*.list.dpkg-old
         rm -f /etc/apt/sources.list.d/docker*.list.dpkg-dist
+        rm -f /etc/apt/sources.list.d/docker*.sources
+        rm -f /etc/apt/sources.list.d/omvdocker.sources  # OpenMediaVault Docker sources
         
         # Remove all Docker GPG keys from various locations
         rm -f /etc/apt/keyrings/docker.asc
@@ -216,9 +229,18 @@ install_docker() {
             sed -i '/docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
         fi
         
-        # Remove Docker entries from any other sources files
+        # Remove Docker entries from any other sources files (.list format)
         find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/download\.docker\.com/d' {} \; 2>/dev/null || true
         find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/docker\.com/d' {} \; 2>/dev/null || true
+        
+        # Remove any .sources files that contain Docker references
+        for sources_file in /etc/apt/sources.list.d/*.sources; do
+            [ ! -e "$sources_file" ] && continue
+            if grep -qi "docker\|download.docker.com" "$sources_file" 2>/dev/null; then
+                log_warn "Removing Docker .sources file: $sources_file"
+                rm -f "$sources_file"
+            fi
+        done
         
         # Remove any entries that reference the old keyring location
         find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/usr\/share\/keyrings\/docker/d' {} \; 2>/dev/null || true
@@ -238,7 +260,7 @@ install_docker() {
         
         # Aggressive cleanup: Remove ANY file that contains docker.com or docker references
         log_info "Performing aggressive cleanup of Docker references..."
-        for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list.d/*.save; do
+        for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list.d/*.save /etc/apt/sources.list.d/*.sources; do
             [ ! -e "$file" ] && continue  # Skip if file doesn't exist
             if [ -f "$file" ] && grep -qi "docker\|download.docker.com" "$file" 2>/dev/null; then
                 log_warn "Removing file with Docker references: $file"
@@ -296,7 +318,7 @@ install_docker() {
         
         # Comprehensive check: List all repository files and their Docker-related content
         log_info "Checking all repository files for Docker references..."
-        for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list; do
+        for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list.d/*.sources /etc/apt/sources.list; do
             [ ! -e "$file" ] && continue  # Skip if file doesn't exist
             if [ -f "$file" ]; then
                 if grep -qi "docker\|download.docker.com" "$file" 2>/dev/null; then
