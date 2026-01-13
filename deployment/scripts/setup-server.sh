@@ -3,6 +3,10 @@
 # Solar Hub - Production Server Setup Script
 # For Debian 11/12 with 64GB RAM, 24+ CPU cores
 #===============================================================================
+if ! grep -qi debian /etc/os-release; then
+  echo "[ERROR] This installer supports Debian only"
+  exit 1
+fi
 
 set -e  # Exit on error
 
