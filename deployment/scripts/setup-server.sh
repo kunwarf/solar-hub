@@ -38,9 +38,24 @@ REDIS_VERSION="7"
 # Example: POSTGRES_DATA_DIR="/mnt/raid/postgresql"
 # Example: REDIS_DATA_DIR="/mnt/raid/redis"
 # Example: MOSQUITTO_DATA_DIR="/mnt/raid/mosquitto"
-POSTGRES_DATA_DIR=""  # Leave empty for default: /var/lib/postgresql
-REDIS_DATA_DIR=""     # Leave empty for default: /var/lib/redis
-MOSQUITTO_DATA_DIR="" # Leave empty for default: /var/lib/mosquitto
+# Default: Use /mnt/md1 (RAID1 array) if available, otherwise use system defaults
+# Note: This auto-detection happens at script start, you can override by setting variables before running
+RAID_MOUNT=""
+if [ -d "/mnt/md1" ] && mountpoint -q "/mnt/md1" 2>/dev/null; then
+    RAID_MOUNT="/mnt/md1"
+elif [ -d "/mnt/raid" ] && mountpoint -q "/mnt/raid" 2>/dev/null; then
+    RAID_MOUNT="/mnt/raid"
+fi
+
+if [ -n "$RAID_MOUNT" ]; then
+    POSTGRES_DATA_DIR="$RAID_MOUNT/postgresql"   # RAID array location
+    REDIS_DATA_DIR="$RAID_MOUNT/redis"           # RAID array location
+    MOSQUITTO_DATA_DIR="$RAID_MOUNT/mosquitto"   # RAID array location
+else
+    POSTGRES_DATA_DIR=""  # Leave empty for default: /var/lib/postgresql
+    REDIS_DATA_DIR=""     # Leave empty for default: /var/lib/redis
+    MOSQUITTO_DATA_DIR="" # Leave empty for default: /var/lib/mosquitto
+fi
 
 # Logging
 LOG_FILE="/var/log/solarhub-setup.log"
@@ -452,7 +467,12 @@ install_postgresql() {
     apt-get install -y postgresql-$POSTGRES_VERSION timescaledb-2-postgresql-$POSTGRES_VERSION timescaledb-tools
     
     # Configure custom data directory for PostgreSQL if specified
-    if [ -n "$POSTGRES_DATA_DIR" ] && [ -d "$POSTGRES_DATA_DIR" ]; then
+    if [ -n "$POSTGRES_DATA_DIR" ]; then
+        # Check if parent directory (mount point) exists
+        PARENT_DIR=$(dirname "$POSTGRES_DATA_DIR")
+        if [ ! -d "$PARENT_DIR" ]; then
+            log_warn "Parent directory $PARENT_DIR does not exist, skipping custom PostgreSQL data directory"
+        else
         log_info "Configuring PostgreSQL to use custom data directory: $POSTGRES_DATA_DIR"
         systemctl stop postgresql
         
@@ -461,14 +481,30 @@ install_postgresql() {
         chown -R postgres:postgres "$POSTGRES_DATA_DIR"
         chmod 700 "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main"
         
-        # Move existing data if default location has data, otherwise initialize
+        # Check current data directory location
+        CURRENT_DATA_DIR=$(grep "^data_directory" /etc/postgresql/$POSTGRES_VERSION/main/postgresql.conf 2>/dev/null | cut -d"'" -f2)
         DEFAULT_DATA_DIR="/var/lib/postgresql/$POSTGRES_VERSION/main"
-        if [ -d "$DEFAULT_DATA_DIR" ] && [ -f "$DEFAULT_DATA_DIR/PG_VERSION" ]; then
-            log_info "Moving existing PostgreSQL data to RAID..."
-            sudo -u postgres cp -a "$DEFAULT_DATA_DIR"/* "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main/" 2>/dev/null || true
+        
+        # Use current location if configured, otherwise use default
+        SOURCE_DIR="${CURRENT_DATA_DIR:-$DEFAULT_DATA_DIR}"
+        
+        # Move existing data if source location has data
+        if [ -d "$SOURCE_DIR" ] && [ -f "$SOURCE_DIR/PG_VERSION" ]; then
+            log_info "Migrating existing PostgreSQL data from $SOURCE_DIR to RAID..."
+            log_info "This may take a while depending on database size..."
+            
+            # Copy data with proper permissions
+            sudo -u postgres rsync -av "$SOURCE_DIR/" "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main/" 2>/dev/null || \
+            sudo -u postgres cp -a "$SOURCE_DIR"/* "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main/" 2>/dev/null || {
+                log_warn "Data copy had issues, but continuing..."
+            }
+            
+            log_info "PostgreSQL data migration completed"
         elif [ ! -f "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main/PG_VERSION" ]; then
-            log_info "Initializing PostgreSQL data directory on RAID..."
+            log_info "Initializing new PostgreSQL data directory on RAID..."
             sudo -u postgres /usr/lib/postgresql/$POSTGRES_VERSION/bin/initdb -D "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main"
+        else
+            log_info "PostgreSQL data directory already exists on RAID"
         fi
         
         # Update postgresql.conf to use custom data directory
@@ -479,6 +515,7 @@ install_postgresql() {
         fi
         
         log_info "PostgreSQL data directory configured to use: $POSTGRES_DATA_DIR/$POSTGRES_VERSION/main"
+        fi
     fi
 
     # Run TimescaleDB tuning
@@ -594,12 +631,17 @@ install_redis() {
     
     # Configure custom data directory for Redis if specified
     REDIS_DIR="/var/lib/redis"
-    if [ -n "$REDIS_DATA_DIR" ] && [ -d "$REDIS_DATA_DIR" ]; then
+    if [ -n "$REDIS_DATA_DIR" ]; then
+        PARENT_DIR=$(dirname "$REDIS_DATA_DIR")
+        if [ ! -d "$PARENT_DIR" ]; then
+            log_warn "Parent directory $PARENT_DIR does not exist, using default Redis data directory"
+        else
         log_info "Configuring Redis to use custom data directory: $REDIS_DATA_DIR"
         REDIS_DIR="$REDIS_DATA_DIR"
         mkdir -p "$REDIS_DIR"
         chown redis:redis "$REDIS_DIR"
         chmod 755 "$REDIS_DIR"
+        fi
     fi
 
     # Configure Redis for production
@@ -675,12 +717,26 @@ install_mosquitto() {
     
     # Configure custom data directory for Mosquitto if specified
     MOSQUITTO_DIR="/var/lib/mosquitto"
-    if [ -n "$MOSQUITTO_DATA_DIR" ] && [ -d "$MOSQUITTO_DATA_DIR" ]; then
+    if [ -n "$MOSQUITTO_DATA_DIR" ]; then
+        PARENT_DIR=$(dirname "$MOSQUITTO_DATA_DIR")
+        if [ ! -d "$PARENT_DIR" ]; then
+            log_warn "Parent directory $PARENT_DIR does not exist, using default Mosquitto data directory"
+        else
         log_info "Configuring Mosquitto to use custom data directory: $MOSQUITTO_DATA_DIR"
         MOSQUITTO_DIR="$MOSQUITTO_DATA_DIR"
         mkdir -p "$MOSQUITTO_DIR"
         chown mosquitto:mosquitto "$MOSQUITTO_DIR"
         chmod 755 "$MOSQUITTO_DIR"
+        
+        # Migrate existing Mosquitto data if it exists
+        DEFAULT_MOSQUITTO_DIR="/var/lib/mosquitto"
+        if [ -d "$DEFAULT_MOSQUITTO_DIR" ] && [ "$(ls -A $DEFAULT_MOSQUITTO_DIR 2>/dev/null)" ]; then
+            log_info "Migrating existing Mosquitto data to RAID..."
+            cp -a "$DEFAULT_MOSQUITTO_DIR"/* "$MOSQUITTO_DIR/" 2>/dev/null || true
+            chown -R mosquitto:mosquitto "$MOSQUITTO_DIR"
+            log_info "Mosquitto data migration completed"
+        fi
+        fi
     fi
 
     # Create password file
@@ -1366,6 +1422,16 @@ main() {
 
     check_root
     get_server_ip
+    
+    # Log RAID configuration if detected
+    if [ -n "$RAID_MOUNT" ]; then
+        log_info "RAID array detected at $RAID_MOUNT - data directories will be configured on RAID"
+        log_info "  PostgreSQL: $POSTGRES_DATA_DIR"
+        log_info "  Redis: $REDIS_DATA_DIR"
+        log_info "  Mosquitto: $MOSQUITTO_DATA_DIR"
+    else
+        log_info "No RAID array detected - using default data directories"
+    fi
 
     setup_system
     create_user
