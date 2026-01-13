@@ -69,22 +69,50 @@ setup_system() {
 
     # Clean up any conflicting Docker repository configurations before updating package lists
     log_info "Cleaning up any conflicting repository configurations..."
-    rm -f /etc/apt/sources.list.d/docker.list
+    
+    # Remove all Docker-related repository files
+    rm -f /etc/apt/sources.list.d/docker*.list
+    rm -f /etc/apt/sources.list.d/docker*.list.save
+    rm -f /etc/apt/sources.list.d/docker*.list.dpkg-old
+    rm -f /etc/apt/sources.list.d/docker*.list.dpkg-dist
+    
+    # Remove all Docker GPG keys from various locations
     rm -f /etc/apt/keyrings/docker.asc
-    rm -f /usr/share/keyrings/docker.gpg
-    rm -f /etc/apt/sources.list.d/docker.list.save
-    sed -i '/download\.docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+    rm -f /etc/apt/keyrings/docker.gpg
+    rm -f /usr/share/keyrings/docker*.asc
+    rm -f /usr/share/keyrings/docker*.gpg
+    rm -f /etc/apt/trusted.gpg.d/docker*.gpg
+    rm -f /etc/apt/trusted.gpg.d/docker*.asc
+    
+    # Remove Docker entries from main sources.list
+    if [ -f /etc/apt/sources.list ]; then
+        sed -i '/download\.docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+        sed -i '/docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+    fi
+    
+    # Remove Docker entries from any other sources files
+    find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/download\.docker\.com/d' {} \; 2>/dev/null || true
+    find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/docker\.com/d' {} \; 2>/dev/null || true
+    
+    log_info "Repository cleanup completed"
 
     # Update package lists with retry logic
     log_info "Updating package lists..."
-    if ! apt-get update; then
+    if ! apt-get update 2>&1 | tee /tmp/apt-update-error.log; then
         log_error "Failed to update package lists. Trying again..."
         sleep 2
-        apt-get update || {
-            log_error "Package list update failed. Please check your network connection and repository configuration."
+        if ! apt-get update 2>&1 | tee -a /tmp/apt-update-error.log; then
+            log_error "Package list update failed after cleanup attempts."
+            log_error "Please manually fix Docker repository conflicts:"
+            log_error "  rm -f /etc/apt/sources.list.d/docker*.list*"
+            log_error "  rm -f /etc/apt/keyrings/docker* /usr/share/keyrings/docker*"
+            log_error "  sed -i '/docker\.com/d' /etc/apt/sources.list"
+            log_error "  apt-get update"
+            log_error "Error details saved to /tmp/apt-update-error.log"
             exit 1
-        }
+        fi
     fi
+    rm -f /tmp/apt-update-error.log
 
     # Upgrade system packages (non-interactive)
     log_info "Upgrading system packages..."
