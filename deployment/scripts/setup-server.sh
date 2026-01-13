@@ -157,18 +157,35 @@ install_docker() {
         log_warn "Docker already installed"
         docker --version
     else
+        # Clean up any existing Docker repository configurations to avoid conflicts
+        log_info "Cleaning up any existing Docker repository configurations..."
+        rm -f /etc/apt/sources.list.d/docker.list
+        rm -f /etc/apt/keyrings/docker.asc
+        rm -f /usr/share/keyrings/docker.gpg
+        rm -f /etc/apt/sources.list.d/docker.list.save
+        
+        # Remove any old Docker repository entries from sources.list
+        sed -i '/download\.docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+
         # Add Docker's official GPG key
+        log_info "Adding Docker's official GPG key..."
         install -m 0755 -d /etc/apt/keyrings
         curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
         chmod a+r /etc/apt/keyrings/docker.asc
 
         # Add repository
+        log_info "Adding Docker repository..."
         echo \
           "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
           $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
           tee /etc/apt/sources.list.d/docker.list > /dev/null
 
+        # Update package lists
+        log_info "Updating package lists..."
         apt-get update
+
+        # Install Docker
+        log_info "Installing Docker..."
         apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
         # Add user to docker group
