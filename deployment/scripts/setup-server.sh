@@ -262,12 +262,18 @@ install_docker() {
         curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
         chmod a+r /etc/apt/keyrings/docker.asc
 
+        # Remove our docker.list if it exists (we'll recreate it cleanly)
+        rm -f /etc/apt/sources.list.d/docker.list
+        
         # Add repository
         log_info "Adding Docker repository..."
         echo \
           "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
           $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
           tee /etc/apt/sources.list.d/docker.list > /dev/null
+        
+        # Ensure the file has correct permissions
+        chmod 644 /etc/apt/sources.list.d/docker.list
 
         # Verify no conflicting Docker entries exist
         log_info "Verifying no conflicting Docker entries..."
@@ -285,16 +291,61 @@ install_docker() {
             log_error "Removing files with old keyring references..."
             grep -rl "usr/share/keyrings/docker" /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f 2>/dev/null || true
         fi
+        
+        # Comprehensive check: List all repository files and their Docker-related content
+        log_info "Checking all repository files for Docker references..."
+        for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list 2>/dev/null; do
+            if [ -f "$file" ]; then
+                if grep -qi "docker\|download.docker.com" "$file" 2>/dev/null; then
+                    log_warn "Found Docker reference in $file:"
+                    grep -i "docker\|download.docker.com" "$file" 2>/dev/null || true
+                    # If it's not our new docker.list file, remove it
+                    if [ "$file" != "/etc/apt/sources.list.d/docker.list" ] && [ "$file" != "/etc/apt/sources.list.d/docker.list.save" ]; then
+                        log_warn "Removing conflicting file: $file"
+                        rm -f "$file"
+                    fi
+                fi
+            fi
+        done
+        
+        # Final check: Remove ANY file that has signed-by pointing to old keyring
+        log_info "Final check for old keyring references..."
+        for file in /etc/apt/sources.list.d/* 2>/dev/null; do
+            if [ -f "$file" ] && grep -q "signed-by.*usr/share/keyrings/docker" "$file" 2>/dev/null; then
+                log_error "Found file with old keyring signed-by: $file"
+                cat "$file" || true
+                rm -f "$file"
+            fi
+        done
+        
+        # Use apt-config to check what apt sees (if available)
+        if command -v apt-config &>/dev/null; then
+            log_info "Checking apt configuration for Docker repositories..."
+            apt-config dump | grep -i docker || log_info "No Docker entries in apt-config"
+        fi
+        
+        # List all .list files to verify
+        log_info "Repository files after cleanup:"
+        ls -la /etc/apt/sources.list.d/*.list 2>/dev/null || true
 
         # Update package lists
         log_info "Updating package lists..."
-        if ! apt-get update; then
+        if ! apt-get update 2>&1 | tee /tmp/docker-apt-update.log; then
             log_error "Failed to update package lists after Docker repository setup."
             log_error "Checking for remaining conflicts..."
+            echo "=== All files in sources.list.d ==="
+            ls -la /etc/apt/sources.list.d/ 2>/dev/null || true
+            echo "=== Docker references in all files ==="
             grep -r "docker" /etc/apt/sources.list.d/ 2>/dev/null || true
             grep "docker" /etc/apt/sources.list 2>/dev/null || true
+            echo "=== Contents of docker.list ==="
+            cat /etc/apt/sources.list.d/docker.list 2>/dev/null || true
+            echo "=== Full error log ==="
+            cat /tmp/docker-apt-update.log 2>/dev/null || true
+            log_error "Please manually remove all Docker repository files and try again"
             exit 1
         fi
+        rm -f /tmp/docker-apt-update.log
 
         # Install Docker
         log_info "Installing Docker..."
