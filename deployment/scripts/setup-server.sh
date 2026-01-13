@@ -63,18 +63,43 @@ get_server_ip() {
 setup_system() {
     log_section "Updating System and Installing Base Packages"
 
-    apt-get update
-    apt-get upgrade -y
+    # Update package lists with retry logic
+    log_info "Updating package lists..."
+    if ! apt-get update; then
+        log_error "Failed to update package lists. Trying again..."
+        sleep 2
+        apt-get update || {
+            log_error "Package list update failed. Please check your network connection and repository configuration."
+            exit 1
+        }
+    fi
 
-    apt-get install -y \
+    # Upgrade system packages (non-interactive)
+    log_info "Upgrading system packages..."
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y || log_warn "Some packages could not be upgraded"
+
+    # Install essential packages first (required for repository operations)
+    log_info "Installing essential packages..."
+    apt-get install -y --no-install-recommends \
         curl \
         wget \
         gnupg \
         lsb-release \
         ca-certificates \
         apt-transport-https \
-        software-properties-common \
-        git \
+        git
+
+    # Try to install software-properties-common (may not be available in all distros)
+    log_info "Installing software-properties-common (if available)..."
+    if apt-cache show software-properties-common &>/dev/null; then
+        apt-get install -y software-properties-common || log_warn "software-properties-common not available, skipping"
+    else
+        log_warn "software-properties-common not found in repositories, skipping"
+    fi
+
+    # Install remaining packages
+    log_info "Installing remaining system packages..."
+    apt-get install -y \
         htop \
         iotop \
         net-tools \
@@ -93,7 +118,10 @@ setup_system() {
         build-essential \
         libpq-dev \
         libffi-dev \
-        libssl-dev
+        libssl-dev || {
+        log_error "Failed to install some packages"
+        exit 1
+    }
 
     log_info "System packages installed successfully"
 }
