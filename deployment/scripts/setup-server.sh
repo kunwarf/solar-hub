@@ -195,13 +195,46 @@ install_docker() {
     else
         # Clean up any existing Docker repository configurations to avoid conflicts
         log_info "Cleaning up any existing Docker repository configurations..."
-        rm -f /etc/apt/sources.list.d/docker.list
-        rm -f /etc/apt/keyrings/docker.asc
-        rm -f /usr/share/keyrings/docker.gpg
-        rm -f /etc/apt/sources.list.d/docker.list.save
         
-        # Remove any old Docker repository entries from sources.list
-        sed -i '/download\.docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+        # Remove all Docker-related repository files
+        rm -f /etc/apt/sources.list.d/docker*.list
+        rm -f /etc/apt/sources.list.d/docker*.list.save
+        rm -f /etc/apt/sources.list.d/docker*.list.dpkg-old
+        rm -f /etc/apt/sources.list.d/docker*.list.dpkg-dist
+        
+        # Remove all Docker GPG keys from various locations
+        rm -f /etc/apt/keyrings/docker.asc
+        rm -f /etc/apt/keyrings/docker.gpg
+        rm -f /usr/share/keyrings/docker*.asc
+        rm -f /usr/share/keyrings/docker*.gpg
+        rm -f /etc/apt/trusted.gpg.d/docker*.gpg
+        rm -f /etc/apt/trusted.gpg.d/docker*.asc
+        
+        # Remove Docker entries from main sources.list
+        if [ -f /etc/apt/sources.list ]; then
+            sed -i '/download\.docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+            sed -i '/docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+        fi
+        
+        # Remove Docker entries from any other sources files
+        find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/download\.docker\.com/d' {} \; 2>/dev/null || true
+        find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/docker\.com/d' {} \; 2>/dev/null || true
+        
+        # Remove any entries that reference the old keyring location
+        find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/usr\/share\/keyrings\/docker/d' {} \; 2>/dev/null || true
+        find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i '/signed-by.*docker/d' {} \; 2>/dev/null || true
+        
+        # Verify no Docker entries remain
+        if grep -r "docker.com" /etc/apt/sources.list.d/ 2>/dev/null || grep "docker.com" /etc/apt/sources.list 2>/dev/null; then
+            log_warn "Some Docker repository entries may still exist, attempting additional cleanup..."
+            find /etc/apt/sources.list.d/ -type f -exec sed -i '/docker/d' {} \; 2>/dev/null || true
+        fi
+        
+        # Final verification - check for any signed-by references to old keyring
+        if grep -r "signed-by.*docker" /etc/apt/sources.list.d/ 2>/dev/null; then
+            log_warn "Found Docker keyring references, removing affected files..."
+            grep -rl "signed-by.*docker" /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f 2>/dev/null || true
+        fi
 
         # Add Docker's official GPG key
         log_info "Adding Docker's official GPG key..."
@@ -218,7 +251,13 @@ install_docker() {
 
         # Update package lists
         log_info "Updating package lists..."
-        apt-get update
+        if ! apt-get update; then
+            log_error "Failed to update package lists after Docker repository setup."
+            log_error "Checking for remaining conflicts..."
+            grep -r "docker" /etc/apt/sources.list.d/ 2>/dev/null || true
+            grep "docker" /etc/apt/sources.list 2>/dev/null || true
+            exit 1
+        fi
 
         # Install Docker
         log_info "Installing Docker..."
