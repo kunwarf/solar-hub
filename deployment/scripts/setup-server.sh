@@ -38,16 +38,48 @@ REDIS_VERSION="7"
 # Example: POSTGRES_DATA_DIR="/mnt/raid/postgresql"
 # Example: REDIS_DATA_DIR="/mnt/raid/redis"
 # Example: MOSQUITTO_DATA_DIR="/mnt/raid/mosquitto"
-# Default: Use /mnt/md1 (RAID1 array) if available, otherwise use system defaults
+# Default: Auto-detect RAID mount points (md1, md0, or common mount locations)
 # Note: This auto-detection happens at script start, you can override by setting variables before running
-RAID_MOUNT=""
-if [ -d "/mnt/md1" ] && mountpoint -q "/mnt/md1" 2>/dev/null; then
-    RAID_MOUNT="/mnt/md1"
-elif [ -d "/mnt/raid" ] && mountpoint -q "/mnt/raid" 2>/dev/null; then
-    RAID_MOUNT="/mnt/raid"
-fi
 
-if [ -n "$RAID_MOUNT" ]; then
+RAID_MOUNT=""
+
+# Function to detect RAID mount point
+detect_raid_mount() {
+    # Check for md1 (RAID1) - typically the faster/faster array
+    if [ -b /dev/md1 ]; then
+        # Find where md1 is mounted
+        MD1_MOUNT=$(mount | grep "/dev/md1" | awk '{print $3}' | head -1)
+        if [ -n "$MD1_MOUNT" ] && [ -d "$MD1_MOUNT" ] && mountpoint -q "$MD1_MOUNT" 2>/dev/null; then
+            RAID_MOUNT="$MD1_MOUNT"
+            return 0
+        fi
+    fi
+    
+    # Check for md0 (RAID1) as fallback
+    if [ -b /dev/md0 ]; then
+        MD0_MOUNT=$(mount | grep "/dev/md0" | awk '{print $3}' | head -1)
+        if [ -n "$MD0_MOUNT" ] && [ -d "$MD0_MOUNT" ] && mountpoint -q "$MD0_MOUNT" 2>/dev/null; then
+            RAID_MOUNT="$MD0_MOUNT"
+            return 0
+        fi
+    fi
+    
+    # Check common mount points
+    for mount_point in /mnt/md1 /mnt/raid /mnt/storage /mnt/data; do
+        if [ -d "$mount_point" ] && mountpoint -q "$mount_point" 2>/dev/null; then
+            # Verify it's actually a RAID device
+            if mount | grep -q "$mount_point.*md[0-9]"; then
+                RAID_MOUNT="$mount_point"
+                return 0
+            fi
+        fi
+    done
+    
+    return 1
+}
+
+# Detect RAID mount point
+if detect_raid_mount; then
     POSTGRES_DATA_DIR="$RAID_MOUNT/postgresql"   # RAID array location
     REDIS_DATA_DIR="$RAID_MOUNT/redis"           # RAID array location
     MOSQUITTO_DATA_DIR="$RAID_MOUNT/mosquitto"   # RAID array location
@@ -1425,7 +1457,10 @@ main() {
     
     # Log RAID configuration if detected
     if [ -n "$RAID_MOUNT" ]; then
-        log_info "RAID array detected at $RAID_MOUNT - data directories will be configured on RAID"
+        # Get the device name for the mount point
+        RAID_DEVICE=$(mount | grep "$RAID_MOUNT" | awk '{print $1}' | head -1)
+        log_info "RAID array detected: $RAID_DEVICE mounted at $RAID_MOUNT"
+        log_info "Data directories will be configured on RAID:"
         log_info "  PostgreSQL: $POSTGRES_DATA_DIR"
         log_info "  Redis: $REDIS_DATA_DIR"
         log_info "  Mosquitto: $MOSQUITTO_DATA_DIR"
