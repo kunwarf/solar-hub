@@ -2,6 +2,15 @@
 #===============================================================================
 # Solar Hub - Production Server Setup Script
 # For Debian 11/12 with 64GB RAM, 24+ CPU cores
+#
+# RAID Configuration:
+# To use RAID arrays for data storage, set the following variables before running:
+#   POSTGRES_DATA_DIR="/mnt/raid/postgresql"   # PostgreSQL data directory
+#   REDIS_DATA_DIR="/mnt/raid/redis"           # Redis data directory  
+#   MOSQUITTO_DATA_DIR="/mnt/raid/mosquitto"   # Mosquitto data directory
+# 
+# Example: export POSTGRES_DATA_DIR="/mnt/raid/postgresql" && ./setup-server.sh
+# Or edit the variables in the Configuration section below.
 #===============================================================================
 if ! grep -qi debian /etc/os-release; then
   echo "[ERROR] This installer supports Debian only"
@@ -23,6 +32,15 @@ SOLARHUB_HOME="/opt/solarhub"
 SOLARHUB_REPO="https://github.com/YOUR_USERNAME/solar-hub.git"  # Update this
 POSTGRES_VERSION="16"
 REDIS_VERSION="7"
+
+# Data Directory Configuration (for RAID arrays)
+# Set these to point to your RAID mount points, or leave empty to use defaults
+# Example: POSTGRES_DATA_DIR="/mnt/raid/postgresql"
+# Example: REDIS_DATA_DIR="/mnt/raid/redis"
+# Example: MOSQUITTO_DATA_DIR="/mnt/raid/mosquitto"
+POSTGRES_DATA_DIR=""  # Leave empty for default: /var/lib/postgresql
+REDIS_DATA_DIR=""     # Leave empty for default: /var/lib/redis
+MOSQUITTO_DATA_DIR="" # Leave empty for default: /var/lib/mosquitto
 
 # Logging
 LOG_FILE="/var/log/solarhub-setup.log"
@@ -432,6 +450,36 @@ install_postgresql() {
 
     apt-get update
     apt-get install -y postgresql-$POSTGRES_VERSION timescaledb-2-postgresql-$POSTGRES_VERSION timescaledb-tools
+    
+    # Configure custom data directory for PostgreSQL if specified
+    if [ -n "$POSTGRES_DATA_DIR" ] && [ -d "$POSTGRES_DATA_DIR" ]; then
+        log_info "Configuring PostgreSQL to use custom data directory: $POSTGRES_DATA_DIR"
+        systemctl stop postgresql
+        
+        # Create data directory structure
+        mkdir -p "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main"
+        chown -R postgres:postgres "$POSTGRES_DATA_DIR"
+        chmod 700 "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main"
+        
+        # Move existing data if default location has data, otherwise initialize
+        DEFAULT_DATA_DIR="/var/lib/postgresql/$POSTGRES_VERSION/main"
+        if [ -d "$DEFAULT_DATA_DIR" ] && [ -f "$DEFAULT_DATA_DIR/PG_VERSION" ]; then
+            log_info "Moving existing PostgreSQL data to RAID..."
+            sudo -u postgres cp -a "$DEFAULT_DATA_DIR"/* "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main/" 2>/dev/null || true
+        elif [ ! -f "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main/PG_VERSION" ]; then
+            log_info "Initializing PostgreSQL data directory on RAID..."
+            sudo -u postgres /usr/lib/postgresql/$POSTGRES_VERSION/bin/initdb -D "$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main"
+        fi
+        
+        # Update postgresql.conf to use custom data directory
+        if ! grep -q "^data_directory" /etc/postgresql/$POSTGRES_VERSION/main/postgresql.conf; then
+            echo "data_directory = '$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main'" >> /etc/postgresql/$POSTGRES_VERSION/main/postgresql.conf
+        else
+            sed -i "s|^data_directory =.*|data_directory = '$POSTGRES_DATA_DIR/$POSTGRES_VERSION/main'|" /etc/postgresql/$POSTGRES_VERSION/main/postgresql.conf
+        fi
+        
+        log_info "PostgreSQL data directory configured to use: $POSTGRES_DATA_DIR/$POSTGRES_VERSION/main"
+    fi
 
     # Run TimescaleDB tuning
     log_info "Running TimescaleDB tuning..."
@@ -543,6 +591,16 @@ install_redis() {
     log_section "Installing Redis"
 
     apt-get install -y redis-server
+    
+    # Configure custom data directory for Redis if specified
+    REDIS_DIR="/var/lib/redis"
+    if [ -n "$REDIS_DATA_DIR" ] && [ -d "$REDIS_DATA_DIR" ]; then
+        log_info "Configuring Redis to use custom data directory: $REDIS_DATA_DIR"
+        REDIS_DIR="$REDIS_DATA_DIR"
+        mkdir -p "$REDIS_DIR"
+        chown redis:redis "$REDIS_DIR"
+        chmod 755 "$REDIS_DIR"
+    fi
 
     # Configure Redis for production
     cat > /etc/redis/redis.conf <<EOF
@@ -573,7 +631,7 @@ stop-writes-on-bgsave-error yes
 rdbcompression yes
 rdbchecksum yes
 dbfilename dump.rdb
-dir /var/lib/redis
+dir $REDIS_DIR
 
 # Security
 requirepass CHANGE_THIS_REDIS_PASSWORD
@@ -614,6 +672,16 @@ install_mosquitto() {
     log_section "Installing Mosquitto MQTT Broker"
 
     apt-get install -y mosquitto mosquitto-clients
+    
+    # Configure custom data directory for Mosquitto if specified
+    MOSQUITTO_DIR="/var/lib/mosquitto"
+    if [ -n "$MOSQUITTO_DATA_DIR" ] && [ -d "$MOSQUITTO_DATA_DIR" ]; then
+        log_info "Configuring Mosquitto to use custom data directory: $MOSQUITTO_DATA_DIR"
+        MOSQUITTO_DIR="$MOSQUITTO_DATA_DIR"
+        mkdir -p "$MOSQUITTO_DIR"
+        chown mosquitto:mosquitto "$MOSQUITTO_DIR"
+        chmod 755 "$MOSQUITTO_DIR"
+    fi
 
     # Create password file
     touch /etc/mosquitto/passwd
@@ -648,7 +716,7 @@ acl_file /etc/mosquitto/acl
 
 # Persistence
 persistence true
-persistence_location /var/lib/mosquitto/
+persistence_location $MOSQUITTO_DIR/
 
 # Logging
 log_dest file /var/log/mosquitto/mosquitto.log
