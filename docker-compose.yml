@@ -1,0 +1,135 @@
+# Docker Compose for Solar Hub Development Environment
+version: '3.8'
+
+services:
+  # PostgreSQL for System A
+  postgres:
+    image: postgres:16-alpine
+    container_name: solarhub_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: solar_hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB for System B (Telemetry)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: solarhub_timescale
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: solar_hub_telemetry
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching, pub/sub, and streams
+  redis:
+    image: redis:7-alpine
+    container_name: solarhub_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker (for device communication)
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: solarhub_mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '#' -C 1 -W 1 || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # System A - Platform API
+  system_a:
+    build:
+      context: ./system_a
+      dockerfile: Dockerfile
+    container_name: solarhub_platform
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=solar_hub
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./system_a:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # System B - Telemetry API
+  system_b:
+    build:
+      context: ./system_b
+      dockerfile: Dockerfile
+    container_name: solarhub_telemetry
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - TIMESCALE_HOST=timescaledb
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_NAME=solar_hub_telemetry
+      - TIMESCALE_USER=postgres
+      - TIMESCALE_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      - PROTOCOL_MQTT_BROKER_HOST=mosquitto
+    ports:
+      - "8001:8001"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    volumes:
+      - ./system_b:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+volumes:
+  postgres_data:
+  timescale_data:
+  redis_data:
+  mosquitto_data:
+  mosquitto_log:

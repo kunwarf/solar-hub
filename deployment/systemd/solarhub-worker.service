@@ -1,0 +1,33 @@
+[Unit]
+Description=Solar Hub Background Workers
+Documentation=https://github.com/YOUR_USERNAME/solar-hub
+After=network.target postgresql.service redis-server.service mosquitto.service solarhub-telemetry.service
+Wants=postgresql.service redis-server.service mosquitto.service
+
+[Service]
+Type=exec
+User=solarhub
+Group=solarhub
+WorkingDirectory=/opt/solarhub/app/system_b
+Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/solarhub/app/.env
+ExecStart=/opt/solarhub/venv/bin/python -m app.workers.main
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/solarhub/logs/worker.log
+StandardError=append:/opt/solarhub/logs/worker-error.log
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/solarhub/logs /opt/solarhub/data
+
+# Resource Limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

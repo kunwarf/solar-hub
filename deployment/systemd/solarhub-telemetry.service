@@ -1,0 +1,37 @@
+[Unit]
+Description=Solar Hub Telemetry API (System B)
+Documentation=https://github.com/YOUR_USERNAME/solar-hub
+After=network.target postgresql.service redis-server.service mosquitto.service
+Wants=postgresql.service redis-server.service mosquitto.service
+
+[Service]
+Type=exec
+User=solarhub
+Group=solarhub
+WorkingDirectory=/opt/solarhub/app/system_b
+Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/solarhub/app/.env
+ExecStart=/opt/solarhub/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 4 --loop uvloop --http httptools
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/solarhub/logs/telemetry.log
+StandardError=append:/opt/solarhub/logs/telemetry-error.log
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/solarhub/logs /opt/solarhub/data
+
+# Resource Limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Watchdog - restart if unresponsive
+WatchdogSec=30
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
