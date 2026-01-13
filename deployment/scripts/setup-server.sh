@@ -668,13 +668,38 @@ install_redis() {
         if [ ! -d "$PARENT_DIR" ]; then
             log_warn "Parent directory $PARENT_DIR does not exist, using default Redis data directory"
         else
-        log_info "Configuring Redis to use custom data directory: $REDIS_DATA_DIR"
-        REDIS_DIR="$REDIS_DATA_DIR"
-        mkdir -p "$REDIS_DIR"
-        chown redis:redis "$REDIS_DIR"
-        chmod 755 "$REDIS_DIR"
+            log_info "Configuring Redis to use custom data directory: $REDIS_DATA_DIR"
+            REDIS_DIR="$REDIS_DATA_DIR"
+            
+            # Create directory with proper permissions
+            mkdir -p "$REDIS_DIR"
+            chown redis:redis "$REDIS_DIR"
+            chmod 700 "$REDIS_DIR"  # More restrictive permissions for Redis data directory
+            
+            # Test if Redis user can write to the directory
+            if sudo -u redis test -w "$REDIS_DIR" 2>/dev/null; then
+                log_info "Redis data directory is writable: $REDIS_DIR"
+            else
+                log_error "Redis data directory $REDIS_DIR is not writable by redis user"
+                log_error "Attempting to fix permissions..."
+                chown -R redis:redis "$REDIS_DIR"
+                chmod 700 "$REDIS_DIR"
+                
+                # Test again
+                if sudo -u redis test -w "$REDIS_DIR" 2>/dev/null; then
+                    log_info "Permissions fixed, directory is now writable"
+                else
+                    log_error "Cannot fix permissions, falling back to default Redis data directory"
+                    REDIS_DIR="/var/lib/redis"
+                    mkdir -p "$REDIS_DIR"
+                    chown redis:redis "$REDIS_DIR"
+                fi
+            fi
         fi
     fi
+
+    # Stop Redis if running before reconfiguration
+    systemctl stop redis-server 2>/dev/null || true
 
     # Configure Redis for production
     cat > /etc/redis/redis.conf <<EOF
@@ -690,7 +715,7 @@ timeout 0
 tcp-keepalive 300
 
 # General
-daemonize yes
+# Note: daemonize is not used when running under systemd (supervised systemd)
 supervised systemd
 pidfile /run/redis/redis-server.pid
 loglevel notice
@@ -733,10 +758,35 @@ client-output-buffer-limit replica 256mb 64mb 60
 client-output-buffer-limit pubsub 32mb 8mb 60
 EOF
 
-    systemctl restart redis-server
-    systemctl enable redis-server
-
-    log_info "Redis installed and configured"
+    # Start and enable Redis
+    systemctl daemon-reload
+    
+    # Try to start Redis
+    if systemctl start redis-server; then
+        sleep 2  # Give Redis time to start
+        
+        if systemctl is-active --quiet redis-server; then
+            systemctl enable redis-server
+            log_info "Redis installed and configured successfully"
+            # Test Redis connection
+            if command -v redis-cli &>/dev/null; then
+                redis-cli ping 2>/dev/null && log_info "Redis is responding to commands" || log_warn "Redis started but not responding to ping (password may be required)"
+            fi
+        else
+            log_error "Redis failed to start. Checking status..."
+            systemctl status redis-server --no-pager -l || true
+            log_error "Checking Redis logs..."
+            journalctl -u redis-server --no-pager -n 30 || true
+            log_error "Redis data directory: $REDIS_DIR"
+            log_error "Directory info: $(ls -ld $REDIS_DIR 2>/dev/null || echo 'Directory does not exist')"
+            log_error "Please check Redis configuration and directory permissions"
+            exit 1
+        fi
+    else
+        log_error "Failed to start Redis service"
+        journalctl -u redis-server --no-pager -n 30 || true
+        exit 1
+    fi
 }
 
 #===============================================================================
