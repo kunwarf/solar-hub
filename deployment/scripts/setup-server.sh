@@ -231,10 +231,30 @@ install_docker() {
         fi
         
         # Final verification - check for any signed-by references to old keyring
-        if grep -r "signed-by.*docker" /etc/apt/sources.list.d/ 2>/dev/null; then
+        if grep -r "signed-by.*docker\|usr/share/keyrings/docker" /etc/apt/sources.list.d/ 2>/dev/null; then
             log_warn "Found Docker keyring references, removing affected files..."
-            grep -rl "signed-by.*docker" /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f 2>/dev/null || true
+            grep -rl "signed-by.*docker\|usr/share/keyrings/docker" /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f 2>/dev/null || true
         fi
+        
+        # Aggressive cleanup: Remove ANY file that contains docker.com or docker references
+        log_info "Performing aggressive cleanup of Docker references..."
+        for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list.d/*.save 2>/dev/null; do
+            if [ -f "$file" ] && grep -qi "docker\|download.docker.com" "$file" 2>/dev/null; then
+                log_warn "Removing file with Docker references: $file"
+                rm -f "$file"
+            fi
+        done
+        
+        # Also check for any files with the old keyring path
+        for file in /etc/apt/sources.list.d/* 2>/dev/null; do
+            if [ -f "$file" ] && grep -q "usr/share/keyrings/docker" "$file" 2>/dev/null; then
+                log_warn "Removing file with old Docker keyring reference: $file"
+                rm -f "$file"
+            fi
+        done
+        
+        # Clear apt cache to ensure no stale repository info
+        rm -rf /var/lib/apt/lists/partial/* 2>/dev/null || true
 
         # Add Docker's official GPG key
         log_info "Adding Docker's official GPG key..."
@@ -248,6 +268,23 @@ install_docker() {
           "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
           $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
           tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+        # Verify no conflicting Docker entries exist
+        log_info "Verifying no conflicting Docker entries..."
+        if grep -r "download.docker.com" /etc/apt/sources.list.d/ 2>/dev/null | grep -v "docker.list" | grep -v "signed-by=/etc/apt/keyrings/docker.asc"; then
+            log_warn "Found conflicting Docker repository entries:"
+            grep -r "download.docker.com" /etc/apt/sources.list.d/ 2>/dev/null | grep -v "docker.list" || true
+            log_warn "Removing conflicting entries..."
+            grep -rl "download.docker.com" /etc/apt/sources.list.d/ 2>/dev/null | grep -v "docker.list" | xargs rm -f 2>/dev/null || true
+        fi
+        
+        # Check for any references to old keyring location
+        if grep -r "usr/share/keyrings/docker" /etc/apt/sources.list.d/ 2>/dev/null; then
+            log_error "Found references to old Docker keyring location:"
+            grep -r "usr/share/keyrings/docker" /etc/apt/sources.list.d/ 2>/dev/null || true
+            log_error "Removing files with old keyring references..."
+            grep -rl "usr/share/keyrings/docker" /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f 2>/dev/null || true
+        fi
 
         # Update package lists
         log_info "Updating package lists..."
