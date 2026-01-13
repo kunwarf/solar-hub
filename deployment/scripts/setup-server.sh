@@ -761,9 +761,35 @@ EOF
     # Start and enable Redis
     systemctl daemon-reload
     
-    # Try to start Redis
-    if systemctl start redis-server; then
-        sleep 2  # Give Redis time to start
+    # Test Redis configuration by trying to start it directly to capture errors
+    log_info "Testing Redis configuration..."
+    REDIS_TEST_OUTPUT=$(timeout 3 sudo -u redis redis-server /etc/redis/redis.conf 2>&1 || true)
+    
+    if echo "$REDIS_TEST_OUTPUT" | grep -qi "error\|fatal\|failed"; then
+        log_error "Redis configuration has errors:"
+        echo "$REDIS_TEST_OUTPUT" | head -20
+        log_error "Fixing common issues..."
+        
+        # Check if the issue is with the directory path
+        if echo "$REDIS_TEST_OUTPUT" | grep -qi "directory\|permission\|cannot"; then
+            log_warn "Directory issue detected, checking permissions..."
+            ls -ld "$REDIS_DIR" || true
+            sudo -u redis test -w "$REDIS_DIR" && log_info "Directory is writable" || log_error "Directory is NOT writable"
+        fi
+        
+        # Try with default directory as fallback
+        log_warn "Attempting to use default Redis directory as fallback..."
+        sed -i "s|^dir .*|dir /var/lib/redis|" /etc/redis/redis.conf
+        REDIS_DIR="/var/lib/redis"
+        mkdir -p "$REDIS_DIR"
+        chown redis:redis "$REDIS_DIR"
+        chmod 700 "$REDIS_DIR"
+    fi
+    
+    # Try to start Redis via systemd
+    log_info "Starting Redis service..."
+    if systemctl start redis-server 2>&1; then
+        sleep 3  # Give Redis time to start
         
         if systemctl is-active --quiet redis-server; then
             systemctl enable redis-server
@@ -773,18 +799,25 @@ EOF
                 redis-cli ping 2>/dev/null && log_info "Redis is responding to commands" || log_warn "Redis started but not responding to ping (password may be required)"
             fi
         else
-            log_error "Redis failed to start. Checking status..."
+            log_error "Redis failed to start. Getting detailed error information..."
+            log_error "=== Systemd Status ==="
             systemctl status redis-server --no-pager -l || true
-            log_error "Checking Redis logs..."
-            journalctl -u redis-server --no-pager -n 30 || true
-            log_error "Redis data directory: $REDIS_DIR"
-            log_error "Directory info: $(ls -ld $REDIS_DIR 2>/dev/null || echo 'Directory does not exist')"
-            log_error "Please check Redis configuration and directory permissions"
+            log_error "=== Redis Direct Error Test ==="
+            sudo -u redis redis-server /etc/redis/redis.conf 2>&1 | head -30 || true
+            log_error "=== Configuration File Check ==="
+            log_error "Redis data directory setting:"
+            grep "^dir " /etc/redis/redis.conf || echo "No dir setting found"
+            log_error "Directory exists and permissions:"
+            ls -ld "$REDIS_DIR" 2>/dev/null || echo "Directory does not exist: $REDIS_DIR"
+            log_error "=== Full Redis Config (first 50 lines) ==="
+            head -50 /etc/redis/redis.conf || true
+            log_error "Please check Redis configuration and fix the errors above"
             exit 1
         fi
     else
-        log_error "Failed to start Redis service"
-        journalctl -u redis-server --no-pager -n 30 || true
+        log_error "Failed to start Redis service via systemd"
+        log_error "=== Direct Redis Start Test ==="
+        sudo -u redis redis-server /etc/redis/redis.conf 2>&1 | head -30 || true
         exit 1
     fi
 }
