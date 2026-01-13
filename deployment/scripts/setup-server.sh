@@ -83,15 +83,15 @@ setup_system() {
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y || log_warn "Some packages could not be upgraded"
 
     # Install essential packages first (required for repository operations)
-    log_info "Installing essential packages..."
-    apt-get install -y --no-install-recommends \
-        curl \
-        wget \
-        gnupg \
-        lsb-release \
-        ca-certificates \
-        apt-transport-https \
-        git
+  #  log_info "Installing essential packages..."
+  #  apt-get install -y --no-install-recommends \
+  #      curl \
+  #      wget \
+  #      gnupg \
+  #      lsb-release \
+  #      ca-certificates \
+  #      apt-transport-https \
+  #      git
 
     # Try to install software-properties-common (may not be available in all distros)
     #log_info "Installing software-properties-common (if available)..."
