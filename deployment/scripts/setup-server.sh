@@ -67,6 +67,14 @@ get_server_ip() {
 setup_system() {
     log_section "Updating System and Installing Base Packages"
 
+    # Clean up any conflicting Docker repository configurations before updating package lists
+    log_info "Cleaning up any conflicting repository configurations..."
+    rm -f /etc/apt/sources.list.d/docker.list
+    rm -f /etc/apt/keyrings/docker.asc
+    rm -f /usr/share/keyrings/docker.gpg
+    rm -f /etc/apt/sources.list.d/docker.list.save
+    sed -i '/download\.docker\.com/d' /etc/apt/sources.list 2>/dev/null || true
+
     # Update package lists with retry logic
     log_info "Updating package lists..."
     if ! apt-get update; then
