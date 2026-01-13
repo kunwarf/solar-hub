@@ -94,12 +94,12 @@ setup_system() {
         git
 
     # Try to install software-properties-common (may not be available in all distros)
-    log_info "Installing software-properties-common (if available)..."
-    if apt-cache show software-properties-common &>/dev/null; then
-        apt-get install -y software-properties-common || log_warn "software-properties-common not available, skipping"
-    else
-        log_warn "software-properties-common not found in repositories, skipping"
-    fi
+    #log_info "Installing software-properties-common (if available)..."
+    #if apt-cache show software-properties-common &>/dev/null; then
+    #    apt-get install -y software-properties-common || log_warn "software-properties-common not available, skipping"
+   # else
+    #    log_warn "software-properties-common not found in repositories, skipping"
+    #fi
 
     # Install remaining packages
     log_info "Installing remaining system packages..."
