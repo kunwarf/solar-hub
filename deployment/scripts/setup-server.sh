@@ -417,13 +417,18 @@ EOF
 install_postgresql() {
     log_section "Installing PostgreSQL $POSTGRES_VERSION with TimescaleDB"
 
-    # Add PostgreSQL repository
-    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+    # Add PostgreSQL repository (using modern method without apt-key)
+    log_info "Adding PostgreSQL repository..."
+    install -m 0755 -d /etc/apt/keyrings
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+    chmod a+r /etc/apt/keyrings/postgresql.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
 
-    # Add TimescaleDB repository
-    echo "deb https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/timescaledb.list
-    wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+    # Add TimescaleDB repository (using modern method without apt-key)
+    log_info "Adding TimescaleDB repository..."
+    wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/keyrings/timescaledb.gpg
+    chmod a+r /etc/apt/keyrings/timescaledb.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/timescaledb.list
 
     apt-get update
     apt-get install -y postgresql-$POSTGRES_VERSION timescaledb-2-postgresql-$POSTGRES_VERSION
