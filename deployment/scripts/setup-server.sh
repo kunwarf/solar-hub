@@ -431,10 +431,11 @@ install_postgresql() {
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/timescaledb.list
 
     apt-get update
-    apt-get install -y postgresql-$POSTGRES_VERSION timescaledb-2-postgresql-$POSTGRES_VERSION
+    apt-get install -y postgresql-$POSTGRES_VERSION timescaledb-2-postgresql-$POSTGRES_VERSION timescaledb-tools
 
     # Run TimescaleDB tuning
-    timescaledb-tune --quiet --yes --pg-config=/usr/lib/postgresql/$POSTGRES_VERSION/bin/pg_config
+    log_info "Running TimescaleDB tuning..."
+    timescaledb-tune --quiet --yes --pg-config=/usr/lib/postgresql/$POSTGRES_VERSION/bin/pg_config || log_warn "timescaledb-tune failed, continuing with manual configuration"
 
     # Configure PostgreSQL for production (64GB RAM, 24 cores)
     cat > /etc/postgresql/$POSTGRES_VERSION/main/conf.d/solarhub.conf <<EOF
