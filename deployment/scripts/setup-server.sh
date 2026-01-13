@@ -238,8 +238,8 @@ install_docker() {
         
         # Aggressive cleanup: Remove ANY file that contains docker.com or docker references
         log_info "Performing aggressive cleanup of Docker references..."
-        shopt -s nullglob 2>/dev/null || true
         for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list.d/*.save; do
+            [ ! -e "$file" ] && continue  # Skip if file doesn't exist
             if [ -f "$file" ] && grep -qi "docker\|download.docker.com" "$file" 2>/dev/null; then
                 log_warn "Removing file with Docker references: $file"
                 rm -f "$file"
@@ -248,12 +248,12 @@ install_docker() {
         
         # Also check for any files with the old keyring path
         for file in /etc/apt/sources.list.d/*; do
+            [ ! -e "$file" ] && continue  # Skip if file doesn't exist
             if [ -f "$file" ] && grep -q "usr/share/keyrings/docker" "$file" 2>/dev/null; then
                 log_warn "Removing file with old Docker keyring reference: $file"
                 rm -f "$file"
             fi
         done
-        shopt -u nullglob 2>/dev/null || true
         
         # Clear apt cache to ensure no stale repository info
         rm -rf /var/lib/apt/lists/partial/* 2>/dev/null || true
@@ -296,8 +296,8 @@ install_docker() {
         
         # Comprehensive check: List all repository files and their Docker-related content
         log_info "Checking all repository files for Docker references..."
-        shopt -s nullglob 2>/dev/null || true
         for file in /etc/apt/sources.list.d/*.list* /etc/apt/sources.list; do
+            [ ! -e "$file" ] && continue  # Skip if file doesn't exist
             if [ -f "$file" ]; then
                 if grep -qi "docker\|download.docker.com" "$file" 2>/dev/null; then
                     log_warn "Found Docker reference in $file:"
@@ -314,13 +314,13 @@ install_docker() {
         # Final check: Remove ANY file that has signed-by pointing to old keyring
         log_info "Final check for old keyring references..."
         for file in /etc/apt/sources.list.d/*; do
+            [ ! -e "$file" ] && continue  # Skip if file doesn't exist
             if [ -f "$file" ] && grep -q "signed-by.*usr/share/keyrings/docker" "$file" 2>/dev/null; then
                 log_error "Found file with old keyring signed-by: $file"
                 cat "$file" || true
                 rm -f "$file"
             fi
         done
-        shopt -u nullglob 2>/dev/null || true
         
         # Use apt-config to check what apt sees (if available)
         if command -v apt-config &>/dev/null; then
