@@ -213,7 +213,7 @@ class SiteConfiguration:
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Site(AggregateRoot):
     """
     Site aggregate root.

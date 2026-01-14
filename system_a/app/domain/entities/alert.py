@@ -74,7 +74,7 @@ class AlertCondition:
         return False
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertRule(AggregateRoot):
     """
     Alert rule definition.
@@ -130,7 +130,7 @@ class AlertRule(AggregateRoot):
         self.mark_updated()
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Alert(AggregateRoot):
     """
     Alert instance.
@@ -205,7 +205,7 @@ class Alert(AggregateRoot):
         self.mark_updated()
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertNotification(Entity):
     """
     Alert notification record.

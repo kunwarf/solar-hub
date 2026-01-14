@@ -168,7 +168,7 @@ class DeviceMetrics:
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Device(AggregateRoot):
     """
     Device aggregate root.

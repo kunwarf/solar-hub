@@ -75,7 +75,7 @@ class OrganizationSettings:
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OrganizationMember(Entity):
     """
     Represents a user's membership in an organization.
@@ -131,7 +131,7 @@ class OrganizationMember(Entity):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Organization(AggregateRoot):
     """
     Organization aggregate root.

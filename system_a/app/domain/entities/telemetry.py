@@ -40,7 +40,7 @@ class MetricType(str, Enum):
     PERFORMANCE_RATIO = "performance_ratio"    # %
 
 
-@dataclass
+@dataclass(kw_only=True)
 class TelemetryHourlySummary(Entity):
     """
     Hourly aggregated telemetry data.
@@ -92,7 +92,7 @@ class TelemetryHourlySummary(Entity):
     capacity_factor: Optional[float] = None
 
 
-@dataclass
+@dataclass(kw_only=True)
 class TelemetryDailySummary(Entity):
     """
     Daily aggregated telemetry data.
@@ -157,7 +157,7 @@ class TelemetryDailySummary(Entity):
     data_completeness_percent: float = 100.0
 
 
-@dataclass
+@dataclass(kw_only=True)
 class TelemetryMonthlySummary(Entity):
     """
     Monthly aggregated telemetry data.
@@ -216,7 +216,7 @@ class TelemetryMonthlySummary(Entity):
     data_completeness_percent: float = 100.0
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceTelemetrySnapshot(Entity):
     """
     Latest telemetry snapshot for a device.
