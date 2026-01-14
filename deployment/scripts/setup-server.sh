@@ -700,6 +700,10 @@ install_redis() {
 
     # Stop Redis if running before reconfiguration
     systemctl stop redis-server 2>/dev/null || true
+    
+    # Kill any existing Redis processes
+    pkill -9 redis-server 2>/dev/null || true
+    sleep 1
 
     # Configure Redis for production
     cat > /etc/redis/redis.conf <<EOF
@@ -785,6 +789,13 @@ EOF
         mkdir -p "$REDIS_DIR"
         chown redis:redis "$REDIS_DIR"
         chmod 700 "$REDIS_DIR"
+    fi
+    
+    # Ensure port is free before starting
+    if lsof -i :6379 >/dev/null 2>&1; then
+        log_warn "Port 6379 is in use, killing existing processes..."
+        fuser -k 6379/tcp 2>/dev/null || pkill -9 -f "redis.*6379" || true
+        sleep 2
     fi
     
     # Try to start Redis via systemd
