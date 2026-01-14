@@ -19,15 +19,63 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create enum types
-    op.execute("CREATE TYPE user_role AS ENUM ('super_admin', 'owner', 'admin', 'manager', 'viewer', 'installer')")
-    op.execute("CREATE TYPE org_member_role AS ENUM ('owner', 'admin', 'manager', 'viewer', 'installer')")
-    op.execute("CREATE TYPE site_status AS ENUM ('active', 'inactive', 'maintenance', 'decommissioned')")
-    op.execute("CREATE TYPE device_type AS ENUM ('inverter', 'meter', 'battery', 'weather_station', 'sensor', 'gateway')")
-    op.execute("CREATE TYPE device_status AS ENUM ('online', 'offline', 'error', 'maintenance', 'unknown')")
-    op.execute("CREATE TYPE protocol_type AS ENUM ('modbus_tcp', 'modbus_rtu', 'mqtt', 'http', 'custom')")
-    op.execute("CREATE TYPE alert_severity AS ENUM ('info', 'warning', 'critical')")
-    op.execute("CREATE TYPE alert_status AS ENUM ('active', 'acknowledged', 'resolved', 'expired')")
+    # Create enum types (idempotent - only create if they don't exist)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE user_role AS ENUM ('super_admin', 'owner', 'admin', 'manager', 'viewer', 'installer');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE org_member_role AS ENUM ('owner', 'admin', 'manager', 'viewer', 'installer');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE site_status AS ENUM ('active', 'inactive', 'maintenance', 'decommissioned');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE device_type AS ENUM ('inverter', 'meter', 'battery', 'weather_station', 'sensor', 'gateway');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE device_status AS ENUM ('online', 'offline', 'error', 'maintenance', 'unknown');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE protocol_type AS ENUM ('modbus_tcp', 'modbus_rtu', 'mqtt', 'http', 'custom');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE alert_severity AS ENUM ('info', 'warning', 'critical');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE alert_status AS ENUM ('active', 'acknowledged', 'resolved', 'expired');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
     # Users table
     op.create_table(
