@@ -63,7 +63,7 @@ class DeviceModel(BaseModel):
     latest_metrics = Column(JSONB, nullable=True)
 
     # Metadata and tags
-    metadata = Column(JSONB, default=dict, nullable=False)
+    device_metadata = Column('metadata', JSONB, default=dict, nullable=False)
     tags = Column(ARRAY(String), default=list, nullable=False)
 
     # Statistics
@@ -92,7 +92,7 @@ class DeviceModel(BaseModel):
             last_error_at=self.last_error_at,
             last_error_message=self.last_error_message,
             latest_metrics=self._parse_metrics(self.latest_metrics),
-            metadata=self.metadata or {},
+            metadata=self.device_metadata or {},
             tags=self.tags or [],
             total_messages_received=self.total_messages_received,
             total_errors=self.total_errors,
@@ -152,7 +152,7 @@ class DeviceModel(BaseModel):
             last_error_at=device.last_error_at,
             last_error_message=device.last_error_message,
             latest_metrics=device.latest_metrics.to_dict() if device.latest_metrics else None,
-            metadata=device.metadata,
+            device_metadata=device.metadata,
             tags=device.tags,
             total_messages_received=device.total_messages_received,
             total_errors=device.total_errors,
@@ -178,7 +178,7 @@ class DeviceModel(BaseModel):
         self.last_error_at = device.last_error_at
         self.last_error_message = device.last_error_message
         self.latest_metrics = device.latest_metrics.to_dict() if device.latest_metrics else None
-        self.metadata = device.metadata
+        self.device_metadata = device.metadata
         self.tags = device.tags
         self.total_messages_received = device.total_messages_received
         self.total_errors = device.total_errors
