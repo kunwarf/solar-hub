@@ -30,6 +30,7 @@ NC='\033[0m' # No Color
 SOLARHUB_USER="solarhub"
 SOLARHUB_HOME="/opt/solarhub"
 SOLARHUB_REPO="https://github.com/YOUR_USERNAME/solar-hub.git"  # Update this
+SOLARHUB_APP_DIR="solar-hub"  # Directory name where the repository is cloned
 POSTGRES_VERSION="16"
 REDIS_VERSION="7"
 
@@ -642,20 +643,20 @@ EOF
     log_info "Checking for schema files to apply..."
     
     # System A schema (PostgreSQL)
-    if [ -f "$SOLARHUB_HOME/app/system_a/docs/database_schema.sql" ]; then
+    if [ -f "$SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_a/docs/database_schema.sql" ]; then
         log_info "Found System A schema file, applying to solar_hub database..."
-        sudo -u postgres psql -d solar_hub -f "$SOLARHUB_HOME/app/system_a/docs/database_schema.sql" 2>&1 | grep -v "already exists\|does not exist" || log_warn "Schema file application had some issues (this is normal if schema already exists)"
+        sudo -u postgres psql -d solar_hub -f "$SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_a/docs/database_schema.sql" 2>&1 | grep -v "already exists\|does not exist" || log_warn "Schema file application had some issues (this is normal if schema already exists)"
     else
-        log_warn "System A schema file not found at $SOLARHUB_HOME/app/system_a/docs/database_schema.sql"
+        log_warn "System A schema file not found at $SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_a/docs/database_schema.sql"
         log_info "You can apply it manually later or use Alembic migrations"
     fi
     
     # System B schema (TimescaleDB)
-    if [ -f "$SOLARHUB_HOME/app/system_b/docs/timescale_schema.sql" ]; then
+    if [ -f "$SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_b/docs/timescale_schema.sql" ]; then
         log_info "Found System B schema file, applying to solar_hub_telemetry database..."
-        sudo -u postgres psql -d solar_hub_telemetry -f "$SOLARHUB_HOME/app/system_b/docs/timescale_schema.sql" 2>&1 | grep -v "already exists\|does not exist" || log_warn "Schema file application had some issues (this is normal if schema already exists)"
+        sudo -u postgres psql -d solar_hub_telemetry -f "$SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_b/docs/timescale_schema.sql" 2>&1 | grep -v "already exists\|does not exist" || log_warn "Schema file application had some issues (this is normal if schema already exists)"
     else
-        log_warn "System B schema file not found at $SOLARHUB_HOME/app/system_b/docs/timescale_schema.sql"
+        log_warn "System B schema file not found at $SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_b/docs/timescale_schema.sql"
         log_info "You can apply it manually later"
     fi
 
@@ -1417,7 +1418,7 @@ Wants=postgresql.service redis-server.service
 Type=exec
 User=$SOLARHUB_USER
 Group=$SOLARHUB_USER
-WorkingDirectory=$SOLARHUB_HOME/app/system_a
+WorkingDirectory=$SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_a
 Environment="PATH=$SOLARHUB_HOME/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=$SOLARHUB_HOME/app/.env
 ExecStart=$SOLARHUB_HOME/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 8 --loop uvloop --http httptools
@@ -1453,7 +1454,7 @@ Wants=postgresql.service redis-server.service mosquitto.service
 Type=exec
 User=$SOLARHUB_USER
 Group=$SOLARHUB_USER
-WorkingDirectory=$SOLARHUB_HOME/app/system_b
+WorkingDirectory=$SOLARHUB_HOME/app/$SOLARHUB_APP_DIR/system_b
 Environment="PATH=$SOLARHUB_HOME/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=$SOLARHUB_HOME/app/.env
 ExecStart=$SOLARHUB_HOME/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 4 --loop uvloop --http httptools
