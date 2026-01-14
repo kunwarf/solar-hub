@@ -74,7 +74,7 @@ class UserPreferences:
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class User(AggregateRoot):
     """
     User aggregate root.
