@@ -54,7 +54,7 @@ class DiscoProvider(str, Enum):
     KE = "KE"                 # K-Electric (Karachi)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SiteConfiguration:
     """
     Site solar system configuration (value object).
