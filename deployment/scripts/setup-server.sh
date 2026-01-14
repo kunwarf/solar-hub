@@ -638,6 +638,27 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 EOF
 
+    # Apply schema files if they exist (optional - Alembic migrations are preferred)
+    log_info "Checking for schema files to apply..."
+    
+    # System A schema (PostgreSQL)
+    if [ -f "$SOLARHUB_HOME/app/system_a/docs/database_schema.sql" ]; then
+        log_info "Found System A schema file, applying to solar_hub database..."
+        sudo -u postgres psql -d solar_hub -f "$SOLARHUB_HOME/app/system_a/docs/database_schema.sql" 2>&1 | grep -v "already exists\|does not exist" || log_warn "Schema file application had some issues (this is normal if schema already exists)"
+    else
+        log_warn "System A schema file not found at $SOLARHUB_HOME/app/system_a/docs/database_schema.sql"
+        log_info "You can apply it manually later or use Alembic migrations"
+    fi
+    
+    # System B schema (TimescaleDB)
+    if [ -f "$SOLARHUB_HOME/app/system_b/docs/timescale_schema.sql" ]; then
+        log_info "Found System B schema file, applying to solar_hub_telemetry database..."
+        sudo -u postgres psql -d solar_hub_telemetry -f "$SOLARHUB_HOME/app/system_b/docs/timescale_schema.sql" 2>&1 | grep -v "already exists\|does not exist" || log_warn "Schema file application had some issues (this is normal if schema already exists)"
+    else
+        log_warn "System B schema file not found at $SOLARHUB_HOME/app/system_b/docs/timescale_schema.sql"
+        log_info "You can apply it manually later"
+    fi
+
     # Configure pg_hba.conf for local connections
     cat >> /etc/postgresql/$POSTGRES_VERSION/main/pg_hba.conf <<EOF
 
@@ -1510,7 +1531,12 @@ print_summary() {
     echo "   pip install -r system_a/requirements.txt"
     echo "   pip install -r system_b/requirements.txt"
     echo ""
-    echo "4. RUN DATABASE MIGRATIONS:"
+    echo "4. APPLY DATABASE SCHEMAS (if not already applied):"
+    echo "   # Option 1: Use schema files (for initial setup)"
+    echo "   sudo -u postgres psql -d solar_hub -f system_a/docs/database_schema.sql"
+    echo "   sudo -u postgres psql -d solar_hub_telemetry -f system_b/docs/timescale_schema.sql"
+    echo ""
+    echo "   # Option 2: Use Alembic migrations (recommended for updates)"
     echo "   cd system_a && alembic upgrade head"
     echo ""
     echo "5. START THE SERVICES:"
