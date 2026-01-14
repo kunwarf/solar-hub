@@ -20,62 +20,38 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Create enum types (idempotent - only create if they don't exist)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE user_role AS ENUM ('super_admin', 'owner', 'admin', 'manager', 'viewer', 'installer');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE org_member_role AS ENUM ('owner', 'admin', 'manager', 'viewer', 'installer');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE site_status AS ENUM ('active', 'inactive', 'maintenance', 'decommissioned');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE device_type AS ENUM ('inverter', 'meter', 'battery', 'weather_station', 'sensor', 'gateway');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE device_status AS ENUM ('online', 'offline', 'error', 'maintenance', 'unknown');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE protocol_type AS ENUM ('modbus_tcp', 'modbus_rtu', 'mqtt', 'http', 'custom');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE alert_severity AS ENUM ('info', 'warning', 'critical');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE alert_status AS ENUM ('active', 'acknowledged', 'resolved', 'expired');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
+    # Note: SQLAlchemy will also try to create these when processing table definitions,
+    # so we need to ensure they exist first and handle the case where they already exist
+    enums_to_create = [
+        ("user_role", "('super_admin', 'owner', 'admin', 'manager', 'viewer', 'installer')"),
+        ("org_member_role", "('owner', 'admin', 'manager', 'viewer', 'installer')"),
+        ("site_status", "('active', 'inactive', 'maintenance', 'decommissioned')"),
+        ("device_type", "('inverter', 'meter', 'battery', 'weather_station', 'sensor', 'gateway')"),
+        ("device_status", "('online', 'offline', 'error', 'maintenance', 'unknown')"),
+        ("protocol_type", "('modbus_tcp', 'modbus_rtu', 'mqtt', 'http', 'custom')"),
+        ("alert_severity", "('info', 'warning', 'critical')"),
+        ("alert_status", "('active', 'acknowledged', 'resolved', 'expired')"),
+    ]
+    
+    for enum_name, enum_values in enums_to_create:
+        # Use DO block to create enum only if it doesn't exist
+        # This prevents errors if the type was created by the setup script
+        # We use a more explicit approach that works with asyncpg
+        op.execute(f"""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_type 
+                    WHERE typname = '{enum_name}'
+                ) THEN
+                    CREATE TYPE {enum_name} AS ENUM {enum_values};
+                END IF;
+            EXCEPTION
+                WHEN duplicate_object THEN
+                    -- Type already exists, ignore
+                    NULL;
+            END $$;
+        """)
 
     # Users table
     op.create_table(
