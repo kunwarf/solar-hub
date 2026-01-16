@@ -123,6 +123,21 @@ class OrganizationModel(BaseModel):
         back_populates='organization',
         lazy='dynamic'
     )
+    reports = relationship(
+        'ReportModel',
+        back_populates='organization',
+        lazy='dynamic'
+    )
+    report_schedules = relationship(
+        'ReportScheduleModel',
+        back_populates='organization',
+        lazy='dynamic'
+    )
+    report_templates = relationship(
+        'ReportTemplateModel',
+        back_populates='organization',
+        lazy='dynamic'
+    )
 
     def to_domain(self) -> Organization:
         """Convert ORM model to domain entity."""

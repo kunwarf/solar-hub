@@ -66,6 +66,21 @@ class UserModel(BaseModel):
         back_populates='user',
         lazy='dynamic'
     )
+    reports = relationship(
+        'ReportModel',
+        back_populates='creator',
+        lazy='dynamic'
+    )
+    report_schedules = relationship(
+        'ReportScheduleModel',
+        back_populates='creator',
+        lazy='dynamic'
+    )
+    report_templates = relationship(
+        'ReportTemplateModel',
+        back_populates='creator',
+        lazy='dynamic'
+    )
 
     def to_domain(self) -> User:
         """Convert ORM model to domain entity."""

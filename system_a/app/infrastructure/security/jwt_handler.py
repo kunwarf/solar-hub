@@ -68,10 +68,22 @@ class JWTHandler(TokenService):
         user_id: UUID,
         role: Optional[str] = None,
         organization_id: Optional[UUID] = None,
+        expires_delta: Optional[timedelta] = None,
     ) -> str:
-        """Create a new access token."""
+        """
+        Create a new access token.
+
+        Args:
+            user_id: User ID to include in token
+            role: Optional role claim
+            organization_id: Optional organization ID
+            expires_delta: Custom expiration time (defaults to access_token_expire_minutes)
+        """
         now = datetime.now(timezone.utc)
-        expires = now + timedelta(minutes=self._access_token_expire_minutes)
+        if expires_delta:
+            expires = now + expires_delta
+        else:
+            expires = now + timedelta(minutes=self._access_token_expire_minutes)
 
         payload = {
             "sub": str(user_id),

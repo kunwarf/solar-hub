@@ -1,8 +1,10 @@
 """
 Dashboard API endpoints.
+
+Provides real-time and historical telemetry data for dashboards.
 """
 from datetime import datetime, date, timedelta, timezone
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from ..dependencies import (
     get_current_user,
     get_unit_of_work,
+    get_telemetry_service,
 )
 from ..schemas.dashboard_schemas import (
     DailyEnergyStats,
@@ -24,16 +27,10 @@ from ..schemas.dashboard_schemas import (
 )
 from ..schemas.auth_schemas import ErrorResponse
 from ...application.interfaces.unit_of_work import UnitOfWork
+from ...application.services.telemetry_service import TelemetryService
 from ...domain.entities.user import User, UserRole
 
 router = APIRouter(prefix="/dashboards", tags=["Dashboards"])
-
-
-# Constants for environmental calculations
-CO2_PER_KWH_KG = 0.475  # Pakistan grid emission factor (approximate)
-TREES_PER_TON_CO2 = 45  # Trees needed to absorb 1 ton CO2 per year
-COAL_PER_KWH_KG = 0.4   # Coal needed to generate 1 kWh
-PKR_PER_KWH = 25.0      # Average electricity rate in Pakistan
 
 
 async def check_org_access(org_id: UUID, user: User, uow: UnitOfWork) -> None:
@@ -72,8 +69,9 @@ async def get_organization_overview(
     organization_id: Optional[UUID] = Query(None, description="Organization ID (defaults to first org)"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
-    """Get organization-wide dashboard overview."""
+    """Get organization-wide dashboard overview with real telemetry data."""
     # Get organization
     if organization_id:
         await check_org_access(organization_id, current_user, uow)
@@ -88,52 +86,24 @@ async def get_organization_overview(
             )
         org = orgs[0]
 
-    # Get site counts
-    all_sites = await uow.sites.get_by_organization_id(org.id, limit=1000)
-    active_sites = [s for s in all_sites if s.status.value == 'active']
-
-    # Get device counts
-    total_devices = await uow.devices.count_by_organization_id(org.id)
-    devices_with_errors = await uow.devices.get_devices_with_errors(org.id)
-
-    # Calculate total capacity
-    total_capacity = sum(s.configuration.system_capacity_kw for s in all_sites)
-
-    # Get online devices across all sites
-    online_count = 0
-    for site in active_sites:
-        online_devices = await uow.devices.get_online_devices(site.id)
-        online_count += len(online_devices)
-
-    # TODO: Get actual energy data from telemetry system (System B)
-    # For now, return placeholder/calculated values
-
-    # Build top sites list
-    top_sites = []
-    for site in active_sites[:5]:
-        top_sites.append({
-            "id": str(site.id),
-            "name": site.name,
-            "capacity_kw": site.configuration.system_capacity_kw,
-            "energy_today_kwh": 0.0,  # TODO: from telemetry
-            "status": site.status.value,
-        })
+    # Get organization overview from telemetry service
+    overview = await telemetry_service.get_org_overview(org.id, org.name)
 
     return OrganizationOverviewResponse(
-        organization_id=org.id,
-        organization_name=org.name,
-        total_sites=len(all_sites),
-        active_sites=len(active_sites),
-        total_devices=total_devices,
-        online_devices=online_count,
-        total_current_power_kw=0.0,  # TODO: from telemetry
-        total_energy_today_kwh=0.0,  # TODO: from telemetry
-        total_energy_this_month_kwh=0.0,  # TODO: from telemetry
-        total_capacity_kw=total_capacity,
-        total_active_alerts=0,  # TODO: from alerts
-        total_critical_alerts=0,  # TODO: from alerts
-        top_sites=top_sites,
-        last_updated=datetime.now(timezone.utc),
+        organization_id=overview.organization_id,
+        organization_name=overview.organization_name,
+        total_sites=overview.total_sites,
+        active_sites=overview.active_sites,
+        total_devices=overview.total_devices,
+        online_devices=overview.online_devices,
+        total_current_power_kw=overview.total_current_power_kw,
+        total_energy_today_kwh=overview.total_energy_today_kwh,
+        total_energy_this_month_kwh=overview.total_energy_this_month_kwh,
+        total_capacity_kw=overview.total_capacity_kw,
+        total_active_alerts=overview.total_active_alerts,
+        total_critical_alerts=overview.total_critical_alerts,
+        top_sites=overview.top_sites,
+        last_updated=overview.last_updated,
     )
 
 
@@ -146,46 +116,41 @@ async def get_site_overview(
     site_id: UUID,
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
-    """Get site dashboard overview."""
-    site = await check_site_access(site_id, current_user, uow)
+    """Get site dashboard overview with real telemetry data."""
+    await check_site_access(site_id, current_user, uow)
 
-    # Get device stats
-    total_devices = await uow.devices.count_by_site_id(site_id)
-    online_devices = await uow.devices.get_online_devices(site_id)
-    devices_with_errors = await uow.devices.get_devices_with_errors(site.organization_id)
-    site_errors = [d for d in devices_with_errors if d.site_id == site_id]
-
-    # TODO: Get actual readings from telemetry system
-    # These are placeholder values
+    # Get site overview from telemetry service
+    overview = await telemetry_service.get_site_overview(site_id)
 
     return SiteOverviewResponse(
-        site_id=site.id,
-        site_name=site.name,
-        status=site.status.value,
-        current_power_kw=0.0,
-        current_grid_power_kw=0.0,
-        current_battery_soc_percent=None,
-        energy_today_kwh=0.0,
-        energy_exported_today_kwh=0.0,
-        energy_imported_today_kwh=0.0,
-        peak_power_today_kw=0.0,
-        energy_this_month_kwh=0.0,
-        energy_lifetime_kwh=0.0,
-        total_devices=total_devices,
-        online_devices=len(online_devices),
-        devices_with_errors=len(site_errors),
-        active_alerts=0,
-        critical_alerts=0,
-        system_capacity_kw=site.configuration.system_capacity_kw,
-        capacity_factor_percent=0.0,
-        last_updated=datetime.now(timezone.utc),
+        site_id=overview.site_id,
+        site_name=overview.site_name,
+        status=overview.status,
+        current_power_kw=overview.current_power_kw,
+        current_grid_power_kw=overview.current_grid_power_kw,
+        current_battery_soc_percent=overview.current_battery_soc_percent,
+        energy_today_kwh=overview.energy_today_kwh,
+        energy_exported_today_kwh=overview.energy_exported_today_kwh,
+        energy_imported_today_kwh=overview.energy_imported_today_kwh,
+        peak_power_today_kw=overview.peak_power_today_kw,
+        energy_this_month_kwh=overview.energy_this_month_kwh,
+        energy_lifetime_kwh=overview.energy_lifetime_kwh,
+        total_devices=overview.total_devices,
+        online_devices=overview.online_devices,
+        devices_with_errors=overview.devices_with_errors,
+        active_alerts=overview.active_alerts,
+        critical_alerts=overview.critical_alerts,
+        system_capacity_kw=overview.system_capacity_kw,
+        capacity_factor_percent=overview.capacity_factor_percent,
+        last_updated=overview.last_updated,
     )
 
 
 @router.get(
     "/sites/{site_id}/energy/daily",
-    response_model=list[DailyEnergyStats],
+    response_model=List[DailyEnergyStats],
     responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
 )
 async def get_daily_energy_stats(
@@ -194,6 +159,7 @@ async def get_daily_energy_stats(
     end_date: date = Query(..., description="End date"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
     """Get daily energy statistics for a site."""
     await check_site_access(site_id, current_user, uow)
@@ -211,29 +177,27 @@ async def get_daily_energy_stats(
             detail="Date range cannot exceed 365 days",
         )
 
-    # TODO: Get actual data from telemetry system
-    # Return placeholder data for the date range
-    stats = []
-    current_date = start_date
-    while current_date <= end_date:
-        stats.append(DailyEnergyStats(
-            date=current_date,
-            energy_generated_kwh=0.0,
-            energy_consumed_kwh=0.0,
-            energy_exported_kwh=0.0,
-            energy_imported_kwh=0.0,
-            peak_power_kw=0.0,
-            peak_power_time=None,
-            sunshine_hours=0.0,
-        ))
-        current_date += timedelta(days=1)
+    # Get daily stats from telemetry service
+    daily_data = await telemetry_service.get_daily_energy_stats(site_id, start_date, end_date)
 
-    return stats
+    return [
+        DailyEnergyStats(
+            date=d.date,
+            energy_generated_kwh=d.energy_generated_kwh,
+            energy_consumed_kwh=d.energy_consumed_kwh,
+            energy_exported_kwh=d.energy_exported_kwh,
+            energy_imported_kwh=d.energy_imported_kwh,
+            peak_power_kw=d.peak_power_kw,
+            peak_power_time=d.peak_power_time,
+            sunshine_hours=d.sunshine_hours,
+        )
+        for d in daily_data
+    ]
 
 
 @router.get(
     "/sites/{site_id}/energy/monthly",
-    response_model=list[MonthlyEnergyStats],
+    response_model=List[MonthlyEnergyStats],
     responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
 )
 async def get_monthly_energy_stats(
@@ -241,27 +205,28 @@ async def get_monthly_energy_stats(
     year: int = Query(..., ge=2020, le=2100, description="Year"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
     """Get monthly energy statistics for a site."""
     await check_site_access(site_id, current_user, uow)
 
-    # TODO: Get actual data from telemetry system
-    # Return placeholder data for each month
-    stats = []
-    for month in range(1, 13):
-        stats.append(MonthlyEnergyStats(
-            year=year,
-            month=month,
-            energy_generated_kwh=0.0,
-            energy_consumed_kwh=0.0,
-            energy_exported_kwh=0.0,
-            energy_imported_kwh=0.0,
-            avg_daily_generation_kwh=0.0,
-            peak_power_kw=0.0,
-            days_with_data=0,
-        ))
+    # Get monthly stats from telemetry service
+    monthly_data = await telemetry_service.get_monthly_energy_stats(site_id, year)
 
-    return stats
+    return [
+        MonthlyEnergyStats(
+            year=m.year,
+            month=m.month,
+            energy_generated_kwh=m.energy_generated_kwh,
+            energy_consumed_kwh=m.energy_consumed_kwh,
+            energy_exported_kwh=m.energy_exported_kwh,
+            energy_imported_kwh=m.energy_imported_kwh,
+            avg_daily_generation_kwh=m.avg_daily_generation_kwh,
+            peak_power_kw=m.peak_power_kw,
+            days_with_data=m.days_with_data,
+        )
+        for m in monthly_data
+    ]
 
 
 @router.get(
@@ -274,6 +239,7 @@ async def get_energy_chart_data(
     period: str = Query("week", description="Period: day, week, month, year"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
     """Get energy chart data for visualization."""
     await check_site_access(site_id, current_user, uow)
@@ -286,38 +252,12 @@ async def get_energy_chart_data(
             detail=f"Period must be one of: {', '.join(valid_periods)}",
         )
 
-    # TODO: Get actual data from telemetry system
-    # Return placeholder chart data
-    today = date.today()
-
-    if period == "day":
-        labels = [f"{h:02d}:00" for h in range(24)]
-        values = [0.0] * 24
-    elif period == "week":
-        labels = [(today - timedelta(days=i)).strftime("%a") for i in range(6, -1, -1)]
-        values = [0.0] * 7
-    elif period == "month":
-        labels = [str(i) for i in range(1, 32)]
-        values = [0.0] * 31
-    else:  # year
-        labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        values = [0.0] * 12
+    # Get chart data from telemetry service
+    chart_data = await telemetry_service.get_energy_chart_data(site_id, period)
 
     return EnergyChartData(
-        labels=labels,
-        datasets=[
-            {
-                "label": "Generation (kWh)",
-                "data": values,
-                "backgroundColor": "#22c55e",
-            },
-            {
-                "label": "Consumption (kWh)",
-                "data": values,
-                "backgroundColor": "#ef4444",
-            },
-        ],
+        labels=chart_data["labels"],
+        datasets=chart_data["datasets"],
     )
 
 
@@ -331,25 +271,19 @@ async def get_realtime_power_data(
     minutes: int = Query(60, ge=5, le=1440, description="Minutes of data to return"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
     """Get real-time power data for live chart."""
     await check_site_access(site_id, current_user, uow)
 
-    # TODO: Get actual data from telemetry system (via Redis pub/sub)
-    # Return placeholder data
-    now = datetime.now(timezone.utc)
-    timestamps = []
-    power_values = []
-
-    for i in range(minutes, 0, -1):
-        timestamps.append(now - timedelta(minutes=i))
-        power_values.append(0.0)
+    # Get real-time power history from telemetry service
+    power_data = await telemetry_service.get_realtime_power_history(site_id, minutes)
 
     return PowerChartData(
-        timestamps=timestamps,
-        power_values=power_values,
-        grid_values=None,
-        battery_values=None,
+        timestamps=power_data["timestamps"],
+        power_values=power_data["power_values"],
+        grid_values=None,  # Could be added if needed
+        battery_values=None,  # Could be added if needed
     )
 
 
@@ -365,44 +299,38 @@ async def compare_sites(
     end_date: date = Query(..., description="End date"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
     """Compare multiple sites' performance."""
     await check_org_access(organization_id, current_user, uow)
 
-    # Get sites to compare
+    # Parse site IDs if provided
+    site_id_list = None
     if site_ids:
         site_id_list = [UUID(sid.strip()) for sid in site_ids.split(",")]
-        sites = []
-        for sid in site_id_list:
-            site = await uow.sites.get_by_id(sid)
-            if site and site.organization_id == organization_id:
-                sites.append(site)
-    else:
-        # Compare all sites in organization
-        sites = await uow.sites.get_by_organization_id(organization_id, limit=20)
 
-    # TODO: Get actual performance data from telemetry system
-    comparison_items = []
-    for site in sites:
-        capacity = site.configuration.system_capacity_kw
-        # Placeholder calculations
-        energy = 0.0  # TODO: from telemetry
-        specific_yield = energy / capacity if capacity > 0 else 0.0
-        performance_ratio = 0.0  # TODO: calculate from actual vs expected
-
-        comparison_items.append(SiteComparisonItem(
-            site_id=site.id,
-            site_name=site.name,
-            energy_generated_kwh=energy,
-            capacity_kw=capacity,
-            performance_ratio=performance_ratio,
-            specific_yield=specific_yield,
-        ))
+    # Get site comparisons from telemetry service
+    comparisons = await telemetry_service.compare_sites(
+        organization_id=organization_id,
+        site_ids=site_id_list,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     return SiteComparisonResponse(
         period_start=start_date,
         period_end=end_date,
-        sites=comparison_items,
+        sites=[
+            SiteComparisonItem(
+                site_id=c.site_id,
+                site_name=c.site_name,
+                energy_generated_kwh=c.energy_generated_kwh,
+                capacity_kw=c.capacity_kw,
+                performance_ratio=c.performance_ratio,
+                specific_yield=c.specific_yield,
+            )
+            for c in comparisons
+        ],
     )
 
 
@@ -418,6 +346,7 @@ async def get_environmental_impact(
     end_date: date = Query(..., description="End date"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    telemetry_service: TelemetryService = Depends(get_telemetry_service),
 ):
     """Get environmental impact metrics."""
     if not organization_id and not site_id:
@@ -432,23 +361,22 @@ async def get_environmental_impact(
     else:
         await check_org_access(organization_id, current_user, uow)
 
-    # TODO: Get actual energy data from telemetry system
-    total_solar_energy = 0.0  # kWh
-
-    # Calculate environmental metrics
-    co2_avoided = total_solar_energy * CO2_PER_KWH_KG
-    trees_equivalent = (co2_avoided / 1000) * TREES_PER_TON_CO2  # Convert to tons
-    coal_avoided = total_solar_energy * COAL_PER_KWH_KG
-    estimated_savings = total_solar_energy * PKR_PER_KWH
+    # Get environmental impact from telemetry service
+    impact = await telemetry_service.get_environmental_impact(
+        organization_id=organization_id,
+        start_date=start_date,
+        end_date=end_date,
+        site_id=site_id,
+    )
 
     return EnvironmentalImpactResponse(
-        site_id=site_id,
-        organization_id=organization_id,
-        period_start=start_date,
-        period_end=end_date,
-        total_solar_energy_kwh=total_solar_energy,
-        co2_avoided_kg=co2_avoided,
-        trees_equivalent=trees_equivalent,
-        coal_avoided_kg=coal_avoided,
-        estimated_savings_pkr=estimated_savings,
+        site_id=impact.site_id,
+        organization_id=impact.organization_id,
+        period_start=impact.period_start,
+        period_end=impact.period_end,
+        total_solar_energy_kwh=impact.total_solar_energy_kwh,
+        co2_avoided_kg=impact.co2_avoided_kg,
+        trees_equivalent=impact.trees_equivalent,
+        coal_avoided_kg=impact.coal_avoided_kg,
+        estimated_savings_pkr=impact.estimated_savings_pkr,
     )

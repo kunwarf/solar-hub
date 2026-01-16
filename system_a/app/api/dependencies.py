@@ -8,14 +8,20 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ..application.services.auth_service import AuthService
+from ..application.services.telemetry_service import TelemetryService
 from ..application.interfaces.unit_of_work import UnitOfWork
 from ..domain.entities.user import User, UserRole, UserStatus
 from ..infrastructure.database.connection import (
     DatabaseManager,
     get_unit_of_work as create_unit_of_work,
 )
-from ..infrastructure.database.repositories import SQLAlchemyUserRepository
+from ..infrastructure.database.repositories import (
+    SQLAlchemyUserRepository,
+    SQLAlchemyTelemetryRepository,
+)
 from ..infrastructure.security import BcryptPasswordHasher, JWTHandler
+from ..infrastructure.external import SMTPEmailService, MockEmailService
+from ..application.interfaces.services import EmailService
 from ..config import get_settings
 
 settings = get_settings()
@@ -27,6 +33,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # Singleton instances for services
 _password_hasher: Optional[BcryptPasswordHasher] = None
 _jwt_handler: Optional[JWTHandler] = None
+_email_service: Optional[EmailService] = None
 
 
 def get_password_hasher() -> BcryptPasswordHasher:
@@ -52,6 +59,22 @@ def get_jwt_handler() -> JWTHandler:
     return _jwt_handler
 
 
+def get_email_service() -> EmailService:
+    """
+    Get email service instance.
+
+    Uses MockEmailService if email is disabled in settings,
+    otherwise uses SMTPEmailService.
+    """
+    global _email_service
+    if _email_service is None:
+        if settings.notifications.email_enabled:
+            _email_service = SMTPEmailService(settings.notifications)
+        else:
+            _email_service = MockEmailService()
+    return _email_service
+
+
 async def get_unit_of_work() -> AsyncGenerator[UnitOfWork, None]:
     """
     Provide Unit of Work for request lifecycle.
@@ -67,12 +90,15 @@ def get_auth_service(
     uow: UnitOfWork = Depends(get_unit_of_work),
     password_hasher: BcryptPasswordHasher = Depends(get_password_hasher),
     jwt_handler: JWTHandler = Depends(get_jwt_handler),
+    email_service: EmailService = Depends(get_email_service),
 ) -> AuthService:
     """Get authentication service instance."""
     return AuthService(
         user_repository=uow.users,
         password_hasher=password_hasher,
         token_service=jwt_handler,
+        email_service=email_service,
+        base_url=settings.app.frontend_url if hasattr(settings.app, 'frontend_url') else "http://localhost:3000",
     )
 
 
@@ -231,3 +257,20 @@ class RoleChecker:
 require_admin = RoleChecker([UserRole.ADMIN, UserRole.SUPER_ADMIN])
 require_super_admin = RoleChecker([UserRole.SUPER_ADMIN])
 require_manager = RoleChecker([UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+
+
+async def get_telemetry_service(
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> TelemetryService:
+    """
+    Get telemetry service instance.
+
+    Provides access to telemetry data for dashboards.
+    """
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    return TelemetryService(
+        telemetry_repository=telemetry_repo,
+        site_repository=uow.sites,
+        device_repository=uow.devices,
+        alert_repository=uow.alerts,
+    )

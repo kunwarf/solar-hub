@@ -1,0 +1,240 @@
+# Device Communication Protocols Configuration
+# ==============================================
+# Defines protocols for identifying and communicating with solar devices.
+# Protocols are tried in priority order (lower number = higher priority).
+
+protocols:
+  # ============================================
+  # INVERTERS
+  # ============================================
+
+  - id: powdrive
+    name: "Powdrive Hybrid Inverter"
+    description: "Powdrive 12K and similar hybrid inverters"
+    device_type: inverter
+    protocol_type: modbus_tcp
+    priority: 1
+    manufacturer: "Powdrive"
+    model_pattern: "^(12K|15K|20K).*"
+    register_map: "powdrive_registers.json"
+    adapter_class: "adapters.powdrive.PowdriveAdapter"
+
+    identification:
+      # Read inverter type register
+      register: 0
+      size: 1
+      expected_values: [2, 3, 4, 5]  # 2=Inverter, 3=Hybrid, 4=Micro, 5=3Phase Hybrid
+      timeout: 5.0
+
+    serial_number:
+      register: 3
+      size: 5
+      encoding: ascii
+
+    polling:
+      default_interval: 10
+      timeout: 5.0
+      max_consecutive_failures: 5
+
+    modbus:
+      unit_id: 1
+      timeout: 5.0
+      retries: 3
+
+  - id: senergy
+    name: "Senergy Hybrid Inverter"
+    description: "Senergy series hybrid inverters"
+    device_type: inverter
+    protocol_type: modbus_tcp
+    priority: 2
+    manufacturer: "Senergy"
+    register_map: "senergy_registers.json"
+    adapter_class: "adapters.senergy.SenergyAdapter"
+
+    identification:
+      # Senergy has different identification registers
+      register: 0
+      size: 1
+      expected_values: [100, 101, 102, 103]
+      timeout: 5.0
+
+    serial_number:
+      register: 10
+      size: 8
+      encoding: ascii
+
+    polling:
+      default_interval: 10
+      timeout: 5.0
+      max_consecutive_failures: 5
+
+    modbus:
+      unit_id: 1
+      timeout: 5.0
+      retries: 3
+
+  # ============================================
+  # ENERGY METERS
+  # ============================================
+
+  - id: iammeter
+    name: "IAMMeter Grid Meter"
+    description: "IAMMeter WEM3080, WEM3080T, WEM3046T energy meters"
+    device_type: meter
+    protocol_type: modbus_tcp
+    priority: 10
+    manufacturer: "Iammeter"
+    model_pattern: "^WEM3(080|046)T?$"
+    register_map: "iammeter_registers.json"
+    adapter_class: "adapters.iammeter.IAMMeterAdapter"
+
+    identification:
+      # Device model register: 1=WEM3080, 2=WEM3080T, 3=WEM3046T, 4=WEM3050T
+      register: 9
+      size: 1
+      expected_values: [1, 2, 3, 4]
+      timeout: 5.0
+
+    serial_number:
+      register: 56
+      size: 8
+      encoding: ascii
+
+    polling:
+      default_interval: 5
+      timeout: 5.0
+      max_consecutive_failures: 5
+
+    modbus:
+      unit_id: 1
+      timeout: 5.0
+      retries: 3
+
+  # ============================================
+  # BATTERIES
+  # ============================================
+
+  - id: pytes
+    name: "Pytes Battery"
+    description: "Pytes LFP battery modules"
+    device_type: battery
+    protocol_type: command
+    priority: 20
+    manufacturer: "Pytes"
+    register_map: "pytes_registers.json"
+    adapter_class: "adapters.battery_pytes.PytesAdapter"
+
+    identification:
+      # Command-based identification
+      command: "info"
+      expected_response: "Pytes"
+      timeout: 5.0
+
+    serial_number:
+      command: "sn"
+      parse_regex: "SN:\\s*([A-Z0-9]+)"
+
+    polling:
+      default_interval: 10
+      timeout: 5.0
+      max_consecutive_failures: 5
+
+    command:
+      line_ending: "\r\n"
+      response_timeout: 5.0
+      command_delay: 0.1
+
+  - id: jkbms_tcp
+    name: "JK-BMS (TCP)"
+    description: "JK Battery Management System over TCP"
+    device_type: battery
+    protocol_type: command
+    priority: 21
+    manufacturer: "JK"
+    adapter_class: "adapters.battery_jkbms_tcpip.JKBMSTCPAdapter"
+
+    identification:
+      command: "\x4E\x57"  # JK-BMS request header
+      expected_response: "\x4E\x57"  # JK-BMS response header
+      timeout: 5.0
+
+    serial_number:
+      command: "sn"
+      parse_regex: "([A-Z0-9]+)"
+
+    polling:
+      default_interval: 10
+      timeout: 5.0
+      max_consecutive_failures: 5
+
+    command:
+      line_ending: ""
+      response_timeout: 5.0
+      command_delay: 0.1
+
+  - id: jkbms_ble
+    name: "JK-BMS (BLE)"
+    description: "JK Battery Management System over Bluetooth LE"
+    device_type: battery
+    protocol_type: ble
+    priority: 100
+    manufacturer: "JK"
+    adapter_class: "adapters.battery_jkbms_ble.JKBMSBLEAdapter"
+
+    # BLE identification is handled differently (by advertisement name)
+    identification:
+      timeout: 10.0
+
+    polling:
+      default_interval: 30
+      timeout: 10.0
+      max_consecutive_failures: 3
+
+  # ============================================
+  # MQTT DEVICES
+  # ============================================
+
+  - id: mqtt_generic
+    name: "MQTT Generic Device"
+    description: "Generic MQTT-based solar device (inverter, meter, or battery)"
+    device_type: inverter
+    protocol_type: mqtt
+    priority: 50
+    adapter_class: "adapters.mqtt_adapter.MQTTAdapter"
+
+    # MQTT identification via status topic
+    identification:
+      timeout: 10.0
+
+    polling:
+      default_interval: 10
+      timeout: 10.0
+      max_consecutive_failures: 5
+
+    # MQTT-specific configuration
+    mqtt:
+      topic_prefix: "solar-hub"
+      qos: 1
+      keepalive: 60
+
+# Server configuration defaults
+# These can be overridden via environment variables
+server:
+  host: "0.0.0.0"
+  port: 8502
+  max_connections: 1000
+
+connection:
+  timeout: 30
+  keepalive: 60
+
+identification:
+  timeout: 10
+  max_retries: 3
+
+polling:
+  default_interval: 10
+  min_interval: 5
+  max_interval: 300
+  failure_backoff: true
+  max_consecutive_failures: 5

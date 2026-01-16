@@ -11,8 +11,9 @@ from uuid import UUID
 from ...domain.entities.user import User
 from ...domain.entities.organization import Organization
 from ...domain.entities.site import Site
-from ...domain.entities.device import Device
+from ...domain.entities.device import Device, DeviceType, ProtocolType
 from ...domain.entities.alert import Alert, AlertRule
+from ...domain.entities.protocol_definition import ProtocolDefinition
 
 
 # Generic type for entities
@@ -406,4 +407,60 @@ class AlertRepository(Repository[Alert]):
         escalation_threshold_minutes: int
     ) -> List[Alert]:
         """Get alerts that should be escalated."""
+        pass
+
+
+class ProtocolDefinitionRepository(Repository[ProtocolDefinition]):
+    """Repository interface for ProtocolDefinition entities."""
+
+    @abstractmethod
+    async def get_by_protocol_id(self, protocol_id: str) -> Optional[ProtocolDefinition]:
+        """Get protocol definition by unique protocol_id string."""
+        pass
+
+    @abstractmethod
+    async def get_by_device_type(
+        self,
+        device_type: DeviceType,
+        is_active: Optional[bool] = True
+    ) -> List[ProtocolDefinition]:
+        """Get protocol definitions for a device type."""
+        pass
+
+    @abstractmethod
+    async def get_by_protocol_type(
+        self,
+        protocol_type: ProtocolType,
+        is_active: Optional[bool] = True
+    ) -> List[ProtocolDefinition]:
+        """Get protocol definitions for a protocol type."""
+        pass
+
+    @abstractmethod
+    async def get_all_active(
+        self,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[ProtocolDefinition]:
+        """Get all active protocol definitions ordered by priority."""
+        pass
+
+    @abstractmethod
+    async def get_all(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        is_active: Optional[bool] = None
+    ) -> List[ProtocolDefinition]:
+        """Get all protocol definitions with optional filtering."""
+        pass
+
+    @abstractmethod
+    async def count(self, is_active: Optional[bool] = None) -> int:
+        """Count protocol definitions."""
+        pass
+
+    @abstractmethod
+    async def protocol_id_exists(self, protocol_id: str) -> bool:
+        """Check if protocol_id is already registered."""
         pass

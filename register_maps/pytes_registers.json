@@ -1,0 +1,11 @@
+[
+  {"id":"battery_bank_voltage_v", "name":"Battery Bank Voltage", "unit":"V", "rw":"RO", "comment":"Standardized ID"},
+  {"id":"battery_bank_current_a", "name":"Battery Bank Current", "unit":"A", "rw":"RO", "comment":"Standardized ID"},
+  {"id":"battery_bank_temp_c", "name":"Battery Bank Temperature", "unit":"°C", "rw":"RO", "comment":"Standardized ID"},
+  {"id":"battery_bank_soc_pct", "name":"Battery Bank SOC", "unit":"%", "rw":"RO", "comment":"Standardized ID"},
+  {"id":"battery_bank_voltage", "name":"Bank Voltage", "unit":"V", "rw":"RO", "comment":"Deprecated: use battery_bank_voltage_v"},
+  {"id":"battery_bank_current", "name":"Bank Current", "unit":"A", "rw":"RO", "comment":"Deprecated: use battery_bank_current_a"},
+  {"id":"battery_bank_temperature", "name":"Bank Temperature", "unit":"°C", "rw":"RO", "comment":"Deprecated: use battery_bank_temp_c"},
+  {"id":"battery_bank_soc", "name":"Bank SOC", "unit":"%", "rw":"RO", "comment":"Deprecated: use battery_bank_soc_pct"}
+]
+

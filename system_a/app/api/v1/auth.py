@@ -18,6 +18,7 @@ from ..schemas.auth_schemas import (
     MessageResponse,
     RefreshTokenRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserResponse,
 )
@@ -73,6 +74,9 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=result.error,
         )
+
+    # Send verification email (non-blocking, don't fail registration if email fails)
+    await auth_service.send_verification_email(result.user)
 
     return UserResponse(
         id=result.user.id,
@@ -260,6 +264,7 @@ async def change_password(
 )
 async def forgot_password(
     request: ForgotPasswordRequest,
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Request password reset email.
@@ -268,8 +273,8 @@ async def forgot_password(
     For security, this endpoint always returns success even if the email
     doesn't exist.
     """
-    # TODO: Implement password reset email sending
-    # For now, we just acknowledge the request
+    await auth_service.request_password_reset(request.email)
+
     return MessageResponse(
         message="If an account exists with this email, a password reset link has been sent",
         success=True,
@@ -300,17 +305,91 @@ async def logout(
 @router.post(
     "/verify-email/{token}",
     response_model=MessageResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid or expired token"},
+    },
 )
 async def verify_email(
     token: str,
+    auth_service: AuthService = Depends(get_auth_service),
+    uow: UnitOfWork = Depends(get_unit_of_work),
 ):
     """
     Verify user's email address using verification token.
 
     The token is sent to the user's email during registration.
     """
-    # TODO: Implement email verification token handling
+    result = await auth_service.verify_email_token(token, uow)
+
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.error,
+        )
+
     return MessageResponse(
-        message="Email verification pending implementation",
-        success=False,
+        message="Email verified successfully",
+        success=True,
+    )
+
+
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid token or password"},
+    },
+)
+async def reset_password(
+    request: ResetPasswordRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """
+    Reset password using the token from password reset email.
+
+    The token expires after 60 minutes for security.
+    """
+    result = await auth_service.reset_password_with_token(
+        token=request.token,
+        new_password=request.new_password,
+        uow=uow,
+    )
+
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.error,
+        )
+
+    return MessageResponse(
+        message="Password reset successfully",
+        success=True,
+    )
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+)
+async def resend_verification_email(
+    current_user: User = Depends(get_current_user),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """
+    Resend email verification link to current user.
+
+    Only available for users who haven't verified their email yet.
+    """
+    if current_user.is_verified:
+        return MessageResponse(
+            message="Email is already verified",
+            success=True,
+        )
+
+    await auth_service.send_verification_email(current_user)
+
+    return MessageResponse(
+        message="Verification email sent",
+        success=True,
     )

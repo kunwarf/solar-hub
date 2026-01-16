@@ -1,0 +1,177 @@
+[
+  {
+    "id": "pv_power_w",
+    "name": "PV Power",
+    "aliases": ["pv_power", "solar_power", "dc_power"],
+    "unit": "W",
+    "type": "float",
+    "description": "Total PV/solar power generation"
+  },
+  {
+    "id": "grid_power_w",
+    "name": "Grid Power",
+    "aliases": ["grid_power", "ac_power", "mains_power"],
+    "unit": "W",
+    "type": "float",
+    "description": "Grid power (positive = import, negative = export)"
+  },
+  {
+    "id": "load_power_w",
+    "name": "Load Power",
+    "aliases": ["load_power", "consumption", "house_power"],
+    "unit": "W",
+    "type": "float",
+    "description": "Total load/consumption power"
+  },
+  {
+    "id": "batt_power_w",
+    "name": "Battery Power",
+    "aliases": ["battery_power", "batt_power", "storage_power"],
+    "unit": "W",
+    "type": "float",
+    "description": "Battery power (positive = charging, negative = discharging)"
+  },
+  {
+    "id": "batt_voltage_v",
+    "name": "Battery Voltage",
+    "aliases": ["battery_voltage", "batt_voltage", "bat_voltage"],
+    "unit": "V",
+    "type": "float",
+    "description": "Battery voltage"
+  },
+  {
+    "id": "batt_current_a",
+    "name": "Battery Current",
+    "aliases": ["battery_current", "batt_current", "bat_current"],
+    "unit": "A",
+    "type": "float",
+    "description": "Battery current"
+  },
+  {
+    "id": "batt_soc_pct",
+    "name": "Battery SOC",
+    "aliases": ["battery_soc", "soc", "state_of_charge", "batt_soc"],
+    "unit": "%",
+    "type": "float",
+    "min": 0,
+    "max": 100,
+    "description": "Battery state of charge percentage"
+  },
+  {
+    "id": "inverter_temp_c",
+    "name": "Inverter Temperature",
+    "aliases": ["temperature", "temp", "inverter_temperature", "device_temp"],
+    "unit": "C",
+    "type": "float",
+    "description": "Inverter/device temperature"
+  },
+  {
+    "id": "serial_number",
+    "name": "Serial Number",
+    "aliases": ["sn", "device_serial", "serial"],
+    "type": "string",
+    "description": "Device serial number"
+  },
+  {
+    "id": "device_model",
+    "name": "Device Model",
+    "aliases": ["model", "device_type", "product_model"],
+    "type": "string",
+    "description": "Device model identifier"
+  },
+  {
+    "id": "firmware_version",
+    "name": "Firmware Version",
+    "aliases": ["fw_version", "firmware", "version"],
+    "type": "string",
+    "description": "Device firmware version"
+  },
+  {
+    "id": "daily_pv_energy_kwh",
+    "name": "Daily PV Energy",
+    "aliases": ["daily_solar_energy", "daily_generation", "pv_energy_today"],
+    "unit": "kWh",
+    "type": "float",
+    "description": "Daily PV energy generation"
+  },
+  {
+    "id": "daily_grid_import_kwh",
+    "name": "Daily Grid Import",
+    "aliases": ["daily_import", "grid_import_today", "energy_from_grid"],
+    "unit": "kWh",
+    "type": "float",
+    "description": "Daily energy imported from grid"
+  },
+  {
+    "id": "daily_grid_export_kwh",
+    "name": "Daily Grid Export",
+    "aliases": ["daily_export", "grid_export_today", "energy_to_grid"],
+    "unit": "kWh",
+    "type": "float",
+    "description": "Daily energy exported to grid"
+  },
+  {
+    "id": "daily_consumption_kwh",
+    "name": "Daily Consumption",
+    "aliases": ["daily_load", "consumption_today", "energy_consumed"],
+    "unit": "kWh",
+    "type": "float",
+    "description": "Daily energy consumption"
+  },
+  {
+    "id": "total_pv_energy_kwh",
+    "name": "Total PV Energy",
+    "aliases": ["total_solar_energy", "lifetime_generation", "cumulative_pv"],
+    "unit": "kWh",
+    "type": "float",
+    "description": "Lifetime PV energy generation"
+  },
+  {
+    "id": "pv1_power_w",
+    "name": "PV1 Power",
+    "aliases": ["mppt1_power", "string1_power"],
+    "unit": "W",
+    "type": "float",
+    "description": "PV string 1 / MPPT 1 power"
+  },
+  {
+    "id": "pv2_power_w",
+    "name": "PV2 Power",
+    "aliases": ["mppt2_power", "string2_power"],
+    "unit": "W",
+    "type": "float",
+    "description": "PV string 2 / MPPT 2 power"
+  },
+  {
+    "id": "pv1_voltage_v",
+    "name": "PV1 Voltage",
+    "aliases": ["mppt1_voltage", "string1_voltage"],
+    "unit": "V",
+    "type": "float",
+    "description": "PV string 1 / MPPT 1 voltage"
+  },
+  {
+    "id": "pv2_voltage_v",
+    "name": "PV2 Voltage",
+    "aliases": ["mppt2_voltage", "string2_voltage"],
+    "unit": "V",
+    "type": "float",
+    "description": "PV string 2 / MPPT 2 voltage"
+  },
+  {
+    "id": "grid_voltage_v",
+    "name": "Grid Voltage",
+    "aliases": ["ac_voltage", "mains_voltage"],
+    "unit": "V",
+    "type": "float",
+    "description": "AC grid voltage"
+  },
+  {
+    "id": "grid_frequency_hz",
+    "name": "Grid Frequency",
+    "aliases": ["ac_frequency", "mains_frequency", "frequency"],
+    "unit": "Hz",
+    "type": "float",
+    "description": "AC grid frequency"
+  }
+]

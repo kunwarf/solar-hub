@@ -1,13 +1,14 @@
 """
 Authentication application service.
 """
+import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
 from uuid import UUID
 
 from ..interfaces.repositories import UserRepository
-from ..interfaces.services import PasswordHasher, TokenService, EventPublisher
+from ..interfaces.services import PasswordHasher, TokenService, EventPublisher, EmailService
 from ..interfaces.unit_of_work import UnitOfWork
 from ...domain.entities.user import User, UserStatus, UserRole, UserPreferences
 from ...domain.events.user_events import (
@@ -17,6 +18,8 @@ from ...domain.events.user_events import (
     UserPasswordChanged,
     UserEmailVerified,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,17 +58,25 @@ class AuthService:
     MAX_FAILED_ATTEMPTS = 5
     LOCKOUT_DURATION_MINUTES = 30
 
+    # Token expiry settings
+    EMAIL_VERIFICATION_EXPIRY_HOURS = 24
+    PASSWORD_RESET_EXPIRY_MINUTES = 60
+
     def __init__(
         self,
         user_repository: UserRepository,
         password_hasher: PasswordHasher,
         token_service: TokenService,
         event_publisher: Optional[EventPublisher] = None,
+        email_service: Optional[EmailService] = None,
+        base_url: str = "http://localhost:3000",
     ):
         self._user_repository = user_repository
         self._password_hasher = password_hasher
         self._token_service = token_service
         self._event_publisher = event_publisher
+        self._email_service = email_service
+        self._base_url = base_url
 
     async def register(
         self,
@@ -480,3 +491,177 @@ class AuthService:
             return False, "Password must contain at least one special character"
 
         return True, None
+
+    def _create_email_verification_token(self, user_id: UUID) -> str:
+        """Create a JWT token for email verification."""
+        return self._token_service.create_access_token(
+            user_id=user_id,
+            role="verify_email",
+            expires_delta=timedelta(hours=self.EMAIL_VERIFICATION_EXPIRY_HOURS),
+        )
+
+    def _create_password_reset_token(self, user_id: UUID) -> str:
+        """Create a JWT token for password reset."""
+        return self._token_service.create_access_token(
+            user_id=user_id,
+            role="reset_password",
+            expires_delta=timedelta(minutes=self.PASSWORD_RESET_EXPIRY_MINUTES),
+        )
+
+    async def send_verification_email(
+        self,
+        user: User,
+    ) -> bool:
+        """
+        Send email verification email to user.
+
+        Args:
+            user: User to send verification email to
+
+        Returns:
+            True if email was sent successfully
+        """
+        if not self._email_service:
+            logger.warning("Email service not configured, skipping verification email")
+            return False
+
+        token = self._create_email_verification_token(user.id)
+        verification_url = f"{self._base_url}/verify-email?token={token}"
+
+        return await self._email_service.send_verification_email(
+            to=user.email,
+            verification_url=verification_url,
+            user_name=user.first_name,
+        )
+
+    async def request_password_reset(
+        self,
+        email: str,
+    ) -> bool:
+        """
+        Request password reset for a user.
+
+        Sends password reset email if user exists.
+        Always returns True to prevent email enumeration.
+
+        Args:
+            email: Email address to send reset link to
+
+        Returns:
+            True (always, to prevent email enumeration)
+        """
+        user = await self._user_repository.get_by_email(email.lower().strip())
+
+        if not user:
+            # Don't reveal whether email exists
+            logger.info("Password reset requested for non-existent email: %s", email)
+            return True
+
+        if user.status in (UserStatus.SUSPENDED, UserStatus.DEACTIVATED):
+            # Don't send reset email to suspended/deactivated accounts
+            logger.info("Password reset requested for inactive account: %s", email)
+            return True
+
+        if not self._email_service:
+            logger.warning("Email service not configured, skipping password reset email")
+            return True
+
+        token = self._create_password_reset_token(user.id)
+        reset_url = f"{self._base_url}/reset-password?token={token}"
+
+        await self._email_service.send_password_reset_email(
+            to=user.email,
+            reset_url=reset_url,
+            user_name=user.first_name,
+        )
+
+        logger.info("Password reset email sent to: %s", email)
+        return True
+
+    async def verify_email_token(
+        self,
+        token: str,
+        uow: UnitOfWork,
+    ) -> AuthResult:
+        """
+        Verify email using token from verification email.
+
+        Args:
+            token: JWT token from verification email
+            uow: Unit of work for transaction management
+
+        Returns:
+            AuthResult with success status
+        """
+        payload = self._token_service.verify_token(token)
+
+        if not payload:
+            return AuthResult(
+                success=False,
+                error="Invalid or expired verification token"
+            )
+
+        if payload.role != "verify_email":
+            return AuthResult(
+                success=False,
+                error="Invalid token type"
+            )
+
+        try:
+            user_id = UUID(payload.sub)
+        except ValueError:
+            return AuthResult(
+                success=False,
+                error="Invalid token payload"
+            )
+
+        return await self.verify_email(user_id, uow)
+
+    async def reset_password_with_token(
+        self,
+        token: str,
+        new_password: str,
+        uow: UnitOfWork,
+    ) -> AuthResult:
+        """
+        Reset password using token from password reset email.
+
+        Args:
+            token: JWT token from password reset email
+            new_password: New password to set
+            uow: Unit of work for transaction management
+
+        Returns:
+            AuthResult with success status
+        """
+        # Validate password strength first
+        is_valid, error = self.validate_password_strength(new_password)
+        if not is_valid:
+            return AuthResult(
+                success=False,
+                error=error
+            )
+
+        payload = self._token_service.verify_token(token)
+
+        if not payload:
+            return AuthResult(
+                success=False,
+                error="Invalid or expired reset token"
+            )
+
+        if payload.role != "reset_password":
+            return AuthResult(
+                success=False,
+                error="Invalid token type"
+            )
+
+        try:
+            user_id = UUID(payload.sub)
+        except ValueError:
+            return AuthResult(
+                success=False,
+                error="Invalid token payload"
+            )
+
+        return await self.reset_password(user_id, new_password, uow)
