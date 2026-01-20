@@ -18,7 +18,7 @@ SSH into your server and run the setup script:
 
 ```bash
 # Download the setup script
-wget https://raw.githubusercontent.com/YOUR_REPO/solar-hub/main/deployment/scripts/setup-server.sh
+wget https://raw.githubusercontent.com/kunwarf/solar-hub/main/deployment/scripts/setup-server.sh
 
 # Make it executable
 chmod +x setup-server.sh

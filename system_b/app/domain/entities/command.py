@@ -40,7 +40,7 @@ class CommandType(str, Enum):
     CUSTOM = "custom"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceCommand(Entity):
     """
     A command to be sent to a device.

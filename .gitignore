@@ -51,6 +51,7 @@ desktop.ini
 tmpclaude-*
 *.tmp
 *.bak
+nul
 
 # Database
 *.db

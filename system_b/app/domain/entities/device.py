@@ -13,7 +13,7 @@ from .base import Entity
 from .telemetry import DeviceType, ConnectionStatus
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceRegistry(Entity):
     """
     Lightweight device registry for System B.

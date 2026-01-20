@@ -8,7 +8,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Entity(ABC):
     """Base class for all entities with identity."""
     id: UUID = field(default_factory=uuid4)
