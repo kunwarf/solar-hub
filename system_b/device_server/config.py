@@ -74,6 +74,7 @@ class PollingSettings(BaseSettings):
     default_interval: int = Field(default=10, description="Default poll interval (seconds)")
     min_interval: int = Field(default=5, description="Minimum poll interval (seconds)")
     max_interval: int = Field(default=300, description="Maximum poll interval (seconds)")
+    poll_timeout: float = Field(default=30.0, description="Timeout for each poll operation (seconds)")
     failure_backoff: bool = Field(default=True, description="Enable exponential backoff on failure")
     max_consecutive_failures: int = Field(default=5, description="Failures before device goes offline")
     backoff_multiplier: float = Field(default=2.0, description="Backoff multiplier")
