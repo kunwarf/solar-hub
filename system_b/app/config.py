@@ -218,12 +218,8 @@ def get_settings() -> AppSettings:
     Get cached application settings.
 
     Uses LRU cache to avoid re-reading environment variables on every access.
+    Note: Environment variables take precedence over .env file and defaults.
     """
-    # Force reload to ensure environment variables are picked up
-    import os
-    # Clear any existing cache if environment variables are set
-    if any(os.getenv(f'TIMESCALE_{k}') for k in ['USER', 'PASSWORD', 'HOST']):
-        get_settings.cache_clear()
     return AppSettings()
 
 
