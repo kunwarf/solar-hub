@@ -162,7 +162,8 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file='.env',
         env_file_encoding='utf-8',
-        extra='ignore'
+        extra='ignore',
+        populate_by_name=True
     )
 
     # Application
@@ -174,7 +175,7 @@ class AppSettings(BaseSettings):
     # Server
     host: str = Field(default='0.0.0.0')
     port: int = Field(default=8001)  # Different from System A
-    workers: int = Field(default=2)
+    uvicorn_workers: int = Field(default=2, alias='workers')
     reload: bool = Field(default=False)
 
     # API
@@ -198,7 +199,7 @@ class AppSettings(BaseSettings):
     protocols: ProtocolSettings = Field(default_factory=ProtocolSettings)
     device_auth: DeviceAuthSettings = Field(default_factory=DeviceAuthSettings)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
-    workers: WorkerSettings = Field(default_factory=WorkerSettings)
+    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
 
     @property
     def is_production(self) -> bool:
