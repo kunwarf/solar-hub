@@ -27,10 +27,37 @@ from ..schemas import (
 )
 from ...application.services import DeviceService, DeviceAuthService
 from ...infrastructure.database.repositories import DeviceRegistryRepository
+from ...domain.entities.telemetry import ConnectionStatus
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
+
+
+def device_to_response(device) -> DeviceResponse:
+    """Convert DeviceRegistry entity to DeviceResponse schema."""
+    # Extract fields from metadata
+    metadata = device.metadata or {}
+    firmware_version = metadata.get("firmware_version")
+    hardware_version = metadata.get("hardware_version")
+    capabilities = metadata.get("capabilities")
+    device_metadata = metadata.get("device_metadata") or metadata
+    
+    return DeviceResponse(
+        id=device.id,
+        site_id=device.site_id,
+        device_type=device.device_type.value if hasattr(device.device_type, 'value') else str(device.device_type),
+        serial_number=device.serial_number,
+        protocol_id=device.protocol,
+        firmware_version=firmware_version,
+        hardware_version=hardware_version,
+        connection_status=device.connection_status.value if hasattr(device.connection_status, 'value') else str(device.connection_status),
+        last_seen=device.last_connected_at,
+        capabilities=capabilities,
+        device_metadata=device_metadata,
+        is_active=device.connection_status != ConnectionStatus.DISCONNECTED,
+        created_at=device.created_at,
+    )
 
 
 @router.post(
@@ -95,21 +122,7 @@ async def register_device(
             metadata=metadata if metadata else None,
         )
 
-        return DeviceResponse(
-            id=device.id,
-            site_id=device.site_id,
-            device_type=device.device_type,
-            serial_number=device.serial_number,
-            protocol_id=device.protocol_id,
-            firmware_version=device.firmware_version,
-            hardware_version=device.hardware_version,
-            connection_status=device.connection_status,
-            last_seen=device.last_seen,
-            capabilities=device.capabilities,
-            device_metadata=device.device_metadata,
-            is_active=device.is_active,
-            created_at=device.created_at,
-        )
+        return device_to_response(device)
     except ValueError as e:
         logger.error(f"Validation error registering device: {e}")
         raise HTTPException(
@@ -154,19 +167,26 @@ async def sync_device(
         device_metadata=request.device_metadata,
     )
 
+    # Extract fields from metadata
+    metadata = device.metadata or {}
+    firmware_version = metadata.get("firmware_version")
+    hardware_version = metadata.get("hardware_version")
+    capabilities = metadata.get("capabilities")
+    device_metadata = metadata.get("device_metadata") or metadata
+    
     return DeviceResponse(
         id=device.id,
         site_id=device.site_id,
-        device_type=device.device_type,
+        device_type=device.device_type.value if hasattr(device.device_type, 'value') else str(device.device_type),
         serial_number=device.serial_number,
-        protocol_id=device.protocol_id,
-        firmware_version=device.firmware_version,
-        hardware_version=device.hardware_version,
-        connection_status=device.connection_status,
-        last_seen=device.last_seen,
-        capabilities=device.capabilities,
-        device_metadata=device.device_metadata,
-        is_active=device.is_active,
+        protocol_id=device.protocol,
+        firmware_version=firmware_version,
+        hardware_version=hardware_version,
+        connection_status=device.connection_status.value if hasattr(device.connection_status, 'value') else str(device.connection_status),
+        last_seen=device.last_connected_at,
+        capabilities=capabilities,
+        device_metadata=device_metadata,
+        is_active=device.connection_status != ConnectionStatus.DISCONNECTED,
         created_at=device.created_at,
     )
 
@@ -193,21 +213,7 @@ async def get_device(
             detail="Device not found",
         )
 
-    return DeviceResponse(
-        id=device.id,
-        site_id=device.site_id,
-        device_type=device.device_type,
-        serial_number=device.serial_number,
-        protocol_id=device.protocol_id,
-        firmware_version=device.firmware_version,
-        hardware_version=device.hardware_version,
-        connection_status=device.connection_status,
-        last_seen=device.last_seen,
-        capabilities=device.capabilities,
-        device_metadata=device.device_metadata,
-        is_active=device.is_active,
-        created_at=device.created_at,
-    )
+    return device_to_response(device)
 
 
 @router.patch(
@@ -236,21 +242,7 @@ async def update_device(
     updates = request.model_dump(exclude_unset=True)
     device = await device_repo.update(device_id, **updates)
 
-    return DeviceResponse(
-        id=device.id,
-        site_id=device.site_id,
-        device_type=device.device_type,
-        serial_number=device.serial_number,
-        protocol_id=device.protocol_id,
-        firmware_version=device.firmware_version,
-        hardware_version=device.hardware_version,
-        connection_status=device.connection_status,
-        last_seen=device.last_seen,
-        capabilities=device.capabilities,
-        device_metadata=device.device_metadata,
-        is_active=device.is_active,
-        created_at=device.created_at,
-    )
+    return device_to_response(device)
 
 
 @router.get(
