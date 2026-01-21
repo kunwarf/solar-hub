@@ -4,12 +4,16 @@ Configuration for the Device Server.
 Provides settings for TCP server, connection handling,
 device identification, polling, and storage integration.
 """
+import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class TCPServerSettings(BaseSettings):
@@ -179,7 +183,37 @@ def get_device_server_settings() -> DeviceServerSettings:
 
     Uses LRU cache to avoid re-reading environment variables on every access.
     """
-    return DeviceServerSettings()
+    # Find .env file location
+    cwd = Path.cwd()
+    env_file = cwd / ".env"
+
+    logger.info(f"Device Server config loading...")
+    logger.info(f"  Current working directory: {cwd}")
+    logger.info(f"  Looking for .env at: {env_file}")
+    logger.info(f"  .env exists: {env_file.exists()}")
+
+    settings = DeviceServerSettings()
+
+    # Log storage/DB settings (mask password)
+    storage = settings.storage
+    password_display = "***" if storage.timescale_password else "(empty)"
+    logger.info(f"  TimescaleDB settings:")
+    logger.info(f"    Host: {storage.timescale_host}")
+    logger.info(f"    Port: {storage.timescale_port}")
+    logger.info(f"    Database: {storage.timescale_database}")
+    logger.info(f"    User: {storage.timescale_user}")
+    logger.info(f"    Password: {password_display}")
+
+    # Log relevant env vars
+    logger.info(f"  Environment variables:")
+    for key in sorted(os.environ.keys()):
+        if key.startswith("DEVICE_STORAGE_") or key.startswith("TIMESCALE"):
+            value = os.environ[key]
+            if "PASSWORD" in key.upper():
+                value = "***"
+            logger.info(f"    {key}={value}")
+
+    return settings
 
 
 # Convenience accessor

@@ -123,10 +123,13 @@ class ConnectionManager:
             connection: The connection to manage.
         """
         try:
+            logger.info(f"Starting connection lifecycle for {connection.remote_addr}")
+
             # Brief stabilization delay
             await asyncio.sleep(0.5)
 
             # Phase 1: Identification
+            logger.info(f"Phase 1: Identifying device on {connection.remote_addr}")
             connection.state = ConnectionState.IDENTIFYING
             identified = await self._identify_device(connection)
 
