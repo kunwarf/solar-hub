@@ -3,9 +3,14 @@ SQLAlchemy models for telemetry data in TimescaleDB.
 
 These models represent the hypertables and regular tables in System B.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID
+
+
+def utc_now():
+    """Helper function for SQLAlchemy default values."""
+    return datetime.now(timezone.utc)
 
 from sqlalchemy import (
     String,
@@ -100,7 +105,7 @@ class DeviceRegistryModel(Base):
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column("metadata", JSONB, nullable=True)
 
     # Audit
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -141,7 +146,7 @@ class TelemetryRawModel(Base):
     raw_value: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
 
     # Ingestion tracking
-    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     processed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Indexes for common query patterns
@@ -206,7 +211,7 @@ class DeviceCommandsModel(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
 
     # Timing
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -245,7 +250,7 @@ class MetricDefinitionsModel(Base):
     max_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     aggregation_method: Mapped[str] = mapped_column(String(20), default="avg")
     is_cumulative: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class IngestionBatchesModel(Base):
@@ -265,7 +270,7 @@ class IngestionBatchesModel(Base):
     record_count: Mapped[int] = mapped_column(Integer, default=0)
 
     # Timing
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Status

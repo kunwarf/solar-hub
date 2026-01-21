@@ -4,7 +4,7 @@ Telemetry domain entities for System B.
 These entities represent raw telemetry data stored in TimescaleDB.
 """
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -57,7 +57,7 @@ class TelemetryPoint:
     source: Optional[str] = None  # 'device', 'calculated', 'manual'
     tags: Optional[Dict[str, Any]] = None
     raw_value: Optional[bytes] = None
-    received_at: datetime = field(default_factory=datetime.utcnow)
+    received_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     processed: bool = False
 
     def __post_init__(self):
