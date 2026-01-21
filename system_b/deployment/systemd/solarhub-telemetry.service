@@ -8,6 +8,7 @@ Type=exec
 User=solarhub
 Group=solarhub
 WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
+ExecStartPre=/bin/test -d /opt/solarhub/app/solar-hub/system_b || (echo "Working directory does not exist" && exit 1)
 Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/solarhub/app/.env
 # Explicitly set database credentials to ensure they're loaded
@@ -17,9 +18,10 @@ Environment="TIMESCALE_HOST=127.0.0.1"
 Environment="TIMESCALE_PORT=5432"
 Environment="TIMESCALE_NAME=solar_hub_telemetry"
 
-# Ensure log directory exists
+# Ensure directories exist and have correct permissions
 ExecStartPre=/bin/mkdir -p /opt/solarhub/logs
 ExecStartPre=/bin/chown solarhub:solarhub /opt/solarhub/logs
+ExecStartPre=/bin/chown -R solarhub:solarhub /opt/solarhub/app/solar-hub/system_b
 
 ExecStart=/opt/solarhub/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 4 --loop uvloop --http httptools
 
