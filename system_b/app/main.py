@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     # Start Device Server (TCP server for Modbus device connections)
     try:
-        from ..device_server.main import DeviceServer
+        from system_b.device_server.main import DeviceServer
 
         _device_server = DeviceServer()
         await _device_server.start()
