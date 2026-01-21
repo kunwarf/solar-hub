@@ -55,13 +55,18 @@ class TimescaleDBManager:
             # Force use of environment variables for database URL
             import os
             db = settings.database
-            # Check environment variables directly
-            user = os.getenv('TIMESCALE_USER', db.user)
-            password = os.getenv('TIMESCALE_PASSWORD', db.password)
-            host = os.getenv('TIMESCALE_HOST', db.host)
-            port = os.getenv('TIMESCALE_PORT', str(db.port))
-            name = os.getenv('TIMESCALE_NAME', db.name)
+            # Check environment variables directly (these take precedence)
+            user = os.getenv('TIMESCALE_USER') or db.user
+            password = os.getenv('TIMESCALE_PASSWORD') or db.password
+            host = os.getenv('TIMESCALE_HOST') or db.host
+            port = os.getenv('TIMESCALE_PORT') or str(db.port)
+            name = os.getenv('TIMESCALE_NAME') or db.name
+            
             db_url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+            
+            # Debug logging
+            print(f"Creating database engine with user: {user}, host: {host}, db: {name}")
+            print(f"TIMESCALE_USER env: {os.getenv('TIMESCALE_USER', 'NOT SET')}")
             
             cls._engine = create_async_engine(
                 db_url,
