@@ -9,7 +9,43 @@ This script runs a Powdrive inverter simulator that connects to System B and:
 
 - System B API running (default: http://127.0.0.1:8001)
 - Python 3.8+ with required dependencies
-- A valid Site ID in System B
+- A valid Site ID (UUID format) in System B
+
+## Getting a Site ID
+
+The `--site-id` parameter requires a valid UUID. You have several options:
+
+### Option 1: Generate a Test UUID
+
+For testing purposes, you can generate a random UUID:
+
+```bash
+# Using Python
+python -c "from uuid import uuid4; print(uuid4())"
+
+# Or use the helper script
+python scripts/get_site_id.py --generate
+```
+
+### Option 2: Get Site ID from System A
+
+If System A is accessible, you can list sites:
+
+```bash
+# Using the helper script
+python scripts/get_site_id.py --list --system-a-url http://127.0.0.1:8000
+
+# Or directly via API (if authenticated)
+curl http://127.0.0.1:8000/api/v1/sites | jq '.items[].id'
+```
+
+### Option 3: Get from Database
+
+Query the database directly:
+
+```sql
+SELECT id, name FROM sites LIMIT 10;
+```
 
 ## Usage
 
@@ -19,7 +55,7 @@ This script runs a Powdrive inverter simulator that connects to System B and:
 cd /opt/solarhub/app/solar-hub/system_b
 python scripts/run_inverter_simulator.py \
     --serial PD12K00001 \
-    --site-id <your-site-uuid> \
+    --site-id 123e4567-e89b-12d3-a456-426614174000 \
     --system-b-url http://127.0.0.1:8001 \
     --modbus-port 8502 \
     --telemetry-interval 60

@@ -300,10 +300,36 @@ class SystemBConnectedSimulator:
 async def main():
     """Main entry point."""
     import argparse
+    from uuid import uuid4
     
-    parser = argparse.ArgumentParser(description="Run inverter simulator connected to System B")
+    def uuid_type(value: str) -> UUID:
+        """Parse UUID with better error message."""
+        try:
+            return UUID(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"'{value}' is not a valid UUID. "
+                f"UUIDs must be in format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx. "
+                f"Example: {uuid4()}"
+            )
+    
+    parser = argparse.ArgumentParser(
+        description="Run inverter simulator connected to System B",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run with a valid site UUID
+  python scripts/run_inverter_simulator.py --serial PD12K00001 --site-id 123e4567-e89b-12d3-a456-426614174000
+
+  # Generate a test UUID (for testing only)
+  python -c "from uuid import uuid4; print(uuid4())"
+  
+  # Get site IDs from System A API (if available)
+  curl http://127.0.0.1:8000/api/v1/sites | jq '.items[].id'
+        """
+    )
     parser.add_argument("--serial", required=True, help="Device serial number")
-    parser.add_argument("--site-id", required=True, type=UUID, help="Site ID (UUID)")
+    parser.add_argument("--site-id", required=True, type=uuid_type, help="Site ID (must be a valid UUID)")
     parser.add_argument("--system-b-url", default="http://127.0.0.1:8001", help="System B API URL")
     parser.add_argument("--modbus-port", type=int, default=8502, help="Modbus TCP port")
     parser.add_argument("--telemetry-interval", type=int, default=60, help="Telemetry interval (seconds)")
