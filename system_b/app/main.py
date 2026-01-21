@@ -28,6 +28,7 @@ settings = get_settings()
 # Global reference to Device Server for health checks
 _device_server: Optional["DeviceServer"] = None
 _device_server_task: Optional[asyncio.Task] = None
+_device_server_lock_socket = None
 
 # Configure logging
 logging.basicConfig(
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     Manages startup and shutdown tasks.
     """
-    global _device_server, _device_server_task
+    global _device_server, _device_server_task, _device_server_lock_socket
 
     # Startup
     logger = logging.getLogger(__name__)
@@ -71,36 +72,64 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         raise  # Redis is critical for System B
 
     # Start Device Server (TCP server for Modbus device connections)
+    # Only start in one worker - use a lock file to coordinate
+    import socket
+    import tempfile
+    from pathlib import Path as FilePath
+
+    device_server_lock_file = FilePath(tempfile.gettempdir()) / "solarhub_device_server.lock"
+    should_start_device_server = False
+
     try:
-        # Add parent directory to path if needed for device_server imports
-        import sys
-        from pathlib import Path
-        system_b_path = Path(__file__).parent.parent
-        solar_hub_path = system_b_path.parent
-        if str(solar_hub_path) not in sys.path:
-            sys.path.insert(0, str(solar_hub_path))
+        # Try to acquire exclusive lock by binding to a local socket
+        # This is atomic and works across processes
+        _device_server_lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _device_server_lock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        _device_server_lock_socket.bind(('127.0.0.1', 18502))  # Internal lock port
+        should_start_device_server = True
+        logger.info("This worker will start the Device Server")
+    except OSError:
+        # Another worker already has the lock
+        logger.info("Device Server will be started by another worker")
+        _device_server_lock_socket = None
 
-        from system_b.device_server.main import DeviceServer
+    if should_start_device_server:
+        try:
+            # Add parent directory to path if needed for device_server imports
+            import sys
+            system_b_path = FilePath(__file__).parent.parent
+            solar_hub_path = system_b_path.parent
+            if str(solar_hub_path) not in sys.path:
+                sys.path.insert(0, str(solar_hub_path))
 
-        _device_server = DeviceServer()
-        await _device_server.start()
+            from system_b.device_server.main import DeviceServer
 
-        # Run serve_forever in background task
-        _device_server_task = asyncio.create_task(
-            _device_server.serve_forever(),
-            name="device_server"
-        )
-        logger.info("Device Server started successfully")
-    except Exception as e:
-        logger.error(f"Device Server startup failed: {e}")
-        # Don't raise - allow API to run even if device server fails
-        _device_server = None
-        _device_server_task = None
+            _device_server = DeviceServer()
+            await _device_server.start()
+
+            # Run serve_forever in background task
+            _device_server_task = asyncio.create_task(
+                _device_server.serve_forever(),
+                name="device_server"
+            )
+            logger.info("Device Server started successfully")
+        except Exception as e:
+            logger.error(f"Device Server startup failed: {e}")
+            # Don't raise - allow API to run even if device server fails
+            _device_server = None
+            _device_server_task = None
 
     yield
 
     # Shutdown
     logger.info("Shutting down application...")
+
+    # Release device server lock socket
+    if _device_server_lock_socket:
+        try:
+            _device_server_lock_socket.close()
+        except Exception:
+            pass
 
     # Stop Device Server
     if _device_server:
