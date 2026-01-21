@@ -49,6 +49,19 @@ class ModbusDeviceSimulator:
     # Register definitions for each device type
     REGISTER_MAPS = {
         "inverter": {
+            # Identification registers (read by server to identify device)
+            # These match the powdrive protocol definition in protocols.yaml
+            "identification": {
+                0: {"name": "device_type", "value": 3},  # 3 = Hybrid inverter
+                1: {"name": "protocol_version", "value": 1},
+                2: {"name": "firmware_version", "value": 100},
+                # Serial number registers (3-7, 5 registers, ASCII encoded)
+                3: {"name": "serial_1", "ascii": True},
+                4: {"name": "serial_2", "ascii": True},
+                5: {"name": "serial_3", "ascii": True},
+                6: {"name": "serial_4", "ascii": True},
+                7: {"name": "serial_5", "ascii": True},
+            },
             # Input registers (read-only telemetry) - address 30000+
             "input": {
                 30001: {"name": "pv_power", "unit": "W", "min": 0, "max": 12000},
@@ -82,6 +95,15 @@ class ModbusDeviceSimulator:
             },
         },
         "battery": {
+            # Identification registers for battery (not used for Modbus probing,
+            # but included for consistency)
+            "identification": {
+                0: {"name": "device_type", "value": 10},  # Battery type
+                10: {"name": "serial_1", "ascii": True},
+                11: {"name": "serial_2", "ascii": True},
+                12: {"name": "serial_3", "ascii": True},
+                13: {"name": "serial_4", "ascii": True},
+            },
             "input": {
                 30001: {"name": "soc", "unit": "%*10", "min": 100, "max": 1000},
                 30002: {"name": "soh", "unit": "%*10", "min": 800, "max": 1000},
@@ -110,6 +132,19 @@ class ModbusDeviceSimulator:
             },
         },
         "meter": {
+            # Identification registers - matches iammeter protocol
+            # register 9, expected values [1, 2, 3, 4]
+            "identification": {
+                9: {"name": "model_type", "value": 1},  # 1 = WEM3080
+                56: {"name": "serial_1", "ascii": True},
+                57: {"name": "serial_2", "ascii": True},
+                58: {"name": "serial_3", "ascii": True},
+                59: {"name": "serial_4", "ascii": True},
+                60: {"name": "serial_5", "ascii": True},
+                61: {"name": "serial_6", "ascii": True},
+                62: {"name": "serial_7", "ascii": True},
+                63: {"name": "serial_8", "ascii": True},
+            },
             "input": {
                 30001: {"name": "grid_power", "unit": "W", "min": -10000, "max": 10000},
                 30002: {"name": "grid_voltage", "unit": "V*10", "min": 2100, "max": 2500},
@@ -206,6 +241,16 @@ class ModbusDeviceSimulator:
         """Initialize register values."""
         register_map = self.REGISTER_MAPS[self.device_type]
 
+        # Initialize identification registers (used for device probing)
+        if "identification" in register_map:
+            for addr, config in register_map["identification"].items():
+                if config.get("ascii"):
+                    # Will be set by _set_serial_number_registers
+                    self.holding_registers[addr] = 0
+                else:
+                    self.holding_registers[addr] = config.get("value", 0)
+            logger.info(f"Initialized identification registers for {self.device_type}")
+
         # Initialize input registers
         for addr, config in register_map["input"].items():
             if config.get("fixed"):
@@ -230,9 +275,25 @@ class ModbusDeviceSimulator:
         # Pad serial to 16 characters (8 registers * 2 bytes)
         serial_padded = self.serial_number.ljust(16, "\x00")[:16]
 
-        # Find serial number registers
-        register_map = self.REGISTER_MAPS[self.device_type]["input"]
-        serial_regs = [addr for addr, cfg in register_map.items() if "serial" in cfg["name"]]
+        register_map = self.REGISTER_MAPS[self.device_type]
+
+        # Set serial in identification registers (holding registers at low addresses)
+        if "identification" in register_map:
+            ident_map = register_map["identification"]
+            serial_regs = [addr for addr, cfg in ident_map.items() if cfg.get("ascii")]
+            serial_regs.sort()
+
+            for i, addr in enumerate(serial_regs):
+                if i * 2 < len(serial_padded):
+                    char1 = ord(serial_padded[i * 2])
+                    char2 = ord(serial_padded[i * 2 + 1]) if i * 2 + 1 < len(serial_padded) else 0
+                    self.holding_registers[addr] = (char1 << 8) | char2
+
+            logger.debug(f"Set serial in identification registers: {serial_regs}")
+
+        # Set serial in input registers (for telemetry reads)
+        input_map = register_map["input"]
+        serial_regs = [addr for addr, cfg in input_map.items() if "serial" in cfg["name"]]
         serial_regs.sort()
 
         # Encode 2 characters per register (big-endian)
@@ -322,10 +383,14 @@ class ModbusDeviceSimulator:
             values.append(val)
 
         # Log the read request with register names
-        register_map = self.REGISTER_MAPS[self.device_type]["holding"]
+        # Check both identification and holding maps for register names
+        register_map = self.REGISTER_MAPS[self.device_type]
+        holding_map = register_map.get("holding", {})
+        ident_map = register_map.get("identification", {})
+
         reg_info = []
         for i, addr in enumerate(range(start_addr, start_addr + quantity)):
-            config = register_map.get(addr)
+            config = holding_map.get(addr) or ident_map.get(addr)
             name = config["name"] if config else f"reg_{addr}"
             reg_info.append(f"{name}={values[i]}")
 
