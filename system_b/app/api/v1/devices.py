@@ -111,15 +111,18 @@ async def register_device(
             created_at=device.created_at,
         )
     except ValueError as e:
+        logger.error(f"Validation error registering device: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
-        logger.error(f"Failed to register device: {e}")
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Failed to register device: {e}\n{error_details}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Device registration failed",
+            detail=f"Device registration failed: {str(e)}",
         )
 
 
