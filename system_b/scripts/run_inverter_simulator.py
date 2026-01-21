@@ -188,33 +188,39 @@ class SystemBConnectedSimulator:
             return
             
         try:
-            # Convert to telemetry points format
-            timestamp = datetime.now(timezone.utc).isoformat()
-            points = []
+            # Convert to telemetry ingest format
+            # The endpoint expects a list of TelemetryBatchCreate objects
+            timestamp = datetime.now(timezone.utc)
             
+            # Convert metrics dict to the format expected by the API
+            metrics_dict = {}
             for metric_name, value in telemetry.items():
-                points.append({
-                    "time": timestamp,
+                if isinstance(value, (int, float)):
+                    metrics_dict[metric_name] = float(value)
+                else:
+                    metrics_dict[metric_name] = value
+            
+            payload = {
+                "points": [{
                     "device_id": str(self.device_id),
                     "site_id": str(self.site_id),
-                    "metric_name": metric_name,
-                    "metric_value": float(value) if isinstance(value, (int, float)) else None,
-                    "quality": "good",
-                })
+                    "timestamp": timestamp.isoformat(),
+                    "source": "simulator",
+                    "metrics": metrics_dict,
+                }]
+            }
             
             response = await self.http_client.post(
-                "/api/v1/telemetry/batch",
-                json={
-                    "source_type": "simulator",
-                    "source_identifier": self.serial_number,
-                    "points": points,
-                }
+                "/api/v1/telemetry/ingest",
+                json=payload
             )
             
             if response.status_code in (200, 201):
-                logger.debug(f"Sent telemetry: {len(points)} points")
+                result = response.json()
+                inserted = result.get("inserted", 0)
+                logger.debug(f"Sent telemetry: {inserted} metrics inserted")
             else:
-                logger.warning(f"Failed to send telemetry: {response.status_code}")
+                logger.warning(f"Failed to send telemetry: {response.status_code} - {response.text}")
                 
         except Exception as e:
             logger.error(f"Error sending telemetry: {e}")

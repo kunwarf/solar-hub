@@ -150,46 +150,17 @@ def register_routes(app: FastAPI) -> None:
             'api_docs': '/docs' if settings.debug else None,
         }
 
-    # Import and register API routers
+    # Import and register API v1 routers
+    from .api.v1 import api_router as v1_api_router
+    
+    # Include the v1 API router (includes devices, telemetry, commands, events)
+    app.include_router(v1_api_router)
+    
+    # Stats endpoint (for monitoring) - keep this as it's not in v1 routers
     from fastapi import APIRouter
-
-    api_router = APIRouter(prefix=f"{settings.api_prefix}/{settings.api_version}")
-
-    # Device registration endpoints
-    @api_router.post("/devices/register")
-    async def register_device():
-        """Register a new device."""
-        return {"message": "Device registration endpoint coming soon"}
-
-    @api_router.post("/devices/{device_id}/authenticate")
-    async def authenticate_device(device_id: str):
-        """Authenticate a device."""
-        return {"message": "Device authentication endpoint coming soon"}
-
-    # Telemetry endpoints
-    @api_router.post("/telemetry")
-    async def ingest_telemetry():
-        """Ingest telemetry data (batch)."""
-        return {"message": "Telemetry ingestion endpoint coming soon"}
-
-    @api_router.post("/telemetry/stream")
-    async def stream_telemetry():
-        """Stream telemetry data (real-time)."""
-        return {"message": "Telemetry streaming endpoint coming soon"}
-
-    # Device commands
-    @api_router.get("/devices/{device_id}/commands")
-    async def get_device_commands(device_id: str):
-        """Get pending commands for device."""
-        return {"commands": []}
-
-    @api_router.post("/devices/{device_id}/commands/{command_id}/result")
-    async def submit_command_result(device_id: str, command_id: str):
-        """Submit command execution result."""
-        return {"message": "Command result endpoint coming soon"}
-
-    # Stats endpoint (for monitoring)
-    @api_router.get("/stats")
+    stats_router = APIRouter(prefix=f"{settings.api_prefix}/{settings.api_version}")
+    
+    @stats_router.get("/stats")
     async def get_stats():
         """Get telemetry statistics."""
         from .infrastructure.database.timescale_connection import get_database_stats
@@ -209,8 +180,8 @@ def register_routes(app: FastAPI) -> None:
             'database': db_stats,
             'streams': {TELEMETRY_STREAM: stream_stats}
         }
-
-    app.include_router(api_router)
+    
+    app.include_router(stats_router)
 
 
 # Create application instance
