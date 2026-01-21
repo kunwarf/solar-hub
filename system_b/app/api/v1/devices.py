@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dependencies import get_db_session, get_device_service, get_auth_service
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
 
-def device_to_response(device) -> DeviceResponse:
+def device_to_response(device, newly_registered: bool = True) -> DeviceResponse:
     """Convert DeviceRegistry entity to DeviceResponse schema."""
     # Extract fields from metadata
     metadata = device.metadata or {}
@@ -42,7 +42,7 @@ def device_to_response(device) -> DeviceResponse:
     hardware_version = metadata.get("hardware_version")
     capabilities = metadata.get("capabilities")
     device_metadata = metadata.get("device_metadata") or metadata
-    
+
     return DeviceResponse(
         id=device.id,
         site_id=device.site_id,
@@ -57,36 +57,39 @@ def device_to_response(device) -> DeviceResponse:
         device_metadata=device_metadata,
         is_active=device.connection_status != ConnectionStatus.DISCONNECTED,
         created_at=device.created_at,
+        newly_registered=newly_registered,
     )
 
 
 @router.post(
     "/register",
     response_model=DeviceResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Register a new device",
-    description="Register a new device in the system.",
+    summary="Register or reconnect a device",
+    description="Register a new device or reconnect an existing device. "
+                "If a device with the same serial number already exists, "
+                "returns the existing device with newly_registered=false.",
 )
 async def register_device(
     request: DeviceRegisterRequest,
+    response: "Response",
     session: AsyncSession = Depends(get_db_session),
 ) -> DeviceResponse:
     """
-    Register a new device.
+    Register a new device or reconnect an existing one.
+
+    This endpoint supports both initial registration and reconnection:
+    - If the serial_number is new: creates a new device, returns 201 Created
+    - If the serial_number exists: returns existing device, returns 200 OK
+
+    The response includes `newly_registered` field to indicate which case occurred.
     """
+    from fastapi import Response
+    from uuid import uuid4
+
     device_repo = DeviceRegistryRepository(session)
     service = DeviceService(device_repo, None)
 
     try:
-        # Generate device_id (or get from request if provided)
-        from uuid import uuid4
-        device_id = uuid4()
-        
-        # For now, we'll use the site_id as organization_id placeholder
-        # In production, you'd fetch organization_id from the site
-        # TODO: Get organization_id from site_id via System A or local cache
-        organization_id = request.site_id  # Temporary: use site_id as org_id
-        
         # Convert device_type string to DeviceType enum
         from ...domain.entities.telemetry import DeviceType
         try:
@@ -96,12 +99,40 @@ async def register_device(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid device_type: {request.device_type}",
             )
-        
+
+        # Check if device with this serial number already exists
+        existing_device = await device_repo.get_by_serial_number(request.serial_number)
+
+        if existing_device:
+            # Device already registered - update connection status and return
+            logger.info(f"Device {request.serial_number} already registered (id: {existing_device.id}), reconnecting")
+
+            # Update last_connected_at and connection status
+            await device_repo.update_connection_status(
+                device_id=existing_device.id,
+                status=ConnectionStatus.CONNECTED,
+            )
+
+            # Refresh device data after update
+            existing_device = await device_repo.get_by_id(existing_device.id)
+
+            # Return 200 OK for existing device
+            response.status_code = status.HTTP_200_OK
+            return device_to_response(existing_device, newly_registered=False)
+
+        # New device - proceed with registration
+        device_id = uuid4()
+
+        # For now, we'll use the site_id as organization_id placeholder
+        # In production, you'd fetch organization_id from the site
+        # TODO: Get organization_id from site_id via System A or local cache
+        organization_id = request.site_id  # Temporary: use site_id as org_id
+
         # Build connection config from request
         connection_config = request.connection_config or {}
         if request.protocol_id:
             connection_config["protocol_id"] = request.protocol_id
-        
+
         # Build metadata from request
         metadata = request.device_metadata or {}
         if request.firmware_version:
@@ -110,7 +141,7 @@ async def register_device(
             metadata["hardware_version"] = request.hardware_version
         if request.capabilities:
             metadata["capabilities"] = request.capabilities
-        
+
         device = await service.register_device(
             device_id=device_id,
             site_id=request.site_id,
@@ -122,7 +153,14 @@ async def register_device(
             metadata=metadata if metadata else None,
         )
 
-        return device_to_response(device)
+        logger.info(f"New device registered: {request.serial_number} (id: {device.id})")
+
+        # Return 201 Created for new device
+        response.status_code = status.HTTP_201_CREATED
+        return device_to_response(device, newly_registered=True)
+
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.error(f"Validation error registering device: {e}")
         raise HTTPException(

@@ -57,6 +57,7 @@ class DeviceResponse(BaseModel):
     device_metadata: Optional[Dict[str, Any]] = None
     is_active: bool = True
     created_at: datetime
+    newly_registered: bool = True  # True if device was just created, False if already existed
 
     model_config = ConfigDict(from_attributes=True)
 
