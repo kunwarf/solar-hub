@@ -18,6 +18,8 @@ from .config import get_settings
 from .infrastructure.database.timescale_connection import TimescaleDBManager, init_db
 from .infrastructure.messaging.redis_streams import RedisStreamManager
 
+# Clear settings cache to ensure environment variables are picked up
+get_settings.cache_clear()
 settings = get_settings()
 
 
