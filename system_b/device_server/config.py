@@ -101,6 +101,14 @@ class StorageSettings(BaseSettings):
         extra="ignore",
     )
 
+    # TimescaleDB connection
+    timescale_host: str = Field(default="localhost", description="TimescaleDB host")
+    timescale_port: int = Field(default=5432, description="TimescaleDB port")
+    timescale_database: str = Field(default="solarhub", description="TimescaleDB database name")
+    timescale_user: str = Field(default="solarhub", description="TimescaleDB user")
+    timescale_password: str = Field(default="", description="TimescaleDB password")
+
+    # Batching settings
     batch_size: int = Field(default=100, description="Batch size for bulk writes")
     flush_interval: float = Field(default=1.0, description="Flush interval in seconds")
     buffer_max_size: int = Field(default=10000, description="Maximum buffer size before force flush")
