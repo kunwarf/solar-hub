@@ -174,10 +174,17 @@ class ConnectionManager:
             connection.state = ConnectionState.POLLING
             self._total_identified += 1
 
+            # Get protocol definition for the device
+            protocol = self.prober.registry.get(identified.protocol_id)
+            if not protocol:
+                logger.error(f"Protocol not found: {identified.protocol_id}")
+                await connection.close()
+                return
+
             await self.device_manager.add_device(
-                device_id=device_id,
                 connection=connection,
                 identified=identified,
+                protocol=protocol,
             )
 
             # Wait for device manager to complete (e.g., polling loop)

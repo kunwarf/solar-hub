@@ -90,15 +90,8 @@ class DeviceServer:
         # Setup connection manager
         self.connection_manager = ConnectionManager(
             prober=self.device_prober,
+            device_manager=self.device_manager,
             settings=self.settings,
-        )
-
-        # Set up callbacks
-        self.connection_manager.set_on_device_identified(
-            self._on_device_identified
-        )
-        self.connection_manager.set_on_connection_lost(
-            self._on_connection_lost
         )
 
         # Setup device manager callbacks
