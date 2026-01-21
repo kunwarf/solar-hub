@@ -33,31 +33,20 @@ class TimescaleDBSettings(BaseSettings):
     retention_days: int = Field(default=90, description='Data retention in days')
     compression_after_days: int = Field(default=7, description='Compress data after days')
 
-    def __init__(self, **kwargs):
-        """Override to ensure environment variables are used."""
+    def model_post_init(self, __context):
+        """Override to ensure environment variables are used after initialization."""
         import os
-        # Explicitly check and use environment variables if not provided
-        if 'user' not in kwargs:
-            env_user = os.getenv('TIMESCALE_USER')
-            if env_user:
-                kwargs['user'] = env_user
-        if 'password' not in kwargs:
-            env_password = os.getenv('TIMESCALE_PASSWORD')
-            if env_password:
-                kwargs['password'] = env_password
-        if 'host' not in kwargs:
-            env_host = os.getenv('TIMESCALE_HOST')
-            if env_host:
-                kwargs['host'] = env_host
-        if 'port' not in kwargs:
-            env_port = os.getenv('TIMESCALE_PORT')
-            if env_port:
-                kwargs['port'] = int(env_port)
-        if 'name' not in kwargs:
-            env_name = os.getenv('TIMESCALE_NAME')
-            if env_name:
-                kwargs['name'] = env_name
-        super().__init__(**kwargs)
+        # Force update from environment variables
+        if os.getenv('TIMESCALE_USER'):
+            object.__setattr__(self, 'user', os.getenv('TIMESCALE_USER'))
+        if os.getenv('TIMESCALE_PASSWORD'):
+            object.__setattr__(self, 'password', os.getenv('TIMESCALE_PASSWORD'))
+        if os.getenv('TIMESCALE_HOST'):
+            object.__setattr__(self, 'host', os.getenv('TIMESCALE_HOST'))
+        if os.getenv('TIMESCALE_PORT'):
+            object.__setattr__(self, 'port', int(os.getenv('TIMESCALE_PORT')))
+        if os.getenv('TIMESCALE_NAME'):
+            object.__setattr__(self, 'name', os.getenv('TIMESCALE_NAME'))
     
     @property
     def url(self) -> str:
