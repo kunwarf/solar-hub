@@ -7,6 +7,8 @@ This is the backend for:
 - Protocol handling (MQTT, Modbus, HTTP)
 - Real-time data streaming
 """
+import logging
+import sys
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -21,6 +23,15 @@ from .infrastructure.messaging.redis_streams import RedisStreamManager
 # Get settings (will use environment variables if available)
 settings = get_settings()
 
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s' if settings.log_format != 'json' else None,
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ]
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
@@ -31,7 +42,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     """
     # Startup
     import os
-    import logging
     logger = logging.getLogger(__name__)
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Environment: {settings.environment}")
@@ -43,27 +53,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     # Initialize TimescaleDB
     try:
         await init_db()
-        print("TimescaleDB initialized successfully")
+        logger.info("TimescaleDB initialized successfully")
     except Exception as e:
-        print(f"TimescaleDB initialization failed: {e}")
+        logger.error(f"TimescaleDB initialization failed: {e}")
         raise
 
     # Test Redis connection
     try:
         client = await RedisStreamManager.get_client()
         await client.ping()
-        print("Redis connection established")
+        logger.info("Redis connection established")
     except Exception as e:
-        print(f"Redis connection failed: {e}")
+        logger.error(f"Redis connection failed: {e}")
         raise  # Redis is critical for System B
 
     yield
 
     # Shutdown
-    print("Shutting down application...")
+    logger.info("Shutting down application...")
     await TimescaleDBManager.close()
     await RedisStreamManager.close()
-    print("Shutdown complete")
+    logger.info("Shutdown complete")
 
 
 def create_app() -> FastAPI:
@@ -105,7 +115,8 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
-        print(f"Unhandled exception: {exc}")
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Unhandled exception: {exc}")
 
         if settings.debug:
             return JSONResponse(
