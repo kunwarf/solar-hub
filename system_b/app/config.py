@@ -14,8 +14,7 @@ class TimescaleDBSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix='TIMESCALE_',
-        # Don't read .env file - only use environment variables from systemd
-        env_file=None,
+        env_file='.env',
         extra='ignore'
     )
 
@@ -33,21 +32,6 @@ class TimescaleDBSettings(BaseSettings):
     retention_days: int = Field(default=90, description='Data retention in days')
     compression_after_days: int = Field(default=7, description='Compress data after days')
 
-    def model_post_init(self, __context):
-        """Override to ensure environment variables are used after initialization."""
-        import os
-        # Force update from environment variables
-        if os.getenv('TIMESCALE_USER'):
-            object.__setattr__(self, 'user', os.getenv('TIMESCALE_USER'))
-        if os.getenv('TIMESCALE_PASSWORD'):
-            object.__setattr__(self, 'password', os.getenv('TIMESCALE_PASSWORD'))
-        if os.getenv('TIMESCALE_HOST'):
-            object.__setattr__(self, 'host', os.getenv('TIMESCALE_HOST'))
-        if os.getenv('TIMESCALE_PORT'):
-            object.__setattr__(self, 'port', int(os.getenv('TIMESCALE_PORT')))
-        if os.getenv('TIMESCALE_NAME'):
-            object.__setattr__(self, 'name', os.getenv('TIMESCALE_NAME'))
-    
     @property
     def url(self) -> str:
         """Build database URL."""
@@ -228,8 +212,7 @@ class AppSettings(BaseSettings):
         return self.environment == 'development'
 
 
-_settings_cache: Optional[AppSettings] = None
-
+@lru_cache()
 def get_settings() -> AppSettings:
     """
     Get cached application settings.
@@ -237,17 +220,7 @@ def get_settings() -> AppSettings:
     Caches settings but checks environment variables on first call.
     Environment variables take precedence over .env file and defaults.
     """
-    global _settings_cache
-    if _settings_cache is None:
-        _settings_cache = AppSettings()
-    return _settings_cache
+    return AppSettings()
 
-
-# Convenience accessor - delay initialization until after environment is set
-def _init_settings():
-    """Initialize settings after environment is available."""
-    global settings
-    settings = get_settings()
-
-# Don't initialize at module level - let it be initialized on first access
-settings: Optional[AppSettings] = None
+# Module-level settings instance
+settings = get_settings()

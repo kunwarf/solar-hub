@@ -54,25 +54,8 @@ class TimescaleDBManager:
     def get_engine(cls) -> AsyncEngine:
         """Get or create the async database engine."""
         if cls._engine is None:
-            # Force use of environment variables for database URL
-            import os
-            db = settings.database
-            # Check environment variables directly (these take precedence)
-            user = os.getenv('TIMESCALE_USER') or db.user
-            password = os.getenv('TIMESCALE_PASSWORD') or db.password
-            host = os.getenv('TIMESCALE_HOST') or db.host
-            port = os.getenv('TIMESCALE_PORT') or str(db.port)
-            name = os.getenv('TIMESCALE_NAME') or db.name
-            
-            db_url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
-            
-            # Debug logging
-            logger.info(f"Creating database engine - User: {user}, Host: {host}, DB: {name}")
-            logger.info(f"TIMESCALE_USER env: {os.getenv('TIMESCALE_USER', 'NOT SET')}")
-            logger.info(f"Database URL: postgresql+asyncpg://{user}:***@{host}:{port}/{name}")
-            
             cls._engine = create_async_engine(
-                db_url,
+                settings.database.url,
                 echo=settings.database.echo_sql,
                 pool_size=settings.database.pool_size,
                 max_overflow=settings.database.max_overflow,
@@ -106,14 +89,6 @@ class TimescaleDBManager:
             )
         return cls._session_factory
 
-    @classmethod
-    def clear_engine(cls) -> None:
-        """Clear the cached engine to force recreation with new credentials."""
-        if cls._engine is not None:
-            cls._engine = None
-            cls._session_factory = None
-            logger.info("Database engine cache cleared")
-    
     @classmethod
     async def close(cls) -> None:
         """Close the database engine and all connections."""
