@@ -6,11 +6,13 @@ This is the backend for:
 - Telemetry data ingestion
 - Protocol handling (MQTT, Modbus, HTTP)
 - Real-time data streaming
+- Device Server (TCP server for Modbus device connections)
 """
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +24,10 @@ from .infrastructure.messaging.redis_streams import RedisStreamManager
 
 # Get settings (will use environment variables if available)
 settings = get_settings()
+
+# Global reference to Device Server for health checks
+_device_server: Optional["DeviceServer"] = None
+_device_server_task: Optional[asyncio.Task] = None
 
 # Configure logging
 logging.basicConfig(
@@ -40,6 +46,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     Manages startup and shutdown tasks.
     """
+    global _device_server, _device_server_task
+
     # Startup
     logger = logging.getLogger(__name__)
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
@@ -62,10 +70,44 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         logger.error(f"Redis connection failed: {e}")
         raise  # Redis is critical for System B
 
+    # Start Device Server (TCP server for Modbus device connections)
+    try:
+        from ..device_server.main import DeviceServer
+
+        _device_server = DeviceServer()
+        await _device_server.start()
+
+        # Run serve_forever in background task
+        _device_server_task = asyncio.create_task(
+            _device_server.serve_forever(),
+            name="device_server"
+        )
+        logger.info("Device Server started successfully")
+    except Exception as e:
+        logger.error(f"Device Server startup failed: {e}")
+        # Don't raise - allow API to run even if device server fails
+        _device_server = None
+        _device_server_task = None
+
     yield
 
     # Shutdown
     logger.info("Shutting down application...")
+
+    # Stop Device Server
+    if _device_server:
+        try:
+            await _device_server.stop()
+            if _device_server_task and not _device_server_task.done():
+                _device_server_task.cancel()
+                try:
+                    await _device_server_task
+                except asyncio.CancelledError:
+                    pass
+            logger.info("Device Server stopped")
+        except Exception as e:
+            logger.error(f"Error stopping Device Server: {e}")
+
     await TimescaleDBManager.close()
     await RedisStreamManager.close()
     logger.info("Shutdown complete")
@@ -145,11 +187,19 @@ def register_routes(app: FastAPI) -> None:
         db_ok = await db_health()
         redis_ok = await redis_health()
 
+        # Check Device Server status
+        device_server_ok = (
+            _device_server is not None
+            and _device_server.tcp_server is not None
+            and _device_server.tcp_server.is_running
+        )
+
         return {
             'status': 'healthy' if db_ok and redis_ok else 'unhealthy',
             'services': {
                 'timescaledb': 'up' if db_ok else 'down',
                 'redis': 'up' if redis_ok else 'down',
+                'device_server': 'up' if device_server_ok else 'down',
             },
             'version': settings.app_version,
             'environment': settings.environment,
