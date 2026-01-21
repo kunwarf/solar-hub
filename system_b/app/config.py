@@ -14,7 +14,8 @@ class TimescaleDBSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix='TIMESCALE_',
-        env_file='.env',
+        # Don't read .env file - only use environment variables from systemd
+        env_file=None,
         extra='ignore'
     )
 
