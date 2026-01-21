@@ -5,7 +5,7 @@ Lightweight device information for telemetry collection.
 Main device registry is in System A.
 """
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID
 
@@ -98,17 +98,17 @@ class DeviceSession:
     """
     device_id: UUID
     session_id: str
-    connected_at: datetime = field(default_factory=datetime.utcnow)
-    last_activity_at: datetime = field(default_factory=datetime.utcnow)
+    connected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     protocol: Optional[str] = None
     client_address: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
     def update_activity(self) -> None:
         """Update last activity timestamp."""
-        self.last_activity_at = datetime.utcnow()
+        self.last_activity_at = datetime.now(timezone.utc)
 
     def is_stale(self, timeout_seconds: int = 300) -> bool:
         """Check if session is stale (no activity for timeout period)."""
         from datetime import timedelta
-        return datetime.utcnow() - self.last_activity_at > timedelta(seconds=timeout_seconds)
+        return datetime.now(timezone.utc) - self.last_activity_at > timedelta(seconds=timeout_seconds)

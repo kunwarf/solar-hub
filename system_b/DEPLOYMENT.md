@@ -1,3 +1,21 @@
+sudo nano /etc/systemd/system/solarhub-platform.service
+# Change WorkingDirectory from:
+#   WorkingDirectory=/opt/solarhub/app/system_a
+# To:
+#   WorkingDirectory=/opt/solarhub/app/solar-hub/system_a
+
+# Update the telemetry service
+sudo nano /etc/systemd/system/solarhub-telemetry.service
+# Change WorkingDirectory from:
+#   WorkingDirectory=/opt/solarhub/app/system_b
+# To:
+#   WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
+
+# Then reload systemd and restart services
+sudo systemctl daemon-reload
+sudo systemctl start solarhub-platform
+sudo systemctl start solarhub-telemetry
+
 # System B - Deployment Guide
 
 System B is the Communication & Telemetry component of Solar Hub. This guide covers deployment on a server with Redis, PostgreSQL (with TimescaleDB), MQTT, and Docker already installed.
@@ -64,6 +82,11 @@ Connect to PostgreSQL and create the database:
 # Connect as postgres user
 sudo -u postgres psql
 ```
+
+postgres=#  ALTER USER solarhub_telemetry WITH PASSWORD 'system_b_telemetery';
+ALTER ROLE
+postgres=# ALTER USER solarhub_app WITH PASSWORD 'system_a_app';
+
 
 Run the following SQL commands:
 

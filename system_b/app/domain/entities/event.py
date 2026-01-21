@@ -19,6 +19,8 @@ class EventType(str, Enum):
     COMMAND = "command"
     FIRMWARE = "firmware"
     CONFIGURATION = "configuration"
+    ALARM = "alarm"
+    FAULT = "fault"
 
 
 class EventSeverity(str, Enum):

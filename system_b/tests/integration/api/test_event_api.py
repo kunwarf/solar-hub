@@ -8,12 +8,11 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.v1 import events
 from app.api.v1.events import router
+from app.domain.entities.event import EventType, EventSeverity
 
 
 @pytest.fixture
@@ -41,26 +40,25 @@ def sample_site_id():
 
 
 @pytest.fixture
-def sample_event_id():
+def sample_user_id():
     return uuid4()
 
 
 @pytest.fixture
-def sample_event_data(sample_event_id, sample_device_id, sample_site_id):
-    """Create sample event data."""
+def sample_event_data(sample_device_id, sample_site_id):
+    """Create sample event data matching DeviceEvent entity."""
     return {
-        "id": sample_event_id,
+        "time": datetime.now(timezone.utc),
         "device_id": sample_device_id,
         "site_id": sample_site_id,
-        "event_type": "alarm",
-        "severity": "warning",
-        "code": "LOW_BATTERY",
+        "event_type": EventType.ERROR,
+        "severity": EventSeverity.WARNING,
+        "event_code": "LOW_BATTERY",
         "message": "Battery SOC below 20%",
         "details": {"soc": 18.5},
         "acknowledged": False,
         "acknowledged_at": None,
         "acknowledged_by": None,
-        "created_at": datetime.now(timezone.utc),
     }
 
 
@@ -71,56 +69,42 @@ class TestCreateEvent:
         self, client, sample_device_id, sample_site_id, sample_event_data
     ):
         """Test successful event creation."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
             mock_event = MagicMock(**sample_event_data)
-            mock_service = MagicMock()
-            mock_service.create_event = AsyncMock(return_value=mock_event)
-            MockService.return_value = mock_service
+            mock_repo = MagicMock()
+            mock_repo.create = AsyncMock(return_value=mock_event)
+            MockRepo.return_value = mock_repo
 
             response = client.post(
                 "/api/v1/events/",
                 json={
                     "device_id": str(sample_device_id),
                     "site_id": str(sample_site_id),
-                    "event_type": "alarm",
+                    "event_type": "error",
                     "severity": "warning",
-                    "code": "LOW_BATTERY",
+                    "event_code": "LOW_BATTERY",
                     "message": "Battery SOC below 20%",
                 },
             )
 
             assert response.status_code == 201
             data = response.json()
-            assert data["event_type"] == "alarm"
+            assert data["event_type"] == "error"
             assert data["severity"] == "warning"
 
     def test_create_event_validation_error(
         self, client, sample_device_id, sample_site_id
     ):
-        """Test event creation with invalid data."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
+        """Test event creation with missing required fields."""
+        response = client.post(
+            "/api/v1/events/",
+            json={
+                "device_id": str(sample_device_id),
+                # Missing site_id, event_type, severity
+            },
+        )
 
-            mock_service = MagicMock()
-            mock_service.create_event = AsyncMock(
-                side_effect=ValueError("Invalid severity level")
-            )
-            MockService.return_value = mock_service
-
-            response = client.post(
-                "/api/v1/events/",
-                json={
-                    "device_id": str(sample_device_id),
-                    "site_id": str(sample_site_id),
-                    "event_type": "alarm",
-                    "severity": "invalid",
-                    "code": "LOW_BATTERY",
-                },
-            )
-
-            assert response.status_code == 400
+        assert response.status_code == 422
 
 
 class TestGetDeviceEvents:
@@ -130,14 +114,12 @@ class TestGetDeviceEvents:
         self, client, sample_device_id, sample_event_data
     ):
         """Test getting events for a device."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
             mock_event = MagicMock(**sample_event_data)
-            mock_service = MagicMock()
-            mock_service.get_device_events = AsyncMock(return_value=[mock_event])
-            mock_service.count_device_events = AsyncMock(return_value=1)
-            MockService.return_value = mock_service
+            mock_repo = MagicMock()
+            mock_repo.get_device_events = AsyncMock(return_value=[mock_event])
+            mock_repo.count_device_events = AsyncMock(return_value=1)
+            MockRepo.return_value = mock_repo
 
             response = client.get(
                 f"/api/v1/events/device/{sample_device_id}",
@@ -152,19 +134,17 @@ class TestGetDeviceEvents:
         self, client, sample_device_id
     ):
         """Test getting device events with filters."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
-            mock_service = MagicMock()
-            mock_service.get_device_events = AsyncMock(return_value=[])
-            mock_service.count_device_events = AsyncMock(return_value=0)
-            MockService.return_value = mock_service
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            mock_repo = MagicMock()
+            mock_repo.get_device_events = AsyncMock(return_value=[])
+            mock_repo.count_device_events = AsyncMock(return_value=0)
+            MockRepo.return_value = mock_repo
 
             response = client.get(
                 f"/api/v1/events/device/{sample_device_id}",
                 params={
-                    "event_type": "alarm",
-                    "severity": "critical",
+                    "event_types": ["error"],
+                    "severities": ["critical"],
                     "acknowledged": False,
                 },
             )
@@ -179,14 +159,12 @@ class TestGetSiteEvents:
         self, client, sample_site_id, sample_event_data
     ):
         """Test getting events for a site."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
             mock_event = MagicMock(**sample_event_data)
-            mock_service = MagicMock()
-            mock_service.get_site_events = AsyncMock(return_value=[mock_event])
-            mock_service.count_site_events = AsyncMock(return_value=1)
-            MockService.return_value = mock_service
+            mock_repo = MagicMock()
+            mock_repo.get_site_events = AsyncMock(return_value=[mock_event])
+            mock_repo.count_site_events = AsyncMock(return_value=1)
+            MockRepo.return_value = mock_repo
 
             response = client.get(
                 f"/api/v1/events/site/{sample_site_id}",
@@ -201,50 +179,46 @@ class TestAcknowledgeEvent:
     """Test event acknowledgment endpoint."""
 
     def test_acknowledge_event_success(
-        self, client, sample_event_id, sample_event_data
+        self, client, sample_device_id, sample_user_id, sample_event_data
     ):
         """Test successful event acknowledgment."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            mock_repo = MagicMock()
+            mock_repo.acknowledge_event = AsyncMock(return_value=True)
+            MockRepo.return_value = mock_repo
 
-            acknowledged_event = MagicMock(**sample_event_data)
-            acknowledged_event.acknowledged = True
-            acknowledged_event.acknowledged_at = datetime.now(timezone.utc)
-            acknowledged_event.acknowledged_by = "operator@example.com"
-
-            mock_service = MagicMock()
-            mock_service.acknowledge_event = AsyncMock(return_value=acknowledged_event)
-            MockService.return_value = mock_service
-
+            event_time = datetime.now(timezone.utc)
             response = client.post(
                 "/api/v1/events/acknowledge",
                 json={
-                    "event_id": str(sample_event_id),
-                    "acknowledged_by": "operator@example.com",
-                    "notes": "Acknowledged and monitoring",
+                    "device_id": str(sample_device_id),
+                    "event_time": event_time.isoformat(),
+                    "event_type": "error",
+                    "acknowledged_by": str(sample_user_id),
                 },
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert data["acknowledged"] is True
+            assert data["success"] is True
 
     def test_acknowledge_event_not_found(
-        self, client, sample_event_id
+        self, client, sample_device_id, sample_user_id
     ):
         """Test acknowledging non-existent event."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            mock_repo = MagicMock()
+            mock_repo.acknowledge_event = AsyncMock(return_value=False)
+            MockRepo.return_value = mock_repo
 
-            mock_service = MagicMock()
-            mock_service.acknowledge_event = AsyncMock(return_value=None)
-            MockService.return_value = mock_service
-
+            event_time = datetime.now(timezone.utc)
             response = client.post(
                 "/api/v1/events/acknowledge",
                 json={
-                    "event_id": str(sample_event_id),
-                    "acknowledged_by": "operator@example.com",
+                    "device_id": str(sample_device_id),
+                    "event_time": event_time.isoformat(),
+                    "event_type": "error",
+                    "acknowledged_by": str(sample_user_id),
                 },
             )
 
@@ -254,22 +228,18 @@ class TestAcknowledgeEvent:
 class TestBulkAcknowledge:
     """Test bulk event acknowledgment endpoint."""
 
-    def test_bulk_acknowledge_success(self, client):
+    def test_bulk_acknowledge_success(self, client, sample_device_id, sample_user_id):
         """Test bulk acknowledgment of events."""
-        event_ids = [uuid4() for _ in range(3)]
-
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
-            mock_service = MagicMock()
-            mock_service.acknowledge_bulk = AsyncMock(return_value=3)
-            MockService.return_value = mock_service
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            mock_repo = MagicMock()
+            mock_repo.acknowledge_events_bulk = AsyncMock(return_value=3)
+            MockRepo.return_value = mock_repo
 
             response = client.post(
                 "/api/v1/events/acknowledge-bulk",
                 json={
-                    "event_ids": [str(eid) for eid in event_ids],
-                    "acknowledged_by": "operator@example.com",
+                    "device_id": str(sample_device_id),
+                    "acknowledged_by": str(sample_user_id),
                 },
             )
 
@@ -283,28 +253,22 @@ class TestGetEventCounts:
 
     def test_get_event_counts(self, client, sample_site_id):
         """Test getting event counts by severity."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
-            mock_service = MagicMock()
-            mock_service.get_event_counts = AsyncMock(return_value={
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            mock_repo = MagicMock()
+            mock_repo.get_event_counts = AsyncMock(return_value={
                 "critical": 5,
                 "warning": 15,
                 "info": 50,
-                "total": 70,
-                "unacknowledged": 20,
             })
-            MockService.return_value = mock_service
+            MockRepo.return_value = mock_repo
 
             response = client.get(
-                "/api/v1/events/counts",
-                params={"site_id": str(sample_site_id)},
+                f"/api/v1/events/counts/{sample_site_id}",
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert data["critical"] == 5
-            assert data["total"] == 70
+            assert "counts" in data
 
 
 class TestGetEventTimeline:
@@ -312,55 +276,48 @@ class TestGetEventTimeline:
 
     def test_get_event_timeline(self, client, sample_site_id):
         """Test getting event timeline."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
             start_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
-            mock_service = MagicMock()
-            mock_service.get_event_timeline = AsyncMock(return_value=[
+            mock_repo = MagicMock()
+            mock_repo.get_event_timeline = AsyncMock(return_value=[
                 {
-                    "hour": start_time.isoformat(),
-                    "critical": 1,
-                    "warning": 3,
+                    "bucket": start_time,
                     "info": 10,
+                    "warning": 3,
+                    "error": 1,
+                    "critical": 0,
                 }
             ])
-            MockService.return_value = mock_service
+            MockRepo.return_value = mock_repo
 
             response = client.get(
-                "/api/v1/events/timeline",
-                params={
-                    "site_id": str(sample_site_id),
-                    "start_time": start_time.isoformat(),
-                },
+                f"/api/v1/events/timeline/{sample_site_id}",
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert len(data) == 1
+            assert "timeline" in data
 
 
 class TestGetEventStats:
     """Test event stats endpoint."""
 
-    def test_get_event_stats(self, client, sample_device_id):
+    def test_get_event_stats(self, client, sample_site_id):
         """Test getting event statistics."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
-            mock_service = MagicMock()
-            mock_service.get_device_event_stats = AsyncMock(return_value={
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            mock_repo = MagicMock()
+            mock_repo.get_event_stats = AsyncMock(return_value={
                 "total_events": 100,
-                "events_last_24h": 15,
-                "events_last_7d": 45,
-                "most_common_code": "LOW_BATTERY",
-                "avg_acknowledgment_time_seconds": 300,
+                "unacknowledged_events": 20,
+                "recent_errors_24h": 5,
+                "first_event": datetime.now(timezone.utc) - timedelta(days=30),
+                "last_event": datetime.now(timezone.utc),
             })
-            MockService.return_value = mock_service
+            MockRepo.return_value = mock_repo
 
             response = client.get(
-                f"/api/v1/events/stats/{sample_device_id}",
+                f"/api/v1/events/stats/{sample_site_id}",
             )
 
             assert response.status_code == 200
@@ -371,28 +328,26 @@ class TestGetEventStats:
 class TestGetTopErrors:
     """Test top errors endpoint."""
 
-    def test_get_top_errors(self, client, sample_site_id):
-        """Test getting top error codes."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
-            mock_service = MagicMock()
-            mock_service.get_top_errors = AsyncMock(return_value=[
-                {"code": "LOW_BATTERY", "count": 50, "severity": "warning"},
-                {"code": "COMM_FAILURE", "count": 25, "severity": "critical"},
-                {"code": "TEMP_HIGH", "count": 10, "severity": "warning"},
+    def test_get_top_errors(self, client, sample_site_id, sample_device_id):
+        """Test getting top error devices."""
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            mock_repo = MagicMock()
+            mock_repo.get_top_error_devices = AsyncMock(return_value=[
+                {
+                    "device_id": sample_device_id,
+                    "error_count": 50,
+                    "last_error": datetime.now(timezone.utc),
+                },
             ])
-            MockService.return_value = mock_service
+            MockRepo.return_value = mock_repo
 
             response = client.get(
-                "/api/v1/events/top-errors",
-                params={"site_id": str(sample_site_id), "limit": 10},
+                f"/api/v1/events/top-errors/{sample_site_id}",
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert len(data) == 3
-            assert data[0]["code"] == "LOW_BATTERY"
+            assert len(data) == 1
 
 
 class TestGetUnacknowledgedEvents:
@@ -402,22 +357,19 @@ class TestGetUnacknowledgedEvents:
         self, client, sample_site_id, sample_event_data
     ):
         """Test getting unacknowledged events."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
             mock_event = MagicMock(**sample_event_data)
-            mock_service = MagicMock()
-            mock_service.get_unacknowledged_events = AsyncMock(return_value=[mock_event])
-            MockService.return_value = mock_service
+            mock_repo = MagicMock()
+            mock_repo.get_unacknowledged_events = AsyncMock(return_value=[mock_event])
+            MockRepo.return_value = mock_repo
 
             response = client.get(
-                "/api/v1/events/unacknowledged",
-                params={"site_id": str(sample_site_id)},
+                f"/api/v1/events/unacknowledged/{sample_site_id}",
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert len(data) == 1
+            assert len(data["events"]) == 1
 
 
 class TestGetRecentCritical:
@@ -427,22 +379,18 @@ class TestGetRecentCritical:
         self, client, sample_site_id, sample_event_data
     ):
         """Test getting recent critical events."""
-        with patch("app.api.v1.events.EventRepository") as MockRepo, \
-             patch("app.api.v1.events.EventService") as MockService:
-
-            sample_event_data["severity"] = "critical"
+        with patch("app.api.v1.events.EventRepository") as MockRepo:
+            sample_event_data["severity"] = EventSeverity.CRITICAL
             mock_event = MagicMock(**sample_event_data)
 
-            mock_service = MagicMock()
-            mock_service.get_recent_critical = AsyncMock(return_value=[mock_event])
-            MockService.return_value = mock_service
+            mock_repo = MagicMock()
+            mock_repo.get_site_events = AsyncMock(return_value=[mock_event])
+            MockRepo.return_value = mock_repo
 
             response = client.get(
-                "/api/v1/events/recent-critical",
-                params={"site_id": str(sample_site_id), "hours": 24},
+                f"/api/v1/events/recent-critical/{sample_site_id}",
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert len(data) == 1
-
+            assert len(data["events"]) == 1

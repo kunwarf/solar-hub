@@ -137,7 +137,8 @@ class WorkerManager:
         """
         self._update_health_status()
 
-        all_healthy = all(self._health_status.values())
+        # Manager must be running AND all workers must be healthy
+        all_healthy = self._running and all(self._health_status.values())
 
         return {
             "healthy": all_healthy,
@@ -176,7 +177,7 @@ class WorkerManager:
     def is_healthy(self) -> bool:
         """Check if all workers are healthy."""
         self._update_health_status()
-        return all(self._health_status.values())
+        return self._running and all(self._health_status.values())
 
     # Convenience access to workers
 

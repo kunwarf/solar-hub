@@ -44,18 +44,18 @@ class DeviceUpdateRequest(BaseModel):
 
 class DeviceResponse(BaseModel):
     """Response for device information."""
-    device_id: UUID
+    id: UUID
     site_id: UUID
-    organization_id: UUID
     device_type: str
     serial_number: str
-    protocol: Optional[str] = None
+    protocol_id: Optional[str] = None
+    firmware_version: Optional[str] = None
+    hardware_version: Optional[str] = None
     connection_status: str
-    is_connected: bool
-    last_connected_at: Optional[datetime] = None
-    last_polled_at: Optional[datetime] = None
-    polling_interval_seconds: int
-    reconnect_count: int
+    last_seen: Optional[datetime] = None
+    capabilities: Optional[List[str]] = None
+    device_metadata: Optional[Dict[str, Any]] = None
+    is_active: bool = True
     created_at: datetime
 
     class Config:
@@ -64,59 +64,54 @@ class DeviceResponse(BaseModel):
 
 class DeviceSessionResponse(BaseModel):
     """Response for active device session."""
-    session_id: str
-    connected_at: datetime
-    last_activity_at: datetime
-    client_address: Optional[str] = None
+    device_id: UUID
+    session_id: Optional[str] = None
+    connected_at: Optional[datetime] = None
+    ip_address: Optional[str] = None
 
 
 class DeviceSummaryResponse(BaseModel):
     """Response for device summary."""
-    device_id: UUID
+    id: UUID
     site_id: UUID
-    organization_id: UUID
     device_type: str
     serial_number: str
-    protocol: Optional[str] = None
     connection_status: str
-    is_connected: bool
-    last_connected_at: Optional[datetime] = None
-    last_polled_at: Optional[datetime] = None
-    polling_interval_seconds: int
-    reconnect_count: int
-    session: Optional[DeviceSessionResponse] = None
+    last_seen: Optional[datetime] = None
+    is_active: bool = True
 
 
 class DeviceListResponse(BaseModel):
     """Response for device list."""
-    devices: List[DeviceResponse]
+    devices: List[DeviceSummaryResponse]
     total: int
 
 
 class ConnectionStatsResponse(BaseModel):
     """Response for connection statistics."""
-    by_status: Dict[str, int]
-    by_type: Dict[str, int]
     total_devices: int
-    active_sessions: int
+    online: int
+    offline: int
+    error: int = 0
+    never_connected: int = 0
 
 
 class DeviceAuthRequest(BaseModel):
     """Request for device authentication."""
-    serial_number: str
+    device_id: UUID
     token: str
 
 
 class DeviceAuthResponse(BaseModel):
     """Response for device authentication."""
-    success: bool
+    authenticated: bool
     device_id: Optional[UUID] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+    session_token: Optional[str] = None
+    expires_at: Optional[datetime] = None
 
 
 class DeviceTokenResponse(BaseModel):
     """Response for token generation."""
     device_id: UUID
     token: str
-    expires_at: datetime
+    expires_in_days: int

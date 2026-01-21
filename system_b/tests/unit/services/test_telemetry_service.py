@@ -394,10 +394,14 @@ class TestMetricDefinitions:
         self, service, mock_telemetry_repo
     ):
         """Test registering a metric definition."""
+        from app.domain.entities.telemetry import DeviceType
+
         metric_def = MetricDefinition(
             metric_name="test_metric",
             display_name="Test Metric",
             unit="units",
+            data_type="float",
+            device_types=[DeviceType.INVERTER],
             min_value=0,
             max_value=100,
         )
