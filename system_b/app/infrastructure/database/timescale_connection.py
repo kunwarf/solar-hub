@@ -121,95 +121,33 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """
-    Initialize TimescaleDB tables and extensions.
+    Initialize TimescaleDB connection and verify schema.
 
-    Creates hypertables for time-series data.
+    Note: Tables and hypertables should be created via Alembic migrations.
+    This function ensures the TimescaleDB extension is enabled and verifies
+    the schema is ready.
     """
     engine = TimescaleDBManager.get_engine()
 
     async with engine.begin() as conn:
-        # Enable TimescaleDB extension
+        # Enable TimescaleDB extension (idempotent)
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
 
-        # Import models to register with metadata
-        from .models import telemetry_model  # noqa: F401
-
-        # Create all tables
-        await conn.run_sync(Base.metadata.create_all)
-
-        # Convert telemetry table to hypertable if not already
-        await conn.execute(text("""
-            SELECT create_hypertable(
-                'telemetry',
-                'time',
-                if_not_exists => TRUE,
-                chunk_time_interval => INTERVAL '1 day'
+        # Verify that required tables exist (created by migrations)
+        result = await conn.execute(text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'telemetry_raw'
             )
         """))
+        tables_exist = result.scalar()
 
-        # Create continuous aggregates for hourly data
-        await conn.execute(text("""
-            CREATE MATERIALIZED VIEW IF NOT EXISTS telemetry_hourly
-            WITH (timescaledb.continuous) AS
-            SELECT
-                time_bucket('1 hour', time) AS bucket,
-                device_id,
-                site_id,
-                metric_name,
-                AVG(metric_value) as avg_value,
-                MIN(metric_value) as min_value,
-                MAX(metric_value) as max_value,
-                COUNT(*) as sample_count
-            FROM telemetry
-            GROUP BY bucket, device_id, site_id, metric_name
-            WITH NO DATA
-        """))
-
-        # Create continuous aggregates for daily data
-        await conn.execute(text("""
-            CREATE MATERIALIZED VIEW IF NOT EXISTS telemetry_daily
-            WITH (timescaledb.continuous) AS
-            SELECT
-                time_bucket('1 day', time) AS bucket,
-                device_id,
-                site_id,
-                metric_name,
-                AVG(metric_value) as avg_value,
-                MIN(metric_value) as min_value,
-                MAX(metric_value) as max_value,
-                SUM(CASE WHEN metric_name LIKE '%energy%' THEN metric_value ELSE 0 END) as total_energy,
-                COUNT(*) as sample_count
-            FROM telemetry
-            GROUP BY bucket, device_id, site_id, metric_name
-            WITH NO DATA
-        """))
-
-        # Add retention policy
-        retention_days = settings.database.retention_days
-        await conn.execute(text(f"""
-            SELECT add_retention_policy(
-                'telemetry',
-                INTERVAL '{retention_days} days',
-                if_not_exists => TRUE
+        if not tables_exist:
+            raise RuntimeError(
+                "Database schema not initialized. Please run migrations first: "
+                "alembic upgrade head"
             )
-        """))
-
-        # Add compression policy
-        compression_days = settings.database.compression_after_days
-        await conn.execute(text(f"""
-            ALTER TABLE telemetry SET (
-                timescaledb.compress,
-                timescaledb.compress_segmentby = 'device_id, site_id, metric_name'
-            )
-        """))
-
-        await conn.execute(text(f"""
-            SELECT add_compression_policy(
-                'telemetry',
-                INTERVAL '{compression_days} days',
-                if_not_exists => TRUE
-            )
-        """))
 
 
 async def drop_db() -> None:
@@ -252,7 +190,7 @@ async def get_database_stats() -> dict:
             SELECT hypertable_name, num_chunks, total_bytes,
                    pg_size_pretty(total_bytes) as total_size
             FROM timescaledb_information.hypertables
-            WHERE hypertable_name = 'telemetry'
+            WHERE hypertable_name = 'telemetry_raw'
         """))
         hypertable_info = hypertable_result.fetchone()
 
@@ -262,7 +200,7 @@ async def get_database_stats() -> dict:
                    MIN(range_start) as oldest_data,
                    MAX(range_end) as newest_data
             FROM timescaledb_information.chunks
-            WHERE hypertable_name = 'telemetry'
+            WHERE hypertable_name = 'telemetry_raw'
         """))
         chunk_info = chunk_result.fetchone()
 
@@ -272,7 +210,7 @@ async def get_database_stats() -> dict:
                    SUM(before_compression_total_bytes) as before_compression,
                    SUM(after_compression_total_bytes) as after_compression
             FROM timescaledb_information.compressed_chunk_stats
-            WHERE hypertable_name = 'telemetry'
+            WHERE hypertable_name = 'telemetry_raw'
         """))
         compression_info = compression_result.fetchone()
 
