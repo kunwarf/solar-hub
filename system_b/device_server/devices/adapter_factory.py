@@ -79,6 +79,7 @@ class TCPModbusAdapter:
         """
         import struct
 
+        logger.debug(f"[SERVER->DEVICE] READ HOLDING addr={addr}, count={count}")
         transaction_id = self._next_transaction_id()
 
         # Build Modbus TCP request
@@ -124,6 +125,7 @@ class TCPModbusAdapter:
                 value = struct.unpack(">H", data[i:i + 2])[0]
                 registers.append(value)
 
+        logger.debug(f"[SERVER<-DEVICE] READ HOLDING response: {registers}")
         return registers
 
     async def _write_holding_u16(self, addr: int, value: int) -> None:
@@ -136,6 +138,7 @@ class TCPModbusAdapter:
         """
         import struct
 
+        logger.info(f"[SERVER->DEVICE] WRITE SINGLE addr={addr}, value={value}")
         transaction_id = self._next_transaction_id()
 
         # Function code 0x06: Write Single Register
@@ -164,6 +167,8 @@ class TCPModbusAdapter:
         if function_code & 0x80:
             raise ValueError(f"Modbus exception: {response[8]}")
 
+        logger.info(f"[SERVER<-DEVICE] WRITE SINGLE response: OK")
+
     async def _write_holding_u16_list(
         self,
         addr: int,
@@ -178,6 +183,7 @@ class TCPModbusAdapter:
         """
         import struct
 
+        logger.info(f"[SERVER->DEVICE] WRITE MULTIPLE addr={addr}, values={values}")
         transaction_id = self._next_transaction_id()
 
         # Function code 0x10: Write Multiple Registers
@@ -209,6 +215,41 @@ class TCPModbusAdapter:
         function_code = response[7]
         if function_code & 0x80:
             raise ValueError(f"Modbus exception: {response[8]}")
+
+        logger.info(f"[SERVER<-DEVICE] WRITE MULTIPLE response: OK")
+
+    async def write_register(self, address: int, value: int) -> None:
+        """
+        Write single holding register (public API).
+
+        Args:
+            address: Register address.
+            value: Value to write (0-65535).
+
+        Raises:
+            ValueError: If value is out of range.
+            Exception: On communication error.
+        """
+        if not 0 <= value <= 65535:
+            raise ValueError(f"Value {value} out of range [0, 65535]")
+        await self._write_holding_u16(address, value)
+
+    async def write_registers(self, address: int, values: List[int]) -> None:
+        """
+        Write multiple holding registers (public API).
+
+        Args:
+            address: Starting register address.
+            values: List of values to write (each 0-65535).
+
+        Raises:
+            ValueError: If any value is out of range.
+            Exception: On communication error.
+        """
+        for i, val in enumerate(values):
+            if not 0 <= val <= 65535:
+                raise ValueError(f"Value at index {i} ({val}) out of range [0, 65535]")
+        await self._write_holding_u16_list(address, values)
 
     async def poll(self) -> Dict[str, Any]:
         """
