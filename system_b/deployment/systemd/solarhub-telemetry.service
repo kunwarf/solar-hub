@@ -17,10 +17,8 @@ Environment="TIMESCALE_HOST=127.0.0.1"
 Environment="TIMESCALE_PORT=5432"
 Environment="TIMESCALE_NAME=solar_hub_telemetry"
 
-# Ensure directories exist and have correct permissions
+# Ensure log directory exists (chown removed - run manually if needed)
 ExecStartPre=/bin/mkdir -p /opt/solarhub/logs
-ExecStartPre=/bin/chown solarhub:solarhub /opt/solarhub/logs
-ExecStartPre=/bin/chown -R solarhub:solarhub /opt/solarhub/app/solar-hub/system_b
 
 ExecStart=/opt/solarhub/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 4 --loop uvloop --http httptools
 
