@@ -10,6 +10,12 @@ Group=solarhub
 WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
 Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/solarhub/app/.env
+# Explicitly set database credentials to ensure they're loaded
+Environment="TIMESCALE_USER=solarhub_telemetry"
+Environment="TIMESCALE_PASSWORD=system_b_telemetery"
+Environment="TIMESCALE_HOST=127.0.0.1"
+Environment="TIMESCALE_PORT=5432"
+Environment="TIMESCALE_NAME=solar_hub_telemetry"
 
 # Ensure log directory exists
 ExecStartPre=/bin/mkdir -p /opt/solarhub/logs
