@@ -290,7 +290,8 @@ async def get_event_counts(
     """
     event_repo = EventRepository(session)
 
-    counts = await event_repo.get_event_counts(site_id, hours)
+    start_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+    counts = await event_repo.get_event_counts(site_id=site_id, start_time=start_time)
 
     return EventCountsResponse(counts=counts)
 

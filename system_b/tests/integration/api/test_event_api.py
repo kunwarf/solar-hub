@@ -256,9 +256,11 @@ class TestGetEventCounts:
         with patch("app.api.v1.events.EventRepository") as MockRepo:
             mock_repo = MagicMock()
             mock_repo.get_event_counts = AsyncMock(return_value={
-                "critical": 5,
-                "warning": 15,
-                "info": 50,
+                "error": {
+                    "critical": 5,
+                    "warning": 15,
+                    "info": 50,
+                }
             })
             MockRepo.return_value = mock_repo
 

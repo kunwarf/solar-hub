@@ -50,7 +50,6 @@ class CommandListResponse(BaseModel):
 
 class CommandResultRequest(BaseModel):
     """Request to report command result."""
-    command_id: UUID
     success: bool
     data: Optional[Dict[str, Any]] = None
     error_code: Optional[str] = None

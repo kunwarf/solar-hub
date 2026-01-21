@@ -10,28 +10,28 @@ from pydantic import BaseModel, Field
 
 class DeviceRegisterRequest(BaseModel):
     """Request to register a device."""
-    device_id: UUID
     site_id: UUID
-    organization_id: UUID
     device_type: str
     serial_number: str = Field(..., min_length=1, max_length=100)
-    protocol: Optional[str] = None
+    protocol_id: Optional[str] = None
+    firmware_version: Optional[str] = None
+    hardware_version: Optional[str] = None
     connection_config: Optional[Dict[str, Any]] = None
-    polling_interval_seconds: int = Field(default=60, ge=5, le=3600)
-    metadata: Optional[Dict[str, Any]] = None
+    capabilities: Optional[List[str]] = None
+    device_metadata: Optional[Dict[str, Any]] = None
 
 
 class DeviceSyncRequest(BaseModel):
     """Request to sync device from System A."""
-    id: UUID
     site_id: UUID
-    organization_id: UUID
     device_type: str
     serial_number: str
-    protocol: Optional[str] = None
+    protocol_id: Optional[str] = None
+    firmware_version: Optional[str] = None
+    hardware_version: Optional[str] = None
     connection_config: Optional[Dict[str, Any]] = None
-    polling_interval_seconds: int = 60
-    metadata: Optional[Dict[str, Any]] = None
+    capabilities: Optional[List[str]] = None
+    device_metadata: Optional[Dict[str, Any]] = None
 
 
 class DeviceUpdateRequest(BaseModel):
