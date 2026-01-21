@@ -72,6 +72,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     # Start Device Server (TCP server for Modbus device connections)
     try:
+        # Add parent directory to path if needed for device_server imports
+        import sys
+        from pathlib import Path
+        system_b_path = Path(__file__).parent.parent
+        solar_hub_path = system_b_path.parent
+        if str(solar_hub_path) not in sys.path:
+            sys.path.insert(0, str(solar_hub_path))
+
         from system_b.device_server.main import DeviceServer
 
         _device_server = DeviceServer()
