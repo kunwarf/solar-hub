@@ -7,7 +7,7 @@ from solar device data loggers and routes them for identification.
 import asyncio
 import logging
 import signal
-from typing import Callable, Optional, Set
+from typing import Awaitable, Callable, Optional, Set
 
 from ..config import DeviceServerSettings, get_device_server_settings
 from .tcp_connection import TCPConnection
@@ -15,8 +15,8 @@ from .tcp_connection import TCPConnection
 logger = logging.getLogger(__name__)
 
 
-# Type for connection handler callback
-ConnectionHandler = Callable[[TCPConnection], asyncio.Task]
+# Type for connection handler callback (async function returning a Task)
+ConnectionHandler = Callable[[TCPConnection], Awaitable[asyncio.Task]]
 
 
 class TCPServer:
@@ -187,8 +187,8 @@ class TCPServer:
         )
 
         try:
-            # Delegate to connection handler
-            task = self._connection_handler(connection)
+            # Delegate to connection handler (await since it's an async function)
+            task = await self._connection_handler(connection)
             self._connection_tasks.add(task)
 
             # Add cleanup callback
