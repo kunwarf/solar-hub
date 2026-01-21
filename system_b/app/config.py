@@ -212,16 +212,26 @@ class AppSettings(BaseSettings):
         return self.environment == 'development'
 
 
-@lru_cache()
+_settings_cache: Optional[AppSettings] = None
+
 def get_settings() -> AppSettings:
     """
     Get cached application settings.
 
-    Uses LRU cache to avoid re-reading environment variables on every access.
-    Note: Environment variables take precedence over .env file and defaults.
+    Caches settings but checks environment variables on first call.
+    Environment variables take precedence over .env file and defaults.
     """
-    return AppSettings()
+    global _settings_cache
+    if _settings_cache is None:
+        _settings_cache = AppSettings()
+    return _settings_cache
 
 
-# Convenience accessor
-settings = get_settings()
+# Convenience accessor - delay initialization until after environment is set
+def _init_settings():
+    """Initialize settings after environment is available."""
+    global settings
+    settings = get_settings()
+
+# Don't initialize at module level - let it be initialized on first access
+settings: Optional[AppSettings] = None
