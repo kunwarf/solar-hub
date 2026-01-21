@@ -52,8 +52,19 @@ class TimescaleDBManager:
     def get_engine(cls) -> AsyncEngine:
         """Get or create the async database engine."""
         if cls._engine is None:
+            # Force use of environment variables for database URL
+            import os
+            db = settings.database
+            # Check environment variables directly
+            user = os.getenv('TIMESCALE_USER', db.user)
+            password = os.getenv('TIMESCALE_PASSWORD', db.password)
+            host = os.getenv('TIMESCALE_HOST', db.host)
+            port = os.getenv('TIMESCALE_PORT', str(db.port))
+            name = os.getenv('TIMESCALE_NAME', db.name)
+            db_url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+            
             cls._engine = create_async_engine(
-                settings.database.url,
+                db_url,
                 echo=settings.database.echo_sql,
                 pool_size=settings.database.pool_size,
                 max_overflow=settings.database.max_overflow,
