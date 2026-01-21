@@ -30,8 +30,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     Manages startup and shutdown tasks.
     """
     # Startup
+    import os
     print(f"Starting {settings.app_name} v{settings.app_version}")
     print(f"Environment: {settings.environment}")
+    # Debug: Show database config
+    db = settings.database
+    print(f"Database config - User: {db.user}, Host: {db.host}, DB: {db.name}")
+    print(f"TIMESCALE_USER env: {os.getenv('TIMESCALE_USER', 'NOT SET')}")
 
     # Initialize TimescaleDB
     try:
