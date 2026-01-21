@@ -1,0 +1,14 @@
+/opt/solarhub/logs/telemetry.log
+/opt/solarhub/logs/telemetry-error.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 solarhub solarhub
+    sharedscripts
+    postrotate
+        systemctl reload solarhub-telemetry.service > /dev/null 2>&1 || true
+    endscript
+}
