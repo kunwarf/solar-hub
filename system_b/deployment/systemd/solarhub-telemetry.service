@@ -8,7 +8,6 @@ Type=exec
 User=solarhub
 Group=solarhub
 WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
-ExecStartPre=/bin/test -d /opt/solarhub/app/solar-hub/system_b || (echo "Working directory does not exist" && exit 1)
 Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/solarhub/app/.env
 # Explicitly set database credentials to ensure they're loaded
