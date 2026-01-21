@@ -3,6 +3,7 @@ TimescaleDB connection management for System B (Telemetry).
 
 Provides async SQLAlchemy engine and session management for time-series data.
 """
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
@@ -18,6 +19,7 @@ from sqlalchemy.orm import DeclarativeBase
 from ...config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 # Naming convention for database constraints
@@ -65,8 +67,9 @@ class TimescaleDBManager:
             db_url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
             
             # Debug logging
-            print(f"Creating database engine with user: {user}, host: {host}, db: {name}")
-            print(f"TIMESCALE_USER env: {os.getenv('TIMESCALE_USER', 'NOT SET')}")
+            logger.info(f"Creating database engine - User: {user}, Host: {host}, DB: {name}")
+            logger.info(f"TIMESCALE_USER env: {os.getenv('TIMESCALE_USER', 'NOT SET')}")
+            logger.info(f"Database URL: postgresql+asyncpg://{user}:***@{host}:{port}/{name}")
             
             cls._engine = create_async_engine(
                 db_url,
