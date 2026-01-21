@@ -51,16 +51,48 @@ async def register_device(
     service = DeviceService(device_repo, None)
 
     try:
+        # Generate device_id (or get from request if provided)
+        from uuid import uuid4
+        device_id = uuid4()
+        
+        # For now, we'll use the site_id as organization_id placeholder
+        # In production, you'd fetch organization_id from the site
+        # TODO: Get organization_id from site_id via System A or local cache
+        organization_id = request.site_id  # Temporary: use site_id as org_id
+        
+        # Convert device_type string to DeviceType enum
+        from ...domain.entities.telemetry import DeviceType
+        try:
+            device_type_enum = DeviceType(request.device_type.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid device_type: {request.device_type}",
+            )
+        
+        # Build connection config from request
+        connection_config = request.connection_config or {}
+        if request.protocol_id:
+            connection_config["protocol_id"] = request.protocol_id
+        
+        # Build metadata from request
+        metadata = request.device_metadata or {}
+        if request.firmware_version:
+            metadata["firmware_version"] = request.firmware_version
+        if request.hardware_version:
+            metadata["hardware_version"] = request.hardware_version
+        if request.capabilities:
+            metadata["capabilities"] = request.capabilities
+        
         device = await service.register_device(
+            device_id=device_id,
             site_id=request.site_id,
-            device_type=request.device_type,
+            organization_id=organization_id,
+            device_type=device_type_enum,
             serial_number=request.serial_number,
-            protocol_id=request.protocol_id,
-            firmware_version=request.firmware_version,
-            hardware_version=request.hardware_version,
-            connection_config=request.connection_config,
-            capabilities=request.capabilities,
-            device_metadata=request.device_metadata,
+            protocol=request.protocol_id,
+            connection_config=connection_config if connection_config else None,
+            metadata=metadata if metadata else None,
         )
 
         return DeviceResponse(
