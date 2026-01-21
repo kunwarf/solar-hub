@@ -21,11 +21,23 @@ from ..application.services import (
     DeviceAuthService,
 )
 
-# Database URL from environment
-DATABASE_URL = os.getenv(
-    "SYSTEM_B_DATABASE_URL",
-    "postgresql+asyncpg://postgres:password@localhost:5432/solar_hub_timescale"
-)
+# Database URL from environment variables (same as timescale_connection.py)
+# Use TIMESCALE_* environment variables to construct the URL
+def get_database_url() -> str:
+    """Construct database URL from TIMESCALE_* environment variables."""
+    user = os.getenv('TIMESCALE_USER', 'postgres')
+    password = os.getenv('TIMESCALE_PASSWORD', 'password')
+    host = os.getenv('TIMESCALE_HOST', 'localhost')
+    port = os.getenv('TIMESCALE_PORT', '5432')
+    name = os.getenv('TIMESCALE_NAME', 'solar_hub_timescale')
+    
+    # Allow override via SYSTEM_B_DATABASE_URL if explicitly set
+    if os.getenv('SYSTEM_B_DATABASE_URL'):
+        return os.getenv('SYSTEM_B_DATABASE_URL')
+    
+    return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+
+DATABASE_URL = get_database_url()
 
 # Create async engine
 engine = create_async_engine(
