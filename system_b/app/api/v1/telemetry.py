@@ -52,6 +52,20 @@ async def ingest_telemetry(
     total_failed = 0
 
     for batch_data in request.points:
+        # Log received telemetry data
+        metric_count = len(batch_data.metrics)
+        metric_names = list(batch_data.metrics.keys())[:10]  # Log first 10 metric names
+        metric_summary = ", ".join(metric_names)
+        if metric_count > 10:
+            metric_summary += f" ... (+{metric_count - 10} more)"
+        
+        logger.info(
+            f"Received telemetry from device {batch_data.device_id} "
+            f"(site: {batch_data.site_id}): "
+            f"{metric_count} metrics, timestamp: {batch_data.timestamp or 'now'}, "
+            f"source: {batch_data.source}, metrics: [{metric_summary}]"
+        )
+        
         try:
             count = await service.ingest_telemetry(
                 device_id=batch_data.device_id,
@@ -59,6 +73,9 @@ async def ingest_telemetry(
                 metrics=batch_data.metrics,
                 timestamp=batch_data.timestamp,
                 source=batch_data.source,
+            )
+            logger.info(
+                f"Successfully ingested {count} telemetry points for device {batch_data.device_id}"
             )
             total_inserted += count
         except Exception as e:
@@ -94,6 +111,20 @@ async def ingest_device_telemetry(
     telemetry_repo = TelemetryRepository(session)
     service = TelemetryService(telemetry_repo)
 
+    # Log received telemetry data
+    metric_count = len(metrics)
+    metric_names = list(metrics.keys())[:10]  # Log first 10 metric names
+    metric_summary = ", ".join(metric_names)
+    if metric_count > 10:
+        metric_summary += f" ... (+{metric_count - 10} more)"
+    
+    logger.info(
+        f"Received telemetry from device {device_id} "
+        f"(site: {site_id}): "
+        f"{metric_count} metrics, timestamp: {timestamp or 'now'}, "
+        f"source: {source}, metrics: [{metric_summary}]"
+    )
+
     try:
         count = await service.ingest_telemetry(
             device_id=device_id,
@@ -101,6 +132,10 @@ async def ingest_device_telemetry(
             metrics=metrics,
             timestamp=timestamp,
             source=source,
+        )
+        
+        logger.info(
+            f"Successfully ingested {count} telemetry points for device {device_id}"
         )
 
         return IngestResponse(
