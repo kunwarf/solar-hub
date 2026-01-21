@@ -132,7 +132,7 @@ class DeviceServer:
         self._running = True
         logger.info(
             f"Device Server started on "
-            f"{self.settings.tcp_server.host}:{self.settings.tcp_server.port}"
+            f"{self.settings.server.host}:{self.settings.server.port}"
         )
 
     async def stop(self) -> None:
@@ -175,7 +175,7 @@ class DeviceServer:
         loader = ProtocolLoader()
 
         # Load from config directory
-        config_path = self.settings.protocols_config_path
+        config_path = self.settings.protocols_file
         if config_path.exists():
             protocols = loader.load_from_file(config_path)
             for protocol in protocols:
