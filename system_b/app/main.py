@@ -52,6 +52,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     # Initialize TimescaleDB
     try:
+        # Clear any cached engine to ensure fresh connection with correct credentials
+        TimescaleDBManager.clear_engine()
         await init_db()
         logger.info("TimescaleDB initialized successfully")
     except Exception as e:

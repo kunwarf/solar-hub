@@ -107,6 +107,14 @@ class TimescaleDBManager:
         return cls._session_factory
 
     @classmethod
+    def clear_engine(cls) -> None:
+        """Clear the cached engine to force recreation with new credentials."""
+        if cls._engine is not None:
+            cls._engine = None
+            cls._session_factory = None
+            logger.info("Database engine cache cleared")
+    
+    @classmethod
     async def close(cls) -> None:
         """Close the database engine and all connections."""
         if cls._engine is not None:
