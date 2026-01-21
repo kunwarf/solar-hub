@@ -4,7 +4,7 @@ Device event entities for System B.
 Events capture significant device occurrences for monitoring and alerting.
 """
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any
 from uuid import UUID
@@ -53,7 +53,7 @@ class DeviceEvent:
     def acknowledge(self, user_id: UUID) -> None:
         """Acknowledge this event."""
         self.acknowledged = True
-        self.acknowledged_at = datetime.utcnow()
+        self.acknowledged_at = datetime.now(timezone.utc)
         self.acknowledged_by = user_id
 
     @classmethod
@@ -66,7 +66,7 @@ class DeviceEvent:
     ) -> "DeviceEvent":
         """Factory method for connection events."""
         return cls(
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             device_id=device_id,
             site_id=site_id,
             event_type=EventType.CONNECTION,
@@ -88,7 +88,7 @@ class DeviceEvent:
     ) -> "DeviceEvent":
         """Factory method for error events."""
         return cls(
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             device_id=device_id,
             site_id=site_id,
             event_type=EventType.ERROR,
@@ -109,7 +109,7 @@ class DeviceEvent:
     ) -> "DeviceEvent":
         """Factory method for status change events."""
         return cls(
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             device_id=device_id,
             site_id=site_id,
             event_type=EventType.STATUS_CHANGE,

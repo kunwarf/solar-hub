@@ -4,7 +4,7 @@ Device command entities for System B.
 Commands represent remote control operations sent to devices.
 """
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional, Dict, Any
 from uuid import UUID, uuid4
@@ -75,40 +75,40 @@ class DeviceCommand(Entity):
     def __post_init__(self):
         # Set default expiration if not provided
         if self.expires_at is None:
-            self.expires_at = datetime.utcnow() + timedelta(hours=1)
+            self.expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
 
     def mark_sent(self) -> None:
         """Mark command as sent to device."""
         self.status = CommandStatus.SENT
-        self.sent_at = datetime.utcnow()
+        self.sent_at = datetime.now(timezone.utc)
 
     def mark_acknowledged(self) -> None:
         """Mark command as acknowledged by device."""
         self.status = CommandStatus.ACKNOWLEDGED
-        self.acknowledged_at = datetime.utcnow()
+        self.acknowledged_at = datetime.now(timezone.utc)
 
     def mark_completed(self, result: Optional[Dict[str, Any]] = None) -> None:
         """Mark command as successfully completed."""
         self.status = CommandStatus.COMPLETED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
         self.result = result
 
     def mark_failed(self, error_message: str) -> None:
         """Mark command as failed."""
         self.status = CommandStatus.FAILED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
         self.error_message = error_message
 
     def mark_timeout(self) -> None:
         """Mark command as timed out."""
         self.status = CommandStatus.TIMEOUT
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
         self.error_message = "Command timed out"
 
     def cancel(self) -> None:
         """Cancel the command."""
         self.status = CommandStatus.CANCELLED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
     def can_retry(self) -> bool:
         """Check if command can be retried."""
@@ -133,7 +133,7 @@ class DeviceCommand(Entity):
         """Check if command has expired."""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     def is_pending(self) -> bool:
         """Check if command is pending execution."""
@@ -191,7 +191,7 @@ class CommandResult:
     command_id: UUID
     device_id: UUID
     success: bool
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     data: Optional[Dict[str, Any]] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None

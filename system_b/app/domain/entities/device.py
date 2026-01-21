@@ -60,13 +60,13 @@ class DeviceRegistry(Entity):
     def mark_connected(self) -> None:
         """Mark device as connected."""
         self.connection_status = ConnectionStatus.CONNECTED
-        self.last_connected_at = datetime.utcnow()
+        self.last_connected_at = datetime.now(timezone.utc)
         self.reconnect_count += 1
 
     def mark_disconnected(self) -> None:
         """Mark device as disconnected."""
         self.connection_status = ConnectionStatus.DISCONNECTED
-        self.last_disconnected_at = datetime.utcnow()
+        self.last_disconnected_at = datetime.now(timezone.utc)
 
     def mark_error(self) -> None:
         """Mark device as in error state."""
@@ -82,12 +82,12 @@ class DeviceRegistry(Entity):
             return False
         if self.next_poll_at is None:
             return True
-        return datetime.utcnow() >= self.next_poll_at
+        return datetime.now(timezone.utc) >= self.next_poll_at
 
     def update_poll_time(self) -> None:
         """Update last polled time and calculate next poll."""
         from datetime import timedelta
-        self.last_polled_at = datetime.utcnow()
+        self.last_polled_at = datetime.now(timezone.utc)
         self.next_poll_at = self.last_polled_at + timedelta(seconds=self.polling_interval_seconds)
 
 

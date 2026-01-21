@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class EventCreateRequest(BaseModel):
@@ -33,8 +33,7 @@ class EventResponse(BaseModel):
     acknowledged_at: Optional[datetime] = None
     acknowledged_by: Optional[UUID] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EventListResponse(BaseModel):

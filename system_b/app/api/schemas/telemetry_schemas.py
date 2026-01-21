@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class TelemetryPointCreate(BaseModel):
@@ -49,8 +49,7 @@ class TelemetryPointResponse(BaseModel):
     quality: str
     unit: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TelemetryLatestResponse(BaseModel):
