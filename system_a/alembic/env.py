@@ -91,43 +91,62 @@ def do_run_migrations(connection: Connection) -> None:
     # Run migrations - duplicate enum errors are handled in the migration itself
     # The migration uses DO blocks to create enums only if they don't exist
     # SQLAlchemy may still try to create them during table processing
-    # We catch duplicate enum errors and retry
-    max_retries = 2
-    for attempt in range(max_retries):
+    # We catch duplicate enum errors and suppress them since the enum already exists
+    from sqlalchemy.exc import ProgrammingError
+    import sys
+    
+    # Monkey-patch SQLAlchemy's enum creation to check if enum exists first
+    from sqlalchemy.dialects.postgresql.named_types import ENUM
+    original_create = ENUM.create
+    
+    def create_with_check(self, bind=None, checkfirst=True, **kw):
+        """Create enum type only if it doesn't exist."""
+        if bind is None:
+            return original_create(self, bind=bind, checkfirst=checkfirst, **kw)
+        
+        # Check if enum already exists
         try:
-            with context.begin_transaction():
-                context.run_migrations()
-            break  # Success, exit retry loop
-        except Exception as e:
+            result = bind.execute(
+                sa_text(f"""
+                    SELECT EXISTS (
+                        SELECT 1 FROM pg_type 
+                        WHERE typname = '{self.name}'
+                    )
+                """)
+            )
+            exists = result.scalar()
+            if exists:
+                # Enum already exists, don't try to create it
+                return
+        except Exception:
+            # If check fails, try original create (will fail if duplicate, but that's ok)
+            pass
+        
+        # Try to create - will fail if duplicate, but we'll catch that
+        try:
+            return original_create(self, bind=bind, checkfirst=checkfirst, **kw)
+        except ProgrammingError as e:
             error_str = str(e).lower()
-            # Check if this is a duplicate enum error
             is_duplicate_enum = (
                 'duplicate' in error_str and 
                 ('type' in error_str or 'enum' in error_str) and 
                 ('already exists' in error_str or 'duplicateobjecterror' in error_str.replace(' ', ''))
             )
-            
-            if is_duplicate_enum and attempt < max_retries - 1:
-                # This is a duplicate enum error - the enum was already created by our DO block
-                # Rollback and retry - SQLAlchemy should see the enum exists now
-                print(f"Warning: Duplicate enum error (attempt {attempt + 1}/{max_retries}), retrying...")
-                connection.rollback()
-                continue
-            elif is_duplicate_enum:
-                # Last attempt - this shouldn't happen, but if it does, the enum exists
-                # so we can try to continue without the transaction wrapper
-                print(f"Warning: Duplicate enum error on final attempt, trying to continue...")
-                connection.rollback()
-                # Try one more time - enum should exist now
-                try:
-                    context.run_migrations()
-                    break
-                except Exception as e2:
-                    # If it still fails, raise the original error
-                    raise e
+            if is_duplicate_enum:
+                # Enum already exists, that's fine - suppress the error
+                return
             else:
-                # Different error, re-raise
                 raise
+    
+    # Temporarily replace the create method
+    ENUM.create = create_with_check
+    
+    try:
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        # Restore original method
+        ENUM.create = original_create
 
 
 async def run_async_migrations() -> None:
