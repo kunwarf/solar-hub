@@ -8,6 +8,8 @@ export { authService } from './auth.service';
 export { dashboardService } from './dashboard.service';
 export { devicesService } from './devices.service';
 export { sitesService } from './sites.service';
+export { billingService } from './billing.service';
+export type { BillingOverview, BillCalculation } from './billing.service';
 
 // Re-export types
 export * from '../types';

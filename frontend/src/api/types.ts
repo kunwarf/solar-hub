@@ -80,8 +80,14 @@ export enum DiscoProvider {
   SEPCO = 'sepco',
   QESCO = 'qesco',
   TESCO = 'tesco',
+  KESCO = 'kesco', // Karachi
   KELECTRIC = 'kelectric',
 }
+
+// Type alias for string literals (used in services)
+export type DiscoProviderString =
+  | 'lesco' | 'fesco' | 'iesco' | 'gepco' | 'mepco'
+  | 'pesco' | 'hesco' | 'sepco' | 'qesco' | 'tesco' | 'kesco';
 
 // ============================================================================
 // User & Authentication

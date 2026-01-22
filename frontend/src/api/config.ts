@@ -101,6 +101,9 @@ export const API_ENDPOINTS = {
 
   // Billing
   billing: {
+    overview: (siteId: string) => `/billing/sites/${siteId}/overview`,
+    history: (siteId: string) => `/billing/sites/${siteId}/history`,
+    calculate: '/billing/calculate',
     tariffs: '/billing/tariffs',
     discos: '/billing/tariffs/discos',
     createTariff: '/billing/tariff/create',
@@ -109,6 +112,14 @@ export const API_ENDPOINTS = {
     simulationById: (id: string) => `/billing/simulations/${id}`,
     compareTariffs: '/billing/compare-tariffs',
     yearlySummary: (siteId: string) => `/billing/yearly-summary/${siteId}`,
+  },
+
+  // Tariffs (Pakistani DISCO rates)
+  tariffs: {
+    list: '/tariffs',
+    byId: (id: string) => `/tariffs/${id}`,
+    byProvider: (provider: string) => `/tariffs/provider/${provider}`,
+    netMetering: (provider: string) => `/tariffs/provider/${provider}/net-metering`,
   },
 
   // Alerts
