@@ -7,10 +7,10 @@
     "de_pin": 4,
     "unit_id": 1,
     "baudrate": 9600,
-    "parity": "N",
+    "parity": "E",
     "stop_bits": 1,
     "data_bits": 8,
-    "timeout_ms": 1000
+    "timeout_ms": 2000
   },
   "modbus_bridge": {
     "server_host": "182.180.150.107",
