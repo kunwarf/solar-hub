@@ -41,10 +41,13 @@ def upgrade() -> None:
     for enum_name, enum_values in enums_to_create:
         # Create enum type using DO block to handle duplicates gracefully
         # This prevents SQLAlchemy from trying to create it during table processing
+        # Format enum values as SQL: 'val1', 'val2', 'val3'
         values_sql = "', '".join(enum_values)
+        # Full enum values string with quotes: 'val1', 'val2', 'val3'
+        enum_values_str = f"'{values_sql}'"
         
         # Use DO block to create enum only if it doesn't exist
-        # Build the CREATE TYPE statement as a string and execute it
+        # Build the CREATE TYPE statement properly
         op.execute(sa.text(f"""
             DO $$ 
             BEGIN
@@ -52,7 +55,7 @@ def upgrade() -> None:
                     SELECT 1 FROM pg_type 
                     WHERE typname = '{enum_name}'
                 ) THEN
-                    EXECUTE 'CREATE TYPE {enum_name} AS ENUM (''' || '{values_sql}' || ''')';
+                    EXECUTE 'CREATE TYPE {enum_name} AS ENUM ({enum_values_str})';
                 END IF;
             EXCEPTION
                 WHEN duplicate_object THEN
