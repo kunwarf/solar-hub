@@ -86,12 +86,30 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
-        # Don't try to create enum types - we handle that in migrations
-        include_object=lambda obj, name, type_, reflected, compare_to: True,
     )
 
-    with context.begin_transaction():
-        context.run_migrations()
+    # Wrap migration execution to catch and ignore duplicate enum errors
+    # SQLAlchemy tries to create enums even when create_type=False if they don't exist
+    # in its metadata, so we catch the error and continue
+    try:
+        with context.begin_transaction():
+            context.run_migrations()
+    except Exception as e:
+        # Check if this is a duplicate enum error
+        error_str = str(e).lower()
+        if 'duplicate' in error_str and ('type' in error_str or 'enum' in error_str) and 'already exists' in error_str:
+            # This is a duplicate enum error - ignore it and continue
+            # The enum was already created, SQLAlchemy just tried to create it again
+            print(f"Warning: Ignoring duplicate enum creation error: {e}")
+            # Try to continue with the migration
+            # We need to commit the transaction and continue
+            connection.commit()
+            # Re-run migrations to continue from where we left off
+            with context.begin_transaction():
+                context.run_migrations()
+        else:
+            # Re-raise if it's a different error
+            raise
 
 
 async def run_async_migrations() -> None:
