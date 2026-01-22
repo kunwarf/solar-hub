@@ -192,11 +192,16 @@ class ModbusBridge:
                     self.stats["errors"] += 1
                     print("[Bridge] TX: Exception 0x0B (gateway target failed)")
 
-            except socket.timeout:
-                # Keepalive timeout - send a ping or just continue
-                print("[Bridge] Keepalive timeout, checking connection...")
-                # Connection is still alive, continue
-                continue
+            except OSError as e:
+                # In MicroPython, timeout raises OSError with ETIMEDOUT (110)
+                if e.args[0] == 110:  # ETIMEDOUT
+                    print("[Bridge] Keepalive timeout, checking connection...")
+                    continue
+                else:
+                    print("[Bridge] Socket error:", e)
+                    self.stats["errors"] += 1
+                    self._cleanup_socket()
+                    time.sleep(1)
 
             except Exception as e:
                 print("[Bridge] Error:", e)
