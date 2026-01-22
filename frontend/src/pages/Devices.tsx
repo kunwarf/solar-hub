@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -13,14 +13,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState, SearchSuggestions } from "@/components/ui/empty-state";
-import { Plus, Search, Filter, HardHat, Activity, Settings, RefreshCw } from "lucide-react";
-import { devices } from "@/data/mockData";
+import { Plus, Search, Filter, HardHat, Activity, Settings, RefreshCw, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useUserRole } from "@/contexts/UserRoleContext";
 import { SwipeableItem } from "@/components/mobile/SwipeableItem";
 import { FloatingActionButton } from "@/components/mobile/MobileActionButtons";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useDevicesForUI } from "@/hooks/useDevices";
+import type { DeviceType, DeviceStatus } from "@/api/types";
 
 const DevicesPage = () => {
   const navigate = useNavigate();
@@ -29,29 +30,34 @@ const DevicesPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  
+
   const showCommissioning = hasPermission("commissioning_mode") || isInstaller;
 
+  // Build API filters
+  const apiFilters = useMemo(() => ({
+    device_type: typeFilter !== "all" ? typeFilter as DeviceType : undefined,
+    status: statusFilter !== "all" ? statusFilter as DeviceStatus : undefined,
+    search: searchQuery || undefined,
+  }), [typeFilter, statusFilter, searchQuery]);
+
+  // Fetch devices from API
+  const { devices, total, isLoading, error, refresh } = useDevicesForUI({
+    filters: apiFilters,
+    autoRefresh: true,
+    refreshInterval: 30000,
+  });
+
   const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
     // Trigger haptic feedback
     if ('vibrate' in navigator) {
       navigator.vibrate(10);
     }
-    // Simulate refresh
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await refresh();
     toast.success("Devices refreshed");
-    setIsRefreshing(false);
-  }, []);
+  }, [refresh]);
 
-  const filteredDevices = devices.filter((device) => {
-    const matchesSearch = device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      device.serialNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = typeFilter === "all" || device.type === typeFilter;
-    const matchesStatus = statusFilter === "all" || device.status === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
-  });
+  // For backward compatibility, filteredDevices is now just devices from API
+  const filteredDevices = devices;
 
   const handleConfigure = (deviceId: string) => {
     navigate(`/devices/${deviceId}/settings`);
@@ -135,7 +141,16 @@ const DevicesPage = () => {
 
         {/* Device Count */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Showing {filteredDevices.length} of {devices.length} devices</span>
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading devices...
+            </span>
+          ) : error ? (
+            <span className="text-destructive">{error}</span>
+          ) : (
+            <span>Showing {filteredDevices.length} of {total} devices</span>
+          )}
         </div>
 
         {/* Device Grid */}
@@ -193,7 +208,7 @@ const DevicesPage = () => {
           </EmptyState>
         )}
 
-        {devices.length === 0 && (
+        {!isLoading && filteredDevices.length === 0 && total === 0 && (
           <EmptyState
             type="no-devices"
             action={{
@@ -206,7 +221,7 @@ const DevicesPage = () => {
 
       {/* Floating Refresh Button (mobile only) */}
       <FloatingActionButton
-        icon={<RefreshCw className={`w-6 h-6 ${isRefreshing ? 'animate-spin' : ''}`} />}
+        icon={<RefreshCw className={`w-6 h-6 ${isLoading ? 'animate-spin' : ''}`} />}
         onClick={handleRefresh}
         label="Refresh devices"
         position="bottom-right"
