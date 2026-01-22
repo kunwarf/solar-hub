@@ -9,7 +9,7 @@ import sys
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import pool, text as sa_text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -91,13 +91,12 @@ def do_run_migrations(connection: Connection) -> None:
         """Check if enum exists before creating it."""
         # Check if enum type exists
         result = connection.execute(
-            sa.text(f"""
+            sa_text(f"""
                 SELECT EXISTS (
                     SELECT 1 FROM pg_type 
-                    WHERE typname = :enum_name
+                    WHERE typname = '{element.name}'
                 )
-            """),
-            {"enum_name": element.name}
+            """)
         )
         exists = result.scalar()
         
