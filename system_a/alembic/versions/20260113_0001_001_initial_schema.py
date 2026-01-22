@@ -33,25 +33,40 @@ def upgrade() -> None:
         ("alert_status", "('active', 'acknowledged', 'resolved', 'expired')"),
     ]
     
+    # Create enum types only if they don't exist
+    # SQLAlchemy will try to create them when processing table definitions,
+    # so we need to create them first and handle the case where they already exist
     for enum_name, enum_values in enums_to_create:
-        # Create enum type only if it doesn't exist using PostgreSQL IF NOT EXISTS
-        # This prevents errors if the type was created by a previous migration attempt
-        # We use a stored procedure approach that works with asyncpg
         connection = op.get_bind()
         
-        # Use a function that creates the type only if it doesn't exist
-        # This is more reliable than checking first, then creating
-        op.execute(sa.text(f"""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{enum_name}') THEN
-                    EXECUTE 'CREATE TYPE {enum_name} AS ENUM {enum_values}';
-                END IF;
-            EXCEPTION
-                WHEN duplicate_object THEN
-                    NULL;  -- Type already exists, ignore
-            END $$;
+        # Check if enum exists
+        check_result = connection.execute(sa.text(f"""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_type 
+                WHERE typname = '{enum_name}'
+            )
         """))
+        exists = check_result.scalar()
+        
+        if not exists:
+            # Create the enum type
+            # Use EXECUTE in DO block to avoid parsing issues with enum values
+            op.execute(sa.text(f"""
+                DO $$ 
+                BEGIN
+                    EXECUTE format('CREATE TYPE {enum_name} AS ENUM %s', {enum_values}::text);
+                EXCEPTION
+                    WHEN duplicate_object THEN
+                        NULL;
+                END $$;
+            """))
+        
+        # Register the enum with SQLAlchemy's metadata to prevent it from trying to create it
+        # This tells SQLAlchemy the enum already exists
+        from sqlalchemy.dialects.postgresql import ENUM
+        enum_type = ENUM(*enum_values.split(','), name=enum_name, create_type=False)
+        # Bind it to the connection so SQLAlchemy knows it exists
+        enum_type._set_parent(connection)
 
     # Users table
     op.create_table(
