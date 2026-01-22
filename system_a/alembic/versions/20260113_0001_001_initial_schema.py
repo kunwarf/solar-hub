@@ -49,24 +49,19 @@ def upgrade() -> None:
         exists = check_result.scalar()
         
         if not exists:
-            # Create the enum type
-            # Use EXECUTE in DO block to avoid parsing issues with enum values
-            op.execute(sa.text(f"""
-                DO $$ 
-                BEGIN
-                    EXECUTE format('CREATE TYPE {enum_name} AS ENUM %s', {enum_values}::text);
-                EXCEPTION
-                    WHEN duplicate_object THEN
-                        NULL;
-                END $$;
-            """))
-        
-        # Register the enum with SQLAlchemy's metadata to prevent it from trying to create it
-        # This tells SQLAlchemy the enum already exists
-        from sqlalchemy.dialects.postgresql import ENUM
-        enum_type = ENUM(*enum_values.split(','), name=enum_name, create_type=False)
-        # Bind it to the connection so SQLAlchemy knows it exists
-        enum_type._set_parent(connection)
+            # Create the enum type directly
+            # Parse enum values from string format like "('val1', 'val2')"
+            values_str = enum_values.strip("()")
+            values_list = [v.strip().strip("'\"") for v in values_str.split(",")]
+            values_sql = "', '".join(values_list)
+            
+            try:
+                op.execute(sa.text(f"CREATE TYPE {enum_name} AS ENUM ('{values_sql}')"))
+            except Exception as e:
+                # If it already exists (race condition), that's fine
+                error_str = str(e).lower()
+                if 'already exists' not in error_str and 'duplicate' not in error_str:
+                    raise
 
     # Users table
     op.create_table(
