@@ -81,35 +81,49 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
-    context.configure(
-        connection=connection,
-        target_metadata=target_metadata,
-        compare_type=True,
-        compare_server_default=True,
-    )
-
-    # Wrap migration execution to catch and ignore duplicate enum errors
-    # SQLAlchemy tries to create enums even when create_type=False if they don't exist
-    # in its metadata, so we catch the error and continue
+    # Create a custom DDL visitor that checks if enum types exist before creating them
+    from sqlalchemy.dialects.postgresql.base import PGDDLCompiler
+    from sqlalchemy.dialects.postgresql.named_types import ENUM
+    
+    original_visit_enum = PGDDLCompiler.visit_ENUM
+    
+    def visit_ENUM_with_check(self, element, **kw):
+        """Check if enum exists before creating it."""
+        # Check if enum type exists
+        result = connection.execute(
+            sa.text(f"""
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_type 
+                    WHERE typname = :enum_name
+                )
+            """),
+            {"enum_name": element.name}
+        )
+        exists = result.scalar()
+        
+        if exists:
+            # Enum already exists, don't try to create it
+            return ""
+        else:
+            # Enum doesn't exist, create it using the original method
+            return original_visit_enum(self, element, **kw)
+    
+    # Temporarily replace the visit_ENUM method
+    PGDDLCompiler.visit_ENUM = visit_ENUM_with_check
+    
     try:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
+        )
+
         with context.begin_transaction():
             context.run_migrations()
-    except Exception as e:
-        # Check if this is a duplicate enum error
-        error_str = str(e).lower()
-        if 'duplicate' in error_str and ('type' in error_str or 'enum' in error_str) and 'already exists' in error_str:
-            # This is a duplicate enum error - ignore it and continue
-            # The enum was already created, SQLAlchemy just tried to create it again
-            print(f"Warning: Ignoring duplicate enum creation error: {e}")
-            # Try to continue with the migration
-            # We need to commit the transaction and continue
-            connection.commit()
-            # Re-run migrations to continue from where we left off
-            with context.begin_transaction():
-                context.run_migrations()
-        else:
-            # Re-raise if it's a different error
-            raise
+    finally:
+        # Restore the original method
+        PGDDLCompiler.visit_ENUM = original_visit_enum
 
 
 async def run_async_migrations() -> None:
