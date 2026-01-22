@@ -90,20 +90,41 @@ def do_run_migrations(connection: Connection) -> None:
 
     # Run migrations - duplicate enum errors are handled in the migration itself
     # The migration uses DO blocks to create enums only if they don't exist
-    # SQLAlchemy may still try to create them, but the DO block handles duplicates
-    with context.begin_transaction():
+    # SQLAlchemy may still try to create them during table processing
+    # We catch duplicate enum errors and retry
+    max_retries = 2
+    for attempt in range(max_retries):
         try:
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+            break  # Success, exit retry loop
         except Exception as e:
-            # Check if this is a duplicate enum error that slipped through
             error_str = str(e).lower()
-            if 'duplicate' in error_str and ('type' in error_str or 'enum' in error_str) and 'already exists' in error_str:
-                # This is a duplicate enum error - the enum was already created
-                # Rollback and try again (the enum now exists, so SQLAlchemy won't try to create it)
+            # Check if this is a duplicate enum error
+            is_duplicate_enum = (
+                'duplicate' in error_str and 
+                ('type' in error_str or 'enum' in error_str) and 
+                ('already exists' in error_str or 'duplicateobjecterror' in error_str.replace(' ', ''))
+            )
+            
+            if is_duplicate_enum and attempt < max_retries - 1:
+                # This is a duplicate enum error - the enum was already created by our DO block
+                # Rollback and retry - SQLAlchemy should see the enum exists now
+                print(f"Warning: Duplicate enum error (attempt {attempt + 1}/{max_retries}), retrying...")
                 connection.rollback()
-                # Re-run migrations - this time the enum exists so SQLAlchemy won't try to create it
-                with context.begin_transaction():
+                continue
+            elif is_duplicate_enum:
+                # Last attempt - this shouldn't happen, but if it does, the enum exists
+                # so we can try to continue without the transaction wrapper
+                print(f"Warning: Duplicate enum error on final attempt, trying to continue...")
+                connection.rollback()
+                # Try one more time - enum should exist now
+                try:
                     context.run_migrations()
+                    break
+                except Exception as e2:
+                    # If it still fails, raise the original error
+                    raise e
             else:
                 # Different error, re-raise
                 raise
