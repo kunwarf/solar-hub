@@ -47,7 +47,7 @@ def upgrade() -> None:
         enum_values_str = f"'{values_sql}'"
         
         # Use DO block to create enum only if it doesn't exist
-        # Build the CREATE TYPE statement properly
+        # Use dollar-quoting for the EXECUTE string to avoid quote escaping issues
         op.execute(sa.text(f"""
             DO $$ 
             BEGIN
@@ -55,7 +55,7 @@ def upgrade() -> None:
                     SELECT 1 FROM pg_type 
                     WHERE typname = '{enum_name}'
                 ) THEN
-                    EXECUTE 'CREATE TYPE {enum_name} AS ENUM ({enum_values_str})';
+                    EXECUTE $sql$CREATE TYPE {enum_name} AS ENUM ({enum_values_str})$sql$;
                 END IF;
             EXCEPTION
                 WHEN duplicate_object THEN
