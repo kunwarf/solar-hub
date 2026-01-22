@@ -44,6 +44,12 @@ class DeviceMetricsSchema(BaseModel):
     last_updated: Optional[datetime] = None
 
 
+class DeviceSnapshotUpdate(BaseModel):
+    """Request to update device snapshot from System B."""
+    snapshot: Dict[str, Any] = Field(..., description="Telemetry snapshot data")
+    timestamp: Optional[str] = Field(None, description="ISO timestamp of the snapshot")
+
+
 class DeviceCreate(BaseModel):
     """Request to create/register a device."""
     site_id: UUID
