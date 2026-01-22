@@ -39,23 +39,17 @@ def upgrade() -> None:
     connection = op.get_bind()
     
     for enum_name, enum_values in enums_to_create:
-        # Check if enum exists
-        check_result = connection.execute(sa.text(f"""
-            SELECT EXISTS (
-                SELECT 1 FROM pg_type 
-                WHERE typname = '{enum_name}'
-            )
-        """))
-        exists = check_result.scalar()
-        
         # Always try to create - if it exists, PostgreSQL will error but we catch it
         # This handles the case where SQLAlchemy tries to create it during table processing
+        # We create it here first so SQLAlchemy's attempt will fail gracefully
         values_sql = "', '".join(enum_values)
         
         try:
             op.execute(sa.text(f"CREATE TYPE {enum_name} AS ENUM ('{values_sql}')"))
         except Exception as e:
             # If it already exists, that's fine - either we created it or it was there before
+            # SQLAlchemy will also try to create it when processing tables, but it will fail
+            # gracefully since we've already created it (or it existed)
             error_str = str(e).lower()
             if 'already exists' not in error_str and 'duplicate' not in error_str:
                 raise
