@@ -101,19 +101,19 @@ class StorageSettings(BaseSettings):
     """Storage configuration for telemetry data."""
 
     model_config = SettingsConfigDict(
-        env_prefix="DEVICE_STORAGE_",
+        env_prefix="TIMESCALE_",
         env_file=".env",
         extra="ignore",
     )
 
-    # TimescaleDB connection
-    timescale_host: str = Field(default="localhost", description="TimescaleDB host")
-    timescale_port: int = Field(default=5432, description="TimescaleDB port")
-    timescale_database: str = Field(default="solarhub", description="TimescaleDB database name")
-    timescale_user: str = Field(default="solarhub", description="TimescaleDB user")
-    timescale_password: str = Field(default="", description="TimescaleDB password")
+    # TimescaleDB connection (uses same env vars as main app: TIMESCALE_*)
+    host: str = Field(default="localhost", description="TimescaleDB host")
+    port: int = Field(default=5432, description="TimescaleDB port")
+    name: str = Field(default="solar_hub_telemetry", description="TimescaleDB database name")
+    user: str = Field(default="postgres", description="TimescaleDB user")
+    password: str = Field(default="postgres", description="TimescaleDB password")
 
-    # Batching settings
+    # Batching settings (use DEVICE_STORAGE_ prefix for these)
     batch_size: int = Field(default=100, description="Batch size for bulk writes")
     flush_interval: float = Field(default=1.0, description="Flush interval in seconds")
     buffer_max_size: int = Field(default=10000, description="Maximum buffer size before force flush")
@@ -197,18 +197,18 @@ def get_device_server_settings() -> DeviceServerSettings:
 
     # Log storage/DB settings (mask password)
     storage = settings.storage
-    password_display = "***" if storage.timescale_password else "(empty)"
+    password_display = "***" if storage.password else "(empty)"
     logger.info(f"  TimescaleDB settings:")
-    logger.info(f"    Host: {storage.timescale_host}")
-    logger.info(f"    Port: {storage.timescale_port}")
-    logger.info(f"    Database: {storage.timescale_database}")
-    logger.info(f"    User: {storage.timescale_user}")
+    logger.info(f"    Host: {storage.host}")
+    logger.info(f"    Port: {storage.port}")
+    logger.info(f"    Database: {storage.name}")
+    logger.info(f"    User: {storage.user}")
     logger.info(f"    Password: {password_display}")
 
     # Log relevant env vars
-    logger.info(f"  Environment variables:")
+    logger.info(f"  Environment variables (TIMESCALE_*):")
     for key in sorted(os.environ.keys()):
-        if key.startswith("DEVICE_STORAGE_") or key.startswith("TIMESCALE"):
+        if key.startswith("TIMESCALE_"):
             value = os.environ[key]
             if "PASSWORD" in key.upper():
                 value = "***"

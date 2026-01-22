@@ -59,18 +59,22 @@ class TimescaleWriter:
 
         storage = self.settings.storage
         try:
+            logger.info(
+                f"Connecting to TimescaleDB at {storage.host}:{storage.port}/{storage.name} "
+                f"as user '{storage.user}'"
+            )
             self._pool = await asyncpg.create_pool(
-                host=storage.timescale_host,
-                port=storage.timescale_port,
-                database=storage.timescale_database,
-                user=storage.timescale_user,
-                password=storage.timescale_password,
+                host=storage.host,
+                port=storage.port,
+                database=storage.name,
+                user=storage.user,
+                password=storage.password,
                 min_size=2,
                 max_size=10,
             )
             logger.info(
                 f"Connected to TimescaleDB at "
-                f"{storage.timescale_host}:{storage.timescale_port}"
+                f"{storage.host}:{storage.port}/{storage.name}"
             )
 
             # Ensure tables exist
