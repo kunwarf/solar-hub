@@ -22,10 +22,10 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-from .base import Base, BaseModel
+from .base import BaseModel
 
 
-class TariffPlanModel(Base, BaseModel):
+class TariffPlanModel(BaseModel):
     """
     Tariff plan for a DISCO and category.
 
@@ -94,7 +94,7 @@ class TariffPlanModel(Base, BaseModel):
     )
 
 
-class BillingSimulationModel(Base, BaseModel):
+class BillingSimulationModel(BaseModel):
     """
     Simulated electricity bill for a site.
 
