@@ -13,17 +13,16 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
-from app.infrastructure.database.connection import DatabaseManager
+from app.infrastructure.database.connection import get_db_session
 from app.config import get_settings
 
 
 async def check_tables():
     """Check which tables exist in the database."""
     settings = get_settings()
-    db_manager = DatabaseManager(settings.database)
     
     try:
-        async with db_manager.get_session() as session:
+        async with get_db_session() as session:
             # Check if alembic_version table exists
             result = await session.execute(text("""
                 SELECT EXISTS (
@@ -86,8 +85,6 @@ async def check_tables():
         import traceback
         traceback.print_exc()
         return False
-    finally:
-        await db_manager.close()
 
 
 if __name__ == "__main__":
