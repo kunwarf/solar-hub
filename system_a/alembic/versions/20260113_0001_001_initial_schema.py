@@ -34,24 +34,20 @@ def upgrade() -> None:
     ]
     
     for enum_name, enum_values in enums_to_create:
-        # Use DO block to create enum only if it doesn't exist
-        # This prevents errors if the type was created by the setup script
-        # We use a more explicit approach that works with asyncpg
-        op.execute(f"""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_type 
-                    WHERE typname = '{enum_name}'
-                ) THEN
-                    CREATE TYPE {enum_name} AS ENUM {enum_values};
-                END IF;
-            EXCEPTION
-                WHEN duplicate_object THEN
-                    -- Type already exists, ignore
-                    NULL;
-            END $$;
-        """)
+        # Check if enum type exists, create only if it doesn't
+        # This prevents errors if the type was created by a previous migration attempt
+        connection = op.get_bind()
+        result = connection.execute(sa.text(f"""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_type 
+                WHERE typname = '{enum_name}'
+            )
+        """))
+        exists = result.scalar()
+        
+        if not exists:
+            # Create the enum type
+            op.execute(sa.text(f"CREATE TYPE {enum_name} AS ENUM {enum_values}"))
 
     # Users table
     op.create_table(
