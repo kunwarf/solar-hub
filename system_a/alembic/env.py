@@ -81,48 +81,46 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
-    # Create a custom DDL visitor that checks if enum types exist before creating them
-    from sqlalchemy.dialects.postgresql.base import PGDDLCompiler
-    from sqlalchemy.dialects.postgresql.named_types import ENUM
-    
-    original_visit_enum = PGDDLCompiler.visit_ENUM
-    
-    def visit_ENUM_with_check(self, element, **kw):
-        """Check if enum exists before creating it."""
-        # Check if enum type exists
-        result = connection.execute(
-            sa_text(f"""
-                SELECT EXISTS (
-                    SELECT 1 FROM pg_type 
-                    WHERE typname = '{element.name}'
-                )
-            """)
-        )
-        exists = result.scalar()
-        
-        if exists:
-            # Enum already exists, don't try to create it
-            return ""
-        else:
-            # Enum doesn't exist, create it using the original method
-            return original_visit_enum(self, element, **kw)
-    
-    # Temporarily replace the visit_ENUM method
-    PGDDLCompiler.visit_ENUM = visit_ENUM_with_check
-    
-    try:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            compare_server_default=True,
-        )
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        compare_server_default=True,
+    )
 
-        with context.begin_transaction():
-            context.run_migrations()
-    finally:
-        # Restore the original method
-        PGDDLCompiler.visit_ENUM = original_visit_enum
+    # Run migrations with retry logic for duplicate enum errors
+    # SQLAlchemy tries to create enums even when create_type=False
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with context.begin_transaction():
+                context.run_migrations()
+            break  # Success, exit retry loop
+        except Exception as e:
+            error_str = str(e).lower()
+            # Check if this is a duplicate enum error
+            if ('duplicate' in error_str and 'type' in error_str and 'already exists' in error_str) or \
+               ('duplicateobjecterror' in error_str.replace(' ', '')):
+                if attempt < max_retries - 1:
+                    # Rollback and retry
+                    connection.rollback()
+                    print(f"Warning: Duplicate enum error (attempt {attempt + 1}/{max_retries}), retrying...")
+                    continue
+                else:
+                    # Last attempt failed, but this is expected if enum already exists
+                    # The migration should have created the enum, so we can continue
+                    print(f"Warning: Enum already exists, continuing migration...")
+                    connection.rollback()
+                    # Try one more time without the transaction wrapper
+                    try:
+                        context.run_migrations()
+                        break
+                    except Exception as e2:
+                        # If it still fails, raise the original error
+                        raise e
+            else:
+                # Different error, re-raise
+                raise
 
 
 async def run_async_migrations() -> None:
