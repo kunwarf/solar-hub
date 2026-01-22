@@ -21,10 +21,10 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-from .base import Base, BaseModel
+from .base import BaseModel
 
 
-class ReportModel(Base, BaseModel):
+class ReportModel(BaseModel):
     """
     Generated report instance.
 
@@ -110,7 +110,7 @@ class ReportModel(Base, BaseModel):
     )
 
 
-class ReportScheduleModel(Base, BaseModel):
+class ReportScheduleModel(BaseModel):
     """
     Schedule for automatic report generation.
 
@@ -179,7 +179,7 @@ class ReportScheduleModel(Base, BaseModel):
     )
 
 
-class ReportTemplateModel(Base, BaseModel):
+class ReportTemplateModel(BaseModel):
     """
     Custom report template for organizations.
 
