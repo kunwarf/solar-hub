@@ -86,6 +86,8 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
+        # Don't try to create enum types - we handle that in migrations
+        include_object=lambda obj, name, type_, reflected, compare_to: True,
     )
 
     with context.begin_transaction():
