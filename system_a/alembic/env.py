@@ -81,46 +81,49 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
-    context.configure(
-        connection=connection,
-        target_metadata=target_metadata,
-        compare_type=True,
-        compare_server_default=True,
-    )
+    # Add event listener to catch and ignore duplicate enum creation errors
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+    
+    @event.listens_for(Engine, "before_cursor_execute", retval=True)
+    def receive_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        """Intercept SQL execution to handle duplicate enum errors."""
+        # Check if this is a CREATE TYPE statement for an enum
+        if statement and 'CREATE TYPE' in str(statement).upper() and 'ENUM' in str(statement).upper():
+            # Extract enum name from statement
+            import re
+            match = re.search(r"CREATE TYPE (\w+) AS ENUM", str(statement), re.IGNORECASE)
+            if match:
+                enum_name = match.group(1)
+                # Check if enum already exists
+                check_result = connection.execute(
+                    sa_text(f"""
+                        SELECT EXISTS (
+                            SELECT 1 FROM pg_type 
+                            WHERE typname = '{enum_name}'
+                        )
+                    """)
+                )
+                exists = check_result.scalar()
+                if exists:
+                    # Enum already exists, skip this statement
+                    # Return a no-op statement instead
+                    return (sa_text("SELECT 1"), parameters, context)
+        return statement, parameters, context
+    
+    try:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
+        )
 
-    # Run migrations with retry logic for duplicate enum errors
-    # SQLAlchemy tries to create enums even when create_type=False
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            with context.begin_transaction():
-                context.run_migrations()
-            break  # Success, exit retry loop
-        except Exception as e:
-            error_str = str(e).lower()
-            # Check if this is a duplicate enum error
-            if ('duplicate' in error_str and 'type' in error_str and 'already exists' in error_str) or \
-               ('duplicateobjecterror' in error_str.replace(' ', '')):
-                if attempt < max_retries - 1:
-                    # Rollback and retry
-                    connection.rollback()
-                    print(f"Warning: Duplicate enum error (attempt {attempt + 1}/{max_retries}), retrying...")
-                    continue
-                else:
-                    # Last attempt failed, but this is expected if enum already exists
-                    # The migration should have created the enum, so we can continue
-                    print(f"Warning: Enum already exists, continuing migration...")
-                    connection.rollback()
-                    # Try one more time without the transaction wrapper
-                    try:
-                        context.run_migrations()
-                        break
-                    except Exception as e2:
-                        # If it still fails, raise the original error
-                        raise e
-            else:
-                # Different error, re-raise
-                raise
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        # Remove event listener
+        event.remove(Engine, "before_cursor_execute", receive_before_cursor_execute)
 
 
 async def run_async_migrations() -> None:
