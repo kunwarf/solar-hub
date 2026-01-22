@@ -345,6 +345,108 @@ async def list_devices(
     )
 
 
+@router.patch(
+    "/{device_id}/snapshot",
+    response_model=MessageResponse,
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def update_device_snapshot(
+    device_id: UUID,
+    request: DeviceSnapshotUpdate,
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """
+    Update device telemetry snapshot from System B.
+    
+    This endpoint is called by System B to push latest device telemetry.
+    It does not require authentication as it uses API key authentication
+    via the System A client in System B.
+    """
+    device = await uow.devices.get_by_id(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Parse timestamp if provided
+    recorded_at = datetime.now(timezone.utc)
+    if request.timestamp:
+        try:
+            recorded_at = datetime.fromisoformat(request.timestamp.replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            pass
+
+    snapshot = request.snapshot
+    
+    # Map snapshot data to DeviceMetrics
+    # Handle various metric name formats from System B
+    metrics_data = {}
+    
+    # Power metrics (convert W to kW where needed)
+    if 'power_output_w' in snapshot or 'power_output' in snapshot:
+        metrics_data['power_output_w'] = snapshot.get('power_output_w') or snapshot.get('power_output', 0)
+    if 'pv_power_w' in snapshot or 'pv1_power_w' in snapshot:
+        pv1 = snapshot.get('pv1_power_w', 0) or 0
+        pv2 = snapshot.get('pv2_power_w', 0) or 0
+        metrics_data['pv_power_w'] = pv1 + pv2
+    if 'grid_power_w' in snapshot:
+        metrics_data['grid_power_w'] = snapshot.get('grid_power_w')
+    if 'load_power_w' in snapshot:
+        metrics_data['load_power_w'] = snapshot.get('load_power_w')
+    if 'battery_power_w' in snapshot:
+        metrics_data['battery_power_w'] = snapshot.get('battery_power_w')
+    
+    # Energy metrics
+    if 'energy_today_kwh' in snapshot:
+        metrics_data['energy_today_kwh'] = snapshot.get('energy_today_kwh')
+    if 'energy_total_kwh' in snapshot:
+        metrics_data['energy_total_kwh'] = snapshot.get('energy_total_kwh')
+    
+    # Electrical metrics
+    if 'voltage_v' in snapshot:
+        metrics_data['voltage_v'] = snapshot.get('voltage_v')
+    if 'current_a' in snapshot:
+        metrics_data['current_a'] = snapshot.get('current_a')
+    if 'frequency_hz' in snapshot:
+        metrics_data['frequency_hz'] = snapshot.get('frequency_hz')
+    
+    # Temperature
+    if 'temperature_c' in snapshot or 'inverter_temp_c' in snapshot:
+        metrics_data['temperature_c'] = snapshot.get('temperature_c') or snapshot.get('inverter_temp_c')
+    
+    # Battery metrics
+    if 'battery_soc_percent' in snapshot or 'battery_soc_pct' in snapshot:
+        metrics_data['battery_soc_percent'] = snapshot.get('battery_soc_percent') or snapshot.get('battery_soc_pct')
+    
+    # Create DeviceMetrics object
+    device_metrics = DeviceMetrics(
+        power_output_w=metrics_data.get('power_output_w'),
+        energy_today_kwh=metrics_data.get('energy_today_kwh'),
+        energy_total_kwh=metrics_data.get('energy_total_kwh'),
+        voltage_v=metrics_data.get('voltage_v'),
+        current_a=metrics_data.get('current_a'),
+        frequency_hz=metrics_data.get('frequency_hz'),
+        temperature_c=metrics_data.get('temperature_c'),
+        battery_soc_percent=metrics_data.get('battery_soc_percent'),
+        battery_power_w=metrics_data.get('battery_power_w'),
+        grid_power_w=metrics_data.get('grid_power_w'),
+        load_power_w=metrics_data.get('load_power_w'),
+        recorded_at=recorded_at,
+    )
+
+    # Update device metrics
+    device.update_metrics(device_metrics)
+    await uow.devices.update(device)
+    await uow.commit()
+
+    return MessageResponse(
+        message="Device snapshot updated successfully",
+        success=True,
+    )
+
+
 @router.get(
     "/{device_id}",
     response_model=DeviceDetailResponse,
