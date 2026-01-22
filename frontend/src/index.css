@@ -1,0 +1,325 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mobile Safe Area Support */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Touch Manipulation for Better Mobile Performance */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Solar Monitoring Design System - Industrial Dark Theme */
+
+@layer base {
+  :root {
+    /* Base colors - Dark industrial theme */
+    --background: 220 20% 7%;
+    --foreground: 210 20% 92%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 210 20% 92%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 210 20% 92%;
+
+    /* Primary - Emerald Green for energy/solar */
+    --primary: 160 84% 39%;
+    --primary-foreground: 220 20% 7%;
+    --primary-glow: 160 84% 50%;
+
+    /* Secondary - Slate blue for UI elements */
+    --secondary: 217 19% 18%;
+    --secondary-foreground: 210 20% 85%;
+
+    /* Muted - For subtle backgrounds */
+    --muted: 220 14% 14%;
+    --muted-foreground: 215 14% 55%;
+
+    /* Accent - Cyan for data highlights */
+    --accent: 187 92% 45%;
+    --accent-foreground: 220 20% 7%;
+
+    /* Destructive - Red for alerts */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 20% 98%;
+
+    /* Warning - Amber for warnings */
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 20% 7%;
+
+    /* Success - Green for positive states */
+    --success: 142 71% 45%;
+    --success-foreground: 220 20% 7%;
+
+    /* Info - Blue for informational */
+    --info: 217 91% 60%;
+    --info-foreground: 220 20% 7%;
+
+    /* Energy specific colors */
+    --solar: 45 93% 47%;
+    --battery: 160 84% 39%;
+    --grid: 217 91% 60%;
+    --consumption: 280 65% 60%;
+
+    --border: 220 13% 20%;
+    --input: 220 13% 20%;
+    --ring: 160 84% 39%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 220 18% 8%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 220 20% 7%;
+    --sidebar-accent: 220 14% 14%;
+    --sidebar-accent-foreground: 210 20% 92%;
+    --sidebar-border: 220 13% 16%;
+    --sidebar-ring: 160 84% 39%;
+
+    /* Gradients */
+    --gradient-solar: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(38 92% 50%) 100%);
+    --gradient-battery: linear-gradient(135deg, hsl(160 84% 39%) 0%, hsl(142 71% 45%) 100%);
+    --gradient-consumption: linear-gradient(135deg, hsl(280 65% 60%) 0%, hsl(290 70% 50%) 100%);
+    --gradient-grid: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(200 80% 50%) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(220 18% 12%) 0%, hsl(220 18% 8%) 100%);
+
+    /* Shadows with glow effects */
+    --shadow-glow-primary: 0 0 30px hsl(160 84% 39% / 0.3);
+    --shadow-glow-solar: 0 0 30px hsl(45 93% 47% / 0.3);
+    --shadow-glow-accent: 0 0 30px hsl(187 92% 45% / 0.3);
+    --shadow-card: 0 4px 24px hsl(220 20% 4% / 0.5);
+
+    /* Typography */
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', system-ui, sans-serif;
+  }
+
+  .light {
+    /* Light theme - Clean industrial */
+    --background: 210 20% 98%;
+    --foreground: 220 20% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+
+    --primary: 160 84% 35%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 160 84% 45%;
+
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 220 20% 20%;
+
+    --muted: 220 14% 92%;
+    --muted-foreground: 215 14% 45%;
+
+    --accent: 187 92% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 20% 10%;
+
+    --success: 142 71% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --info: 217 91% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --solar: 45 93% 47%;
+    --battery: 160 84% 35%;
+    --grid: 217 91% 55%;
+    --consumption: 280 65% 55%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 160 84% 35%;
+
+    /* Sidebar - Light */
+    --sidebar-background: 220 14% 96%;
+    --sidebar-foreground: 220 20% 20%;
+    --sidebar-primary: 160 84% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 92%;
+    --sidebar-accent-foreground: 220 20% 10%;
+    --sidebar-border: 220 13% 88%;
+    --sidebar-ring: 160 84% 35%;
+
+    /* Shadows for light mode */
+    --shadow-glow-primary: 0 0 20px hsl(160 84% 39% / 0.2);
+    --shadow-glow-solar: 0 0 20px hsl(45 93% 47% / 0.25);
+    --shadow-glow-accent: 0 0 20px hsl(187 92% 45% / 0.2);
+    --shadow-card: 0 4px 20px hsl(220 20% 10% / 0.08);
+  }
+
+  .dark {
+    /* Same as root - dark is default */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-xl;
+    box-shadow: var(--shadow-card);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:border-primary/30;
+  }
+
+  .glass-card-hover:hover {
+    box-shadow: var(--shadow-glow-primary);
+  }
+
+  .data-value {
+    font-family: var(--font-mono);
+    @apply text-foreground font-medium tracking-tight;
+  }
+
+  .data-label {
+    @apply text-muted-foreground text-sm font-medium uppercase tracking-wider;
+  }
+
+  .energy-glow-solar {
+    box-shadow: var(--shadow-glow-solar);
+  }
+
+  .energy-glow-primary {
+    box-shadow: var(--shadow-glow-primary);
+  }
+
+  .energy-glow-accent {
+    box-shadow: var(--shadow-glow-accent);
+  }
+
+  .stat-card {
+    @apply glass-card p-5 relative overflow-hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    @apply absolute inset-0 opacity-5;
+    background: radial-gradient(ellipse at top right, currentColor, transparent 70%);
+  }
+
+  /* Animated pulse for live data */
+  .pulse-live {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  /* Energy flow animation */
+  .energy-flow {
+    background: linear-gradient(90deg, transparent, currentColor, transparent);
+    background-size: 200% 100%;
+    animation: flow 2s linear infinite;
+  }
+
+  @keyframes flow {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Shimmer effect for skeletons */
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Device status indicators */
+  .status-online {
+    @apply bg-success;
+    box-shadow: 0 0 8px hsl(var(--success) / 0.6);
+  }
+
+  .status-offline {
+    @apply bg-destructive;
+    box-shadow: 0 0 8px hsl(var(--destructive) / 0.6);
+  }
+
+  .status-warning {
+    @apply bg-warning;
+    box-shadow: 0 0 8px hsl(var(--warning) / 0.6);
+  }
+
+  /* Focus indicators for accessibility */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Button press animation */
+  .btn-press {
+    @apply active:scale-[0.97] transition-transform;
+  }
+
+  /* Smooth page transitions */
+  .page-transition {
+    @apply transition-opacity duration-300;
+  }
+
+  /* Skip to main content link for screen readers */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md;
+  }
+}
