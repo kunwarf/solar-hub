@@ -9,7 +9,7 @@ from uuid import UUID
 from .base import DomainEvent
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserCreated(DomainEvent):
     """Event raised when a new user is created."""
     user_id: UUID
@@ -28,7 +28,7 @@ class UserCreated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserEmailVerified(DomainEvent):
     """Event raised when user email is verified."""
     user_id: UUID
@@ -45,7 +45,7 @@ class UserEmailVerified(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserLoggedIn(DomainEvent):
     """Event raised when user logs in successfully."""
     user_id: UUID
@@ -60,7 +60,7 @@ class UserLoggedIn(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserAccountLocked(DomainEvent):
     """Event raised when user account is locked due to failed login attempts."""
     user_id: UUID
@@ -77,7 +77,7 @@ class UserAccountLocked(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserPasswordChanged(DomainEvent):
     """Event raised when user changes their password."""
     user_id: UUID
@@ -92,7 +92,7 @@ class UserPasswordChanged(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserProfileUpdated(DomainEvent):
     """Event raised when user updates their profile."""
     user_id: UUID
@@ -107,7 +107,7 @@ class UserProfileUpdated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserRoleChanged(DomainEvent):
     """Event raised when user role is changed."""
     user_id: UUID
@@ -128,7 +128,7 @@ class UserRoleChanged(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserSuspended(DomainEvent):
     """Event raised when user account is suspended."""
     user_id: UUID
@@ -147,7 +147,7 @@ class UserSuspended(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserReactivated(DomainEvent):
     """Event raised when suspended user is reactivated."""
     user_id: UUID
@@ -164,7 +164,7 @@ class UserReactivated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UserDeactivated(DomainEvent):
     """Event raised when user account is permanently deactivated."""
     user_id: UUID

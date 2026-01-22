@@ -8,7 +8,7 @@ from uuid import UUID
 from .base import DomainEvent
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SiteCreated(DomainEvent):
     """Event raised when a new site is created."""
     site_id: UUID
@@ -29,7 +29,7 @@ class SiteCreated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SiteUpdated(DomainEvent):
     """Event raised when site details are updated."""
     site_id: UUID
@@ -44,7 +44,7 @@ class SiteUpdated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SiteConfigured(DomainEvent):
     """Event raised when site configuration is set or updated."""
     site_id: UUID
@@ -61,7 +61,7 @@ class SiteConfigured(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SiteStatusChanged(DomainEvent):
     """Event raised when site status changes."""
     site_id: UUID
@@ -84,7 +84,7 @@ class SiteStatusChanged(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SiteDecommissioned(DomainEvent):
     """Event raised when site is permanently decommissioned."""
     site_id: UUID

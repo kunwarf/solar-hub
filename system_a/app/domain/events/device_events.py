@@ -8,7 +8,7 @@ from uuid import UUID
 from .base import DomainEvent
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceRegistered(DomainEvent):
     """Event raised when a new device is registered."""
     device_id: UUID
@@ -31,7 +31,7 @@ class DeviceRegistered(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceUpdated(DomainEvent):
     """Event raised when device details are updated."""
     device_id: UUID
@@ -46,7 +46,7 @@ class DeviceUpdated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceConnectionConfigured(DomainEvent):
     """Event raised when device connection is configured."""
     device_id: UUID
@@ -63,7 +63,7 @@ class DeviceConnectionConfigured(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceOnline(DomainEvent):
     """Event raised when device comes online."""
     device_id: UUID
@@ -78,7 +78,7 @@ class DeviceOnline(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceOffline(DomainEvent):
     """Event raised when device goes offline."""
     device_id: UUID
@@ -93,7 +93,7 @@ class DeviceOffline(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceError(DomainEvent):
     """Event raised when device reports an error."""
     device_id: UUID
@@ -112,7 +112,7 @@ class DeviceError(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceErrorCleared(DomainEvent):
     """Event raised when device error is cleared."""
     device_id: UUID
@@ -127,7 +127,7 @@ class DeviceErrorCleared(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceMaintenanceStarted(DomainEvent):
     """Event raised when device enters maintenance mode."""
     device_id: UUID
@@ -146,7 +146,7 @@ class DeviceMaintenanceStarted(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceMaintenanceEnded(DomainEvent):
     """Event raised when device exits maintenance mode."""
     device_id: UUID
@@ -163,7 +163,7 @@ class DeviceMaintenanceEnded(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeviceDecommissioned(DomainEvent):
     """Event raised when device is permanently decommissioned."""
     device_id: UUID

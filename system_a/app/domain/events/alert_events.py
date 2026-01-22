@@ -9,7 +9,7 @@ from uuid import UUID
 from .base import DomainEvent
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertRuleCreated(DomainEvent):
     """Event raised when an alert rule is created."""
     rule_id: UUID
@@ -20,7 +20,7 @@ class AlertRuleCreated(DomainEvent):
     metric: str
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertRuleUpdated(DomainEvent):
     """Event raised when an alert rule is updated."""
     rule_id: UUID
@@ -28,21 +28,21 @@ class AlertRuleUpdated(DomainEvent):
     changes: dict = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertRuleActivated(DomainEvent):
     """Event raised when an alert rule is activated."""
     rule_id: UUID
     organization_id: UUID
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertRuleDeactivated(DomainEvent):
     """Event raised when an alert rule is deactivated."""
     rule_id: UUID
     organization_id: UUID
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertTriggered(DomainEvent):
     """Event raised when an alert is triggered."""
     alert_id: UUID
@@ -58,7 +58,7 @@ class AlertTriggered(DomainEvent):
     threshold_value: Optional[float] = None
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertAcknowledged(DomainEvent):
     """Event raised when an alert is acknowledged."""
     alert_id: UUID
@@ -67,7 +67,7 @@ class AlertAcknowledged(DomainEvent):
     acknowledged_at: datetime
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertResolved(DomainEvent):
     """Event raised when an alert is resolved."""
     alert_id: UUID
@@ -78,7 +78,7 @@ class AlertResolved(DomainEvent):
     duration_seconds: int = 0
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertEscalated(DomainEvent):
     """Event raised when an alert is escalated."""
     alert_id: UUID
@@ -87,7 +87,7 @@ class AlertEscalated(DomainEvent):
     reason: str = "Not acknowledged within escalation window"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AlertNotificationSent(DomainEvent):
     """Event raised when an alert notification is sent."""
     alert_id: UUID

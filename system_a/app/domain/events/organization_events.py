@@ -8,7 +8,7 @@ from uuid import UUID
 from .base import DomainEvent
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OrganizationCreated(DomainEvent):
     """Event raised when a new organization is created."""
     organization_id: UUID
@@ -27,7 +27,7 @@ class OrganizationCreated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OrganizationUpdated(DomainEvent):
     """Event raised when organization details are updated."""
     organization_id: UUID
@@ -42,7 +42,7 @@ class OrganizationUpdated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OrganizationSuspended(DomainEvent):
     """Event raised when organization is suspended."""
     organization_id: UUID
@@ -61,7 +61,7 @@ class OrganizationSuspended(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OrganizationReactivated(DomainEvent):
     """Event raised when organization is reactivated."""
     organization_id: UUID
@@ -78,7 +78,7 @@ class OrganizationReactivated(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OwnershipTransferred(DomainEvent):
     """Event raised when organization ownership is transferred."""
     organization_id: UUID
@@ -99,7 +99,7 @@ class OwnershipTransferred(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MemberInvited(DomainEvent):
     """Event raised when a user is invited to organization."""
     organization_id: UUID
@@ -120,7 +120,7 @@ class MemberInvited(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MemberAccepted(DomainEvent):
     """Event raised when invited member accepts invitation."""
     organization_id: UUID
@@ -137,7 +137,7 @@ class MemberAccepted(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MemberRemoved(DomainEvent):
     """Event raised when member is removed from organization."""
     organization_id: UUID
@@ -156,7 +156,7 @@ class MemberRemoved(DomainEvent):
         }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MemberRoleChanged(DomainEvent):
     """Event raised when member's role is changed."""
     organization_id: UUID
