@@ -61,6 +61,7 @@ class SiteModel(BaseModel):
     # Relationships
     organization = relationship('OrganizationModel', back_populates='sites')
     devices = relationship('DeviceModel', back_populates='site', lazy='dynamic')
+    billing_simulations = relationship('BillingSimulationModel', back_populates='site', lazy='dynamic')
 
     def to_domain(self) -> Site:
         """Convert ORM model to domain entity."""
