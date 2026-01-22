@@ -40,8 +40,12 @@ def upgrade() -> None:
     if 'last_error_at' not in columns:
         op.add_column('devices', sa.Column('last_error_at', sa.DateTime(timezone=True), nullable=True))
     
-    # Add last_error_message if it doesn't exist
-    if 'last_error_message' not in columns:
+    # Handle last_error_message: rename last_error if it exists, otherwise add it
+    if 'last_error' in columns and 'last_error_message' not in columns:
+        # Rename existing last_error column to last_error_message
+        op.alter_column('devices', 'last_error', new_column_name='last_error_message')
+    elif 'last_error_message' not in columns:
+        # Add last_error_message if it doesn't exist and last_error doesn't exist either
         op.add_column('devices', sa.Column('last_error_message', sa.Text(), nullable=True))
     
     # Add latest_metrics if it doesn't exist
@@ -73,10 +77,6 @@ def upgrade() -> None:
     if 'model' in columns:
         op.execute("UPDATE devices SET model = 'Unknown' WHERE model IS NULL")
         op.alter_column('devices', 'model', nullable=False, existing_type=sa.String(100))
-    
-    # Rename last_error to last_error_message if it exists and last_error_message doesn't
-    if 'last_error' in columns and 'last_error_message' not in columns:
-        op.alter_column('devices', 'last_error', new_column_name='last_error_message')
     
     # Add index on last_seen_at if it doesn't exist
     indexes = [idx['name'] for idx in inspector.get_indexes('devices')]
