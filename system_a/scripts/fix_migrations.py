@@ -73,9 +73,13 @@ async def check_tables():
             if not sites_exists and alembic_exists:
                 print("\n⚠️  WARNING: sites table missing but Alembic version exists!")
                 print("   This means migrations are out of sync.")
-                print("\n   To fix this, run:")
-                print("   1. Drop alembic_version table: DROP TABLE alembic_version;")
-                print("   2. Run migrations from start: alembic upgrade head")
+                print("\n   Resetting Alembic version...")
+                
+                # Drop alembic_version table to reset
+                await session.execute(text("DROP TABLE IF EXISTS alembic_version"))
+                await session.commit()
+                print("   ✓ Dropped alembic_version table")
+                print("\n   Now run: alembic upgrade head")
                 return False
             
             return True
