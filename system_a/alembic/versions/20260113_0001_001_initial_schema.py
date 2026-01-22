@@ -23,22 +23,22 @@ def upgrade() -> None:
     # Note: SQLAlchemy will also try to create these when processing table definitions,
     # so we need to ensure they exist first and handle the case where they already exist
     enums_to_create = [
-        ("user_role", "('super_admin', 'owner', 'admin', 'manager', 'viewer', 'installer')"),
-        ("org_member_role", "('owner', 'admin', 'manager', 'viewer', 'installer')"),
-        ("site_status", "('active', 'inactive', 'maintenance', 'decommissioned')"),
-        ("device_type", "('inverter', 'meter', 'battery', 'weather_station', 'sensor', 'gateway')"),
-        ("device_status", "('online', 'offline', 'error', 'maintenance', 'unknown')"),
-        ("protocol_type", "('modbus_tcp', 'modbus_rtu', 'mqtt', 'http', 'custom')"),
-        ("alert_severity", "('info', 'warning', 'critical')"),
-        ("alert_status", "('active', 'acknowledged', 'resolved', 'expired')"),
+        ("user_role", ['super_admin', 'owner', 'admin', 'manager', 'viewer', 'installer']),
+        ("org_member_role", ['owner', 'admin', 'manager', 'viewer', 'installer']),
+        ("site_status", ['active', 'inactive', 'maintenance', 'decommissioned']),
+        ("device_type", ['inverter', 'meter', 'battery', 'weather_station', 'sensor', 'gateway']),
+        ("device_status", ['online', 'offline', 'error', 'maintenance', 'unknown']),
+        ("protocol_type", ['modbus_tcp', 'modbus_rtu', 'mqtt', 'http', 'custom']),
+        ("alert_severity", ['info', 'warning', 'critical']),
+        ("alert_status", ['active', 'acknowledged', 'resolved', 'expired']),
     ]
     
     # Create enum types only if they don't exist
     # SQLAlchemy will try to create them when processing table definitions,
     # so we need to create them first and handle the case where they already exist
+    connection = op.get_bind()
+    
     for enum_name, enum_values in enums_to_create:
-        connection = op.get_bind()
-        
         # Check if enum exists
         check_result = connection.execute(sa.text(f"""
             SELECT EXISTS (
@@ -50,15 +50,13 @@ def upgrade() -> None:
         
         if not exists:
             # Create the enum type directly
-            # Parse enum values from string format like "('val1', 'val2')"
-            values_str = enum_values.strip("()")
-            values_list = [v.strip().strip("'\"") for v in values_str.split(",")]
-            values_sql = "', '".join(values_list)
+            # Format values as SQL enum values
+            values_sql = "', '".join(enum_values)
             
             try:
                 op.execute(sa.text(f"CREATE TYPE {enum_name} AS ENUM ('{values_sql}')"))
             except Exception as e:
-                # If it already exists (race condition), that's fine
+                # If it already exists (race condition or SQLAlchemy created it), that's fine
                 error_str = str(e).lower()
                 if 'already exists' not in error_str and 'duplicate' not in error_str:
                     raise
