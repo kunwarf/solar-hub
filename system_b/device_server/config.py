@@ -71,7 +71,7 @@ class PollingSettings(BaseSettings):
         extra="ignore",
     )
 
-    default_interval: int = Field(default=10, description="Default poll interval (seconds)")
+    default_interval: int = Field(default=10, description="Default poll interval (seconds)")  # 10 seconds
     min_interval: int = Field(default=5, description="Minimum poll interval (seconds)")
     max_interval: int = Field(default=300, description="Maximum poll interval (seconds)")
     poll_timeout: float = Field(default=30.0, description="Timeout for each poll operation (seconds)")

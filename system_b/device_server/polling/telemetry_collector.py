@@ -90,10 +90,7 @@ class TelemetryCollector:
                     duration_ms=duration_ms,
                 )
 
-                logger.debug(
-                    f"Collected telemetry from {device_id}: "
-                    f"{len(telemetry)} values in {duration_ms:.1f}ms"
-                )
+                # Summary already logged by adapter
 
                 return True, telemetry, None
             else:
@@ -258,9 +255,6 @@ class TelemetryProcessor:
 
             # Check for reasonable ranges based on key
             if not self._validate_range(key, value, device_type):
-                logger.debug(
-                    f"Value {value} for {key} out of range for {device_type}"
-                )
                 return None
 
             return value

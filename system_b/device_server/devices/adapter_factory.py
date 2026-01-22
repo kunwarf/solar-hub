@@ -79,7 +79,6 @@ class TCPModbusAdapter:
         """
         import struct
 
-        logger.debug(f"[SERVER->DEVICE] READ HOLDING addr={addr}, count={count}")
         transaction_id = self._next_transaction_id()
 
         # Build Modbus TCP request
@@ -125,7 +124,6 @@ class TCPModbusAdapter:
                 value = struct.unpack(">H", data[i:i + 2])[0]
                 registers.append(value)
 
-        logger.debug(f"[SERVER<-DEVICE] READ HOLDING response: {registers}")
         return registers
 
     async def _write_holding_u16(self, addr: int, value: int) -> None:
@@ -284,9 +282,22 @@ class TCPModbusAdapter:
                 value = self._decode_words(reg, regs)
                 values[reg_id] = value
 
-            except Exception as e:
-                logger.debug(f"Failed to read register {reg_id}: {e}")
+            except Exception:
                 continue
+
+        # Log summary with key metrics
+        key_metrics = []
+        for key in ["pv1_power_w", "pv2_power_w", "battery_power_w", "battery_soc_pct",
+                    "grid_power_w", "load_power_w", "inverter_temp_c"]:
+            if key in values:
+                val = values[key]
+                if isinstance(val, float):
+                    key_metrics.append(f"{key}={val:.1f}")
+                else:
+                    key_metrics.append(f"{key}={val}")
+
+        if key_metrics:
+            logger.info(f"Poll: {len(values)} regs | {' | '.join(key_metrics)}")
 
         return values
 
