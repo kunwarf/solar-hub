@@ -44,7 +44,7 @@ def upgrade() -> None:
         values_sql = "', '".join(enum_values)
         
         # Use DO block to create enum only if it doesn't exist
-        # This is more reliable than try-except for asyncpg
+        # Build the CREATE TYPE statement as a string and execute it
         op.execute(sa.text(f"""
             DO $$ 
             BEGIN
@@ -52,7 +52,7 @@ def upgrade() -> None:
                     SELECT 1 FROM pg_type 
                     WHERE typname = '{enum_name}'
                 ) THEN
-                    EXECUTE format('CREATE TYPE {enum_name} AS ENUM (%L)', '{values_sql}');
+                    EXECUTE 'CREATE TYPE {enum_name} AS ENUM (''' || '{values_sql}' || ''')';
                 END IF;
             EXCEPTION
                 WHEN duplicate_object THEN
