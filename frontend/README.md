@@ -489,6 +489,11 @@ sudo netstat -tlnp | grep nginx
 sudo tail -f /var/log/nginx/error.log
 ```
 
+**✅ Success indicators:**
+- `curl http://localhost:8080` returns HTML content (not 500 error)
+- Browser shows the Solar Hub application when accessing `http://YOUR_SERVER_IP:8080`
+- No errors in `/var/log/nginx/solarhub-frontend-error.log`
+
 **Note about the http2 deprecation warning:**
 
 You may see a warning like:
@@ -549,13 +554,153 @@ sudo chmod +x /opt/solarhub/scripts/deploy-frontend.sh
 
 #### Troubleshooting
 
+**Issue: 500 Internal Server Error**
+
+This is the most common issue. Follow these steps in order:
+
+**Step 1: Check the actual error (CRITICAL)**
+```bash
+# Check the main nginx error log
+sudo tail -30 /var/log/nginx/error.log
+
+# Or check the specific error log for this site
+sudo tail -30 /var/log/nginx/solarhub-frontend-error.log
+```
+
+**Step 2: Verify the dist directory exists**
+```bash
+ls -la /opt/solarhub/app/solar-hub/frontend/dist/
+```
+
+If it doesn't exist or is empty, build the frontend:
+```bash
+cd /opt/solarhub/app/solar-hub/frontend
+npm install
+npm run build
+ls -la dist/  # Verify files were created
+```
+
+**Step 3: Fix file permissions (CRITICAL)**
+
+The error "Permission denied" means nginx can't traverse the directory path. You need execute permission on ALL parent directories:
+
+```bash
+# Find out what user nginx runs as
+ps aux | grep nginx | head -1
+
+# CRITICAL: Set execute permission on ALL parent directories
+# nginx needs to traverse: /opt -> solarhub -> app -> solar-hub -> frontend -> dist
+sudo chmod +x /opt
+sudo chmod +x /opt/solarhub
+sudo chmod +x /opt/solarhub/app
+sudo chmod +x /opt/solarhub/app/solar-hub
+sudo chmod +x /opt/solarhub/app/solar-hub/frontend
+
+# Fix ownership and permissions on the dist directory
+sudo chown -R www-data:www-data /opt/solarhub/app/solar-hub/frontend/dist
+sudo chmod -R 755 /opt/solarhub/app/solar-hub/frontend/dist
+
+# Or if nginx runs as nginx user:
+sudo chown -R nginx:nginx /opt/solarhub/app/solar-hub/frontend/dist
+sudo chmod -R 755 /opt/solarhub/app/solar-hub/frontend/dist
+
+# Verify nginx can access the files
+sudo -u www-data ls -la /opt/solarhub/app/solar-hub/frontend/dist/index.html
+# Should NOT show "Permission denied"
+```
+
+**Step 4: Check for rate limiting zone conflict**
+```bash
+# Check if zone is already defined
+sudo nginx -T 2>&1 | grep "frontend_limit"
+```
+
+If you see "zone frontend_limit already defined" in the error log, use the simplified config:
+```bash
+# Use the simple config without rate limiting
+sudo cp /opt/solarhub/app/solar-hub/frontend/nginx.production.simple.conf /etc/nginx/sites-available/solarhub-frontend-8080
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+**Step 5: Verify nginx can read the files**
+```bash
+# Test as nginx user (replace www-data with your nginx user if different)
+sudo -u www-data ls -la /opt/solarhub/app/solar-hub/frontend/dist/index.html
+```
+
+**Step 6: Verify the config is actually being used**
+```bash
+# Check which config is enabled
+ls -la /etc/nginx/sites-enabled/ | grep 8080
+
+# View the actual config being used
+cat /etc/nginx/sites-available/solarhub-frontend-8080
+
+# Check if nginx is listening on port 8080
+sudo netstat -tlnp | grep 8080
+# or
+sudo ss -tlnp | grep 8080
+```
+
+**Step 7: Test nginx configuration**
+```bash
+# Test all configs
+sudo nginx -t
+
+# If there are errors, fix them before reloading
+```
+
+**Step 8: Try minimal config (if still getting 500 error)**
+```bash
+# Use the minimal config to isolate the issue
+sudo cp /opt/solarhub/app/solar-hub/frontend/nginx.production.minimal.conf /etc/nginx/sites-available/solarhub-frontend-8080
+sudo nginx -t
+sudo systemctl reload nginx
+curl http://localhost:8080
+```
+
+**Step 9: Check for SELinux/AppArmor issues (if on RHEL/CentOS)**
+```bash
+# Check SELinux status
+getenforce
+
+# If Enforcing, check for denials
+sudo ausearch -m avc -ts recent | grep nginx
+
+# Temporarily test with SELinux permissive (for testing only)
+sudo setenforce 0
+curl http://localhost:8080
+# If it works, you need to set proper SELinux context
+```
+
+**Common error messages and fixes:**
+
+- **"No such file or directory"** → Build the frontend: `npm run build`
+- **"Permission denied" (13: Permission denied)** → **MOST COMMON!** nginx needs execute permission on ALL parent directories:
+  ```bash
+  sudo chmod +x /opt /opt/solarhub /opt/solarhub/app /opt/solarhub/app/solar-hub /opt/solarhub/app/solar-hub/frontend
+  sudo chown -R www-data:www-data /opt/solarhub/app/solar-hub/frontend/dist
+  sudo chmod -R 755 /opt/solarhub/app/solar-hub/frontend/dist
+  ```
+- **"zone frontend_limit already defined"** → Use `nginx.production.simple.conf` instead
+- **"open() failed"** → Check the path in nginx config matches actual location
+- **"rewrite or internal redirection cycle"** → Usually caused by permission denied, fix permissions first
+
+**Common causes and fixes:**
+
+1. **dist/ directory doesn't exist** → Build the frontend: `cd /opt/solarhub/app/solar-hub/frontend && npm run build`
+2. **Permission denied** → Fix permissions: `sudo chown -R www-data:www-data /opt/solarhub/app/solar-hub/frontend/dist`
+3. **Rate limiting zone conflict** → Remove `limit_req_zone` line from config if already defined in main nginx.conf
+4. **Wrong path** → Verify the path in nginx config matches where `dist/` actually is
+
 **Issue: Existing application stopped working after adding Solar Hub config**
 - This should NOT happen, but if it does:
   - Check nginx error logs: `sudo tail -f /var/log/nginx/error.log`
   - Verify your existing site config is still enabled: `ls -la /etc/nginx/sites-enabled/`
   - Test all nginx configs: `sudo nginx -T` (look for syntax errors)
   - Check if port 80 is still listening: `sudo netstat -tlnp | grep :80`
-  - If needed, remove Solar Hub config temporarily: `sudo rm /etc/nginx/sites-enabled/solarhub-frontend && sudo systemctl reload nginx`
+  - If needed, remove Solar Hub config temporarily: `sudo rm /etc/nginx/sites-enabled/solarhub-frontend-8080 && sudo systemctl reload nginx`
 
 **Issue: 502 Bad Gateway or Connection Refused**
 - Check if nginx is running: `sudo systemctl status nginx`
