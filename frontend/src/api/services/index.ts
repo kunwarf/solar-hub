@@ -12,6 +12,10 @@ export { billingService } from './billing.service';
 export type { BillingOverview, BillCalculation } from './billing.service';
 export { alertsService } from './alerts.service';
 export type { UIAlert, AlertFilters } from './alerts.service';
+export { usersService } from './users.service';
+export type { UserFilters } from './users.service';
+export { organizationsService } from './organizations.service';
+export type { OrganizationFilters, InviteRequest } from './organizations.service';
 
 // Re-export types
 export * from '../types';
