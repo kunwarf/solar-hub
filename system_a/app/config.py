@@ -261,7 +261,7 @@ class AppSettings(BaseSettings):
 
     # Frontend URL (for email links like verification, password reset)
     frontend_url: str = Field(
-        default='http://localhost:8080',
+        default='http://182.180.150.107:8080',
         description='Frontend application URL for email links'
     )
 
