@@ -53,7 +53,7 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     """Get database URL from settings or environment."""
-    # Try to get from environment first (for CI/CD)
+    # Try full URL first (for CI/CD or explicit config)
     url = os.getenv("SYSTEM_B_DATABASE_URL")
     if url:
         # Convert postgres:// to postgresql+asyncpg://
@@ -61,6 +61,18 @@ def get_url() -> str:
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgresql://") and "+asyncpg" not in url:
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    # Try to construct from individual TIMESCALE_* variables
+    host = os.getenv("TIMESCALE_HOST")
+    port = os.getenv("TIMESCALE_PORT", "5432")
+    name = os.getenv("TIMESCALE_NAME")
+    user = os.getenv("TIMESCALE_USER")
+    password = os.getenv("TIMESCALE_PASSWORD")
+
+    if host and name and user and password:
+        url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+        print(f"Constructed DB URL from TIMESCALE_* variables: {user}@{host}:{port}/{name}")
         return url
 
     # Return a default for development
