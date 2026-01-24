@@ -35,14 +35,38 @@ class WiFiManager:
             print("[WiFi] No SSID configured")
             return False
 
+        # Reset WiFi interface to clean state
+        try:
+            self.sta.disconnect()
+        except:
+            pass
+
+        # Deactivate and reactivate to reset internal state
+        self.sta.active(False)
+        time.sleep(0.5)
         self.sta.active(True)
+        time.sleep(0.5)
 
         if self.sta.isconnected():
             print("[WiFi] Already connected to", self.sta.config("essid"))
             return True
 
         print("[WiFi] Connecting to:", ssid)
-        self.sta.connect(ssid, password)
+
+        try:
+            self.sta.connect(ssid, password)
+        except OSError as e:
+            print("[WiFi] Connection error:", e)
+            # Retry after full reset
+            self.sta.active(False)
+            time.sleep(1)
+            self.sta.active(True)
+            time.sleep(0.5)
+            try:
+                self.sta.connect(ssid, password)
+            except OSError as e2:
+                print("[WiFi] Retry failed:", e2)
+                return False
 
         start = time.time()
         while time.time() - start < timeout_s:
