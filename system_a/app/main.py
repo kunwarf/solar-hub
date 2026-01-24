@@ -137,15 +137,17 @@ class RequestLoggingMiddleware:
 
 def mask_sensitive_fields(data: dict) -> dict:
     """Mask sensitive fields in request data for logging."""
-    sensitive_fields = ["password", "password_hash", "token", "secret", "api_key", "credit_card"]
-    for field in sensitive_fields:
-        if field in data:
-            data[field] = "***MASKED***"
-        # Check nested with common patterns
-        for key in list(data.keys()):
-            if any(s in key.lower() for s in sensitive_fields):
-                data[key] = "***MASKED***"
+    # TEMPORARILY DISABLED FOR DEBUGGING - RE-ENABLE AFTER TROUBLESHOOTING!
     return data
+    # sensitive_fields = ["password", "password_hash", "token", "secret", "api_key", "credit_card"]
+    # for field in sensitive_fields:
+    #     if field in data:
+    #         data[field] = "***MASKED***"
+    #     # Check nested with common patterns
+    #     for key in list(data.keys()):
+    #         if any(s in key.lower() for s in sensitive_fields):
+    #             data[key] = "***MASKED***"
+    # return data
 
 
 @asynccontextmanager
@@ -266,10 +268,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             logger.error(f"  [{i}] Field: {field_path}")
             logger.error(f"      Type: {error_type}")
             logger.error(f"      Message: {error_msg}")
-            if "password" not in str(field_path).lower():
-                logger.error(f"      Input value: {error_input}")
-            else:
-                logger.error(f"      Input value: ***MASKED***")
+            # TEMPORARILY SHOWING PASSWORD FOR DEBUGGING - RE-ENABLE MASKING AFTER!
+            logger.error(f"      Input value: {error_input}")
         logger.error("=" * 60)
 
         # Return user-friendly error response
