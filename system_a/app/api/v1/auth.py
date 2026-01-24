@@ -104,10 +104,10 @@ async def register(
     # Build response
     user_response = UserResponse(
         id=result.user.id,
-        email=result.user.email,
+        email=str(result.user.email),
         first_name=result.user.first_name,
         last_name=result.user.last_name,
-        phone=result.user.phone,
+        phone=str(result.user.phone) if result.user.phone else None,
         role=result.user.role.value,
         status=result.user.status.value,
         is_verified=result.user.is_verified,
