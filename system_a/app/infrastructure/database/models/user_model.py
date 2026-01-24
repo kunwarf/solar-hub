@@ -30,14 +30,15 @@ class UserModel(BaseModel):
     phone = Column(String(20), nullable=True, index=True)
 
     # Status and role
+    # Use values_callable to store enum values (lowercase) instead of names (uppercase)
     status = Column(
-        Enum(UserStatus, name='user_status'),
+        Enum(UserStatus, name='user_status', values_callable=lambda e: [x.value for x in e]),
         default=UserStatus.PENDING,
         nullable=False,
         index=True
     )
     role = Column(
-        Enum(UserRole, name='user_role'),
+        Enum(UserRole, name='user_role', values_callable=lambda e: [x.value for x in e]),
         default=UserRole.VIEWER,
         nullable=False,
         index=True
