@@ -7,6 +7,7 @@ import asyncio
 import os
 import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import pool
@@ -15,6 +16,24 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load .env file
+try:
+    from dotenv import load_dotenv
+
+    # Look for .env in system_b directory or parent directory
+    env_paths = [
+        Path(__file__).parent.parent / ".env",  # system_b/.env
+        Path(__file__).parent.parent.parent / ".env",  # solar-hub/.env
+    ]
+
+    for env_path in env_paths:
+        if env_path.exists():
+            load_dotenv(env_path)
+            print(f"Loaded environment from: {env_path}")
+            break
+except ImportError:
+    print("python-dotenv not installed, using environment variables only")
 
 from app.infrastructure.database.models import Base
 
