@@ -23,7 +23,7 @@ from ..dependencies import get_current_user, get_unit_of_work
 from ...application.interfaces.unit_of_work import UnitOfWork
 from ...domain.entities.user import User, UserRole
 from ...infrastructure.cache.telemetry_cache import telemetry_cache
-from ...infrastructure.cache.site_cache import site_info_cache, CachedSiteInfo
+from ...infrastructure.cache.site_cache import site_cache as site_info_cache, CachedSiteInfo
 
 logger = logging.getLogger(__name__)
 
