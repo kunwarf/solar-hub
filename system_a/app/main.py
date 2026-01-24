@@ -8,6 +8,9 @@ This is the main backend for:
 - Billing simulation
 - AI-powered analytics
 """
+import logging
+import sys
+import traceback
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -21,6 +24,15 @@ from .infrastructure.cache.redis_cache import RedisManager
 
 settings = get_settings()
 
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format='%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    stream=sys.stdout,
+)
+logger = logging.getLogger("system_a")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
@@ -30,35 +42,37 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     Manages startup and shutdown tasks.
     """
     # Startup
-    print(f"Starting {settings.app_name} v{settings.app_version}")
-    print(f"Environment: {settings.environment}")
-    print(f"CORS allowed origins: {settings.cors.allowed_origins}")
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    logger.info(f"Environment: {settings.environment}")
+    logger.info(f"Debug mode: {settings.debug}")
+    logger.info(f"CORS allowed origins: {settings.cors.allowed_origins}")
 
     # Initialize database
     try:
         await init_db()
-        print("Database initialized successfully")
+        logger.info("Database initialized successfully")
     except Exception as e:
-        print(f"Database initialization failed: {e}")
+        logger.error(f"Database initialization failed: {e}")
+        logger.error(traceback.format_exc())
         raise
 
     # Test Redis connection
     try:
         client = await RedisManager.get_client()
         await client.ping()
-        print("Redis connection established")
+        logger.info("Redis connection established")
     except Exception as e:
-        print(f"Redis connection failed: {e}")
+        logger.warning(f"Redis connection failed: {e}")
         # Redis failure is not fatal for now
         pass
 
     yield
 
     # Shutdown
-    print("Shutting down application...")
+    logger.info("Shutting down application...")
     await DatabaseManager.close()
     await RedisManager.close()
-    print("Shutdown complete")
+    logger.info("Shutdown complete")
 
 
 def create_app() -> FastAPI:
@@ -107,6 +121,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(DomainException)
     async def domain_exception_handler(request: Request, exc: DomainException):
+        logger.warning(f"Domain exception on {request.method} {request.url.path}: {exc}")
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content=exc.to_dict(),
@@ -114,6 +129,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(EntityNotFoundException)
     async def not_found_handler(request: Request, exc: EntityNotFoundException):
+        logger.info(f"Not found on {request.method} {request.url.path}: {exc}")
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content=exc.to_dict(),
@@ -121,6 +137,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ValidationException)
     async def validation_handler(request: Request, exc: ValidationException):
+        logger.warning(f"Validation error on {request.method} {request.url.path}: {exc}")
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=exc.to_dict(),
@@ -128,6 +145,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AuthorizationException)
     async def authorization_handler(request: Request, exc: AuthorizationException):
+        logger.warning(f"Authorization denied on {request.method} {request.url.path}: {exc}")
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
             content=exc.to_dict(),
@@ -135,8 +153,18 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
-        # Log the exception
-        print(f"Unhandled exception: {exc}")
+        # Log detailed exception info
+        error_id = id(exc)  # Simple error tracking ID
+        logger.error("=" * 60)
+        logger.error(f"UNHANDLED EXCEPTION [ID: {error_id}]")
+        logger.error(f"Request: {request.method} {request.url.path}")
+        logger.error(f"Query params: {dict(request.query_params)}")
+        logger.error(f"Client: {request.client.host if request.client else 'unknown'}")
+        logger.error(f"Exception type: {type(exc).__name__}")
+        logger.error(f"Exception message: {exc}")
+        logger.error("Stack trace:")
+        logger.error(traceback.format_exc())
+        logger.error("=" * 60)
 
         if settings.debug:
             return JSONResponse(
@@ -145,6 +173,9 @@ def register_exception_handlers(app: FastAPI) -> None:
                     'error': 'INTERNAL_ERROR',
                     'message': str(exc),
                     'type': type(exc).__name__,
+                    'error_id': error_id,
+                    'path': request.url.path,
+                    'traceback': traceback.format_exc().split('\n'),
                 },
             )
 
@@ -153,6 +184,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 'error': 'INTERNAL_ERROR',
                 'message': 'An internal error occurred',
+                'error_id': error_id,
             },
         )
 
