@@ -95,8 +95,12 @@ class DeviceRegistryModel(Base):
     model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     firmware_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
-    # Ownership status
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="orphan")
+    # Ownership status (using PostgreSQL enum type 'device_status')
+    status: Mapped[str] = mapped_column(
+        SAEnum("orphan", "claimed", name="device_status", create_type=False),
+        nullable=False,
+        default="orphan"
+    )
     owner_id: Mapped[Optional[UUID]] = mapped_column(PGUUID(as_uuid=True), nullable=True)
 
     # Device capabilities
