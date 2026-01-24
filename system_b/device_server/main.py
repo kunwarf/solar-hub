@@ -265,10 +265,11 @@ class DeviceServer:
         new_status: DeviceStatus,
     ) -> None:
         """Handle device status change."""
-        if self.system_a_client:
-            await self.system_a_client.update_device_status(
-                device_id, new_status
-            )
+        # Update Redis cache with new status
+        device_state = self.device_manager.get_device(device_id)
+        if self.redis_cache and device_state and device_state.serial_number:
+            status_str = "online" if new_status == DeviceStatus.ONLINE else "offline"
+            await self.redis_cache.write_status(device_state.serial_number, status_str)
 
     async def _on_telemetry(
         self,
@@ -286,12 +287,6 @@ class DeviceServer:
         if self.redis_cache and serial_number:
             await self.redis_cache.write_telemetry(serial_number, telemetry.copy())
 
-        # Update System A snapshot (legacy - will be removed after full migration)
-        if self.system_a_client:
-            await self.system_a_client.update_device_snapshot(
-                device_id, telemetry.copy()
-            )
-
     async def _on_poll_device_offline(
         self,
         device_id: UUID,
@@ -301,14 +296,6 @@ class DeviceServer:
         # Update Redis cache with offline status
         if self.redis_cache and device_state and device_state.serial_number:
             await self.redis_cache.write_status(device_state.serial_number, "offline")
-
-        # Update System A (legacy)
-        if self.system_a_client:
-            await self.system_a_client.update_device_status(
-                device_id,
-                DeviceStatus.OFFLINE,
-                "Too many poll failures",
-            )
 
     def get_stats(self) -> dict:
         """Get server statistics."""
