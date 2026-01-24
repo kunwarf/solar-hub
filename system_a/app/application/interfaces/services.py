@@ -27,7 +27,12 @@ class TokenService(ABC):
     """Interface for JWT token service."""
 
     @abstractmethod
-    def create_access_token(self, user_id: UUID, extra_claims: Optional[Dict[str, Any]] = None) -> str:
+    def create_access_token(
+        self,
+        user_id: UUID,
+        role: Optional[str] = None,
+        organization_id: Optional[UUID] = None,
+    ) -> str:
         """Create a new access token."""
         pass
 
@@ -44,6 +49,11 @@ class TokenService(ABC):
     @abstractmethod
     def revoke_token(self, token: str) -> None:
         """Revoke a token."""
+        pass
+
+    @abstractmethod
+    def verify_token(self, token: str) -> Optional[Any]:
+        """Verify and decode a token, returning a TokenPayload or None."""
         pass
 
 

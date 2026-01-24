@@ -210,6 +210,40 @@ class JWTHandler(TokenService):
             return datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         return None
 
+    def decode_token(self, token: str) -> dict:
+        """
+        Decode and validate a token.
+
+        Required by TokenService interface.
+        Returns the payload as a dictionary.
+        Raises jwt.InvalidTokenError if token is invalid.
+        """
+        options = {}
+        if self._audience:
+            options["audience"] = self._audience
+        if self._issuer:
+            options["issuer"] = self._issuer
+
+        payload = jwt.decode(
+            token,
+            self._secret_key,
+            algorithms=[self._algorithm],
+            **options
+        )
+        return payload
+
+    def revoke_token(self, token: str) -> None:
+        """
+        Revoke a token.
+
+        Required by TokenService interface.
+        Note: Full implementation would store revoked JTIs in Redis.
+        For now, this is a no-op as we rely on short token expiry.
+        """
+        # TODO: Implement token revocation with Redis blacklist
+        # For now, we rely on short access token expiry times
+        pass
+
     def _generate_jti(self) -> str:
         """Generate unique JWT ID."""
         import uuid
