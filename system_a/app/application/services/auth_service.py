@@ -105,14 +105,15 @@ class AuthService:
         # Hash password
         password_hash = self._password_hasher.hash(request.password)
 
-        # Create user entity
+        # TODO: Make email verification configurable via settings
+        # For now, users are registered as ACTIVE (no email verification required)
         user = User(
             email=request.email.lower().strip(),
             phone=request.phone,
             password_hash=password_hash,
             first_name=request.first_name.strip(),
             last_name=request.last_name.strip(),
-            status=UserStatus.PENDING,
+            status=UserStatus.ACTIVE,  # No email verification required
             role=UserRole.VIEWER,  # Default role
             preferences=UserPreferences(),
         )
