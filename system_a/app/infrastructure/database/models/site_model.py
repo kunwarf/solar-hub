@@ -31,13 +31,13 @@ class SiteModel(BaseModel):
     name = Column(String(200), nullable=False)
     timezone = Column(String(50), default='Asia/Karachi', nullable=False)
     site_type = Column(
-        Enum(SiteType, name='site_type'),
+        Enum(SiteType, name='site_type', values_callable=lambda e: [x.value for x in e]),
         default=SiteType.RESIDENTIAL,
         nullable=False,
         index=True
     )
     status = Column(
-        Enum(SiteStatus, name='site_status'),
+        Enum(SiteStatus, name='site_status', values_callable=lambda e: [x.value for x in e]),
         default=SiteStatus.PENDING_SETUP,
         nullable=False,
         index=True

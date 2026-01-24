@@ -35,11 +35,11 @@ class OrganizationMemberModel(Base, UUIDMixin, TimestampMixin):
         index=True
     )
     role = Column(
-        Enum(UserRole, name='user_role'),
+        Enum(UserRole, name='user_role', values_callable=lambda e: [x.value for x in e]),
         nullable=False
     )
     status = Column(
-        Enum(MembershipStatus, name='membership_status'),
+        Enum(MembershipStatus, name='membership_status', values_callable=lambda e: [x.value for x in e]),
         default=MembershipStatus.PENDING,
         nullable=False
     )
@@ -98,7 +98,7 @@ class OrganizationModel(BaseModel):
         index=True
     )
     status = Column(
-        Enum(OrganizationStatus, name='organization_status'),
+        Enum(OrganizationStatus, name='organization_status', values_callable=lambda e: [x.value for x in e]),
         default=OrganizationStatus.ACTIVE,
         nullable=False,
         index=True
