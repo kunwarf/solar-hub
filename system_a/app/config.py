@@ -259,6 +259,12 @@ class AppSettings(BaseSettings):
     default_timezone: str = Field(default='Asia/Karachi')
     default_currency: str = Field(default='PKR')
 
+    # Frontend URL (for email links like verification, password reset)
+    frontend_url: str = Field(
+        default='http://localhost:8080',
+        description='Frontend application URL for email links'
+    )
+
     # Sub-settings
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

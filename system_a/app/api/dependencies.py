@@ -112,7 +112,7 @@ def get_auth_service(
         password_hasher=password_hasher,
         token_service=jwt_handler,
         email_service=email_service,
-        base_url="http://localhost:3000",
+        base_url=settings.frontend_url,
     )
 
 
