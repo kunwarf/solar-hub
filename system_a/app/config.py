@@ -154,6 +154,29 @@ class AISettings(BaseSettings):
     forecasting_enabled: bool = Field(default=True)
 
 
+class SystemBSettings(BaseSettings):
+    """System B (Telemetry Service) connection settings."""
+
+    model_config = SettingsConfigDict(
+        env_prefix='SYSTEM_B_',
+        env_file='.env',
+        extra='ignore'
+    )
+
+    url: str = Field(
+        default='http://localhost:8001',
+        description='System B API base URL'
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description='API key for System B authentication'
+    )
+    timeout: float = Field(
+        default=30.0,
+        description='Request timeout in seconds'
+    )
+
+
 class AppSettings(BaseSettings):
     """Main application settings."""
 
@@ -204,6 +227,7 @@ class AppSettings(BaseSettings):
     cors: CORSSettings = Field(default_factory=CORSSettings)
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
     ai: AISettings = Field(default_factory=AISettings)
+    system_b: SystemBSettings = Field(default_factory=SystemBSettings)
 
     @property
     def is_production(self) -> bool:

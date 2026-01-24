@@ -21,7 +21,7 @@ DEFAULT_CONFIG = {
     "rtu": {
         "uart_id": 1,
         "tx_pin": 17,
-        "rx_pin": 16,
+        "rx_pin": 18,
         "de_pin": 4,        # RS485 direction pin (optional, 0 to disable)
         "unit_id": 1,
         "baudrate": 9600,
@@ -54,10 +54,21 @@ DEFAULT_CONFIG = {
         "poll_s": 10,
     },
 
+    # System B API configuration
+    "api": {
+        "base_url": "http://182.180.150.107:8001",
+        "register_endpoint": "/api/v1/devices/self-register",
+    },
+
     # Device info
     "device": {
-        "name": "",
-        "serial": "",
+        "serial": "",           # Serial number (16-char format: SH01INXXXXXXXX)
+        "name": "",             # Optional friendly name
+        "type": "inverter",     # inverter, battery, meter, gateway
+        "manufacturer": "SolarHub",
+        "firmware_version": "1.0.0",
+        "protocol": "modbus_tcp",
+        "model": "",
     }
 }
 

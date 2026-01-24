@@ -17,5 +17,17 @@
     "server_port": 8502,
     "reconnect_delay": 5,
     "keepalive_interval": 30
+  },
+  "api": {
+    "base_url": "http://182.180.150.107:8001",
+    "register_endpoint": "/api/v1/devices/self-register"
+  },
+  "device": {
+    "serial": "SH01IN9A423V4CU0",
+    "name": "SolarLogger-ESP32",
+    "type": "inverter",
+    "manufacturer": "SolarHub",
+    "firmware_version": "1.0.0",
+    "protocol": "modbus_tcp"
   }
 }

@@ -56,6 +56,12 @@ class ConnectionStatusEnum:
     TIMEOUT = "timeout"
 
 
+class DeviceStatusEnum:
+    """Device ownership status."""
+    ORPHAN = "orphan"
+    CLAIMED = "claimed"
+
+
 class CommandStatusEnum:
     PENDING = "pending"
     SENT = "sent"
@@ -71,16 +77,30 @@ class DeviceRegistryModel(Base):
     Device registry for System B.
 
     Lightweight device information for telemetry collection.
+    Supports orphan devices (not yet claimed by a user).
     """
     __tablename__ = "device_registry"
 
     device_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
-    site_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
-    organization_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    # Nullable for orphan devices (not yet claimed)
+    site_id: Mapped[Optional[UUID]] = mapped_column(PGUUID(as_uuid=True), nullable=True, index=True)
+    organization_id: Mapped[Optional[UUID]] = mapped_column(PGUUID(as_uuid=True), nullable=True, index=True)
 
     # Device info
     device_type: Mapped[str] = mapped_column(String(50), nullable=False)
     serial_number: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+
+    # Device details (from self-registration)
+    manufacturer: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    firmware_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # Ownership status
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="orphan")
+    owner_id: Mapped[Optional[UUID]] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+
+    # Device capabilities
+    capabilities: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
     # Authentication
     auth_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -100,6 +120,7 @@ class DeviceRegistryModel(Base):
     polling_interval_seconds: Mapped[int] = mapped_column(Integer, default=60)
     last_polled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     next_poll_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_telemetry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Metadata
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column("metadata", JSONB, nullable=True)
@@ -113,6 +134,7 @@ class DeviceRegistryModel(Base):
     __table_args__ = (
         Index("idx_device_registry_status", "connection_status"),
         Index("idx_device_registry_next_poll", "next_poll_at"),
+        Index("idx_device_registry_device_status", "status"),
     )
 
 

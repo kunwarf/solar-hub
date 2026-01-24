@@ -13,19 +13,38 @@ from .base import Entity
 from .telemetry import DeviceType, ConnectionStatus
 
 
+class DeviceStatus:
+    """Device ownership status."""
+    ORPHAN = "orphan"
+    CLAIMED = "claimed"
+
+
 @dataclass(kw_only=True)
 class DeviceRegistry(Entity):
     """
     Lightweight device registry for System B.
 
     Contains only the information needed for telemetry collection.
-    Full device details are stored in System A.
+    Supports orphan devices (not yet claimed by a user).
     """
     device_id: UUID  # Same as Entity.id but explicit
-    site_id: UUID
-    organization_id: UUID
+    # Nullable for orphan devices
+    site_id: Optional[UUID] = None
+    organization_id: Optional[UUID] = None
     device_type: DeviceType
     serial_number: str
+
+    # Device details (from self-registration)
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    firmware_version: Optional[str] = None
+
+    # Ownership status
+    status: str = DeviceStatus.ORPHAN
+    owner_id: Optional[UUID] = None
+
+    # Device capabilities
+    capabilities: Optional[Dict[str, Any]] = None
 
     # Authentication
     auth_token_hash: Optional[str] = None
@@ -37,7 +56,7 @@ class DeviceRegistry(Entity):
     last_disconnected_at: Optional[datetime] = None
     reconnect_count: int = 0
 
-    # Protocol configuration (cached from System A)
+    # Protocol configuration
     protocol: Optional[str] = None
     connection_config: Optional[Dict[str, Any]] = None
 
@@ -45,6 +64,7 @@ class DeviceRegistry(Entity):
     polling_interval_seconds: int = 60
     last_polled_at: Optional[datetime] = None
     next_poll_at: Optional[datetime] = None
+    last_telemetry_at: Optional[datetime] = None
 
     # Metadata
     metadata: Optional[Dict[str, Any]] = None
@@ -75,6 +95,28 @@ class DeviceRegistry(Entity):
     def is_connected(self) -> bool:
         """Check if device is currently connected."""
         return self.connection_status == ConnectionStatus.CONNECTED
+
+    def is_orphan(self) -> bool:
+        """Check if device is orphan (not claimed by any user)."""
+        return self.status == DeviceStatus.ORPHAN
+
+    def is_claimed(self) -> bool:
+        """Check if device is claimed by a user."""
+        return self.status == DeviceStatus.CLAIMED
+
+    def claim(self, owner_id: UUID, site_id: UUID, organization_id: UUID) -> None:
+        """Claim device for a user."""
+        self.owner_id = owner_id
+        self.site_id = site_id
+        self.organization_id = organization_id
+        self.status = DeviceStatus.CLAIMED
+
+    def release(self) -> None:
+        """Release device (make orphan again)."""
+        self.owner_id = None
+        self.site_id = None
+        self.organization_id = None
+        self.status = DeviceStatus.ORPHAN
 
     def needs_polling(self) -> bool:
         """Check if device needs to be polled."""

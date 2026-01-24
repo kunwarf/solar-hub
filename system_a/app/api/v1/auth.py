@@ -1,31 +1,41 @@
 """
 Authentication API endpoints.
 """
+from typing import List
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..dependencies import (
     get_auth_service,
     get_current_user,
     get_jwt_handler,
+    get_registration_service,
     get_unit_of_work,
 )
 from ..schemas.auth_schemas import (
     AuthResponse,
     ChangePasswordRequest,
+    DeviceClaimResponse,
     ErrorResponse,
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
     RefreshTokenRequest,
     RegisterRequest,
+    RegisterResponse,
     ResetPasswordRequest,
+    SiteResponse,
     TokenResponse,
     UserResponse,
 )
 from ...application.services.auth_service import (
     AuthService,
     LoginRequest as ServiceLoginRequest,
-    RegisterRequest as ServiceRegisterRequest,
+)
+from ...application.services.registration_service import (
+    RegistrationService,
+    RegistrationRequest as ServiceRegistrationRequest,
 )
 from ...application.interfaces.unit_of_work import UnitOfWork
 from ...domain.entities.user import User
@@ -36,7 +46,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post(
     "/register",
-    response_model=UserResponse,
+    response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
         400: {"model": ErrorResponse, "description": "Validation error"},
@@ -45,24 +55,32 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 )
 async def register(
     request: RegisterRequest,
+    registration_service: RegistrationService = Depends(get_registration_service),
     auth_service: AuthService = Depends(get_auth_service),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
     """
-    Register a new user account.
+    Register a new user account with organization and site setup.
 
-    Returns the created user profile. Email verification will be required
-    before full access is granted.
+    Creates:
+    - User account
+    - Default organization
+    - Default site ("My Home")
+    - Claims device if device_serial is provided
+
+    Returns the created user profile, site info, and optional device claim info.
+    Email verification will be required before full access is granted.
     """
-    service_request = ServiceRegisterRequest(
+    service_request = ServiceRegistrationRequest(
         email=request.email,
         password=request.password,
         first_name=request.first_name,
         last_name=request.last_name,
         phone=request.phone,
+        device_serial=request.device_serial,
     )
 
-    result = await auth_service.register(service_request, uow)
+    result = await registration_service.register(service_request, uow)
 
     if not result.success:
         if "already registered" in result.error:
@@ -78,7 +96,8 @@ async def register(
     # Send verification email (non-blocking, don't fail registration if email fails)
     await auth_service.send_verification_email(result.user)
 
-    return UserResponse(
+    # Build response
+    user_response = UserResponse(
         id=result.user.id,
         email=result.user.email,
         first_name=result.user.first_name,
@@ -89,6 +108,37 @@ async def register(
         is_verified=result.user.is_verified,
         created_at=result.user.created_at,
         updated_at=result.user.updated_at,
+    )
+
+    site_response = None
+    if result.site:
+        site_response = SiteResponse(
+            id=result.site.id,
+            name=result.site.name,
+            is_default=result.site.is_default,
+        )
+
+    device_response = None
+    if result.device:
+        device_response = DeviceClaimResponse(
+            id=result.device.id,
+            serial_number=result.device.serial_number,
+            device_type=result.device.device_type,
+            manufacturer=result.device.manufacturer,
+            status=result.device.status,
+        )
+
+    # Build message
+    message = "Registration successful"
+    if result.device_error:
+        message = f"Registration successful. Note: {result.device_error}"
+
+    return RegisterResponse(
+        success=True,
+        message=message,
+        user=user_response,
+        site=site_response,
+        device=device_response,
     )
 
 
@@ -393,3 +443,100 @@ async def resend_verification_email(
         message="Verification email sent",
         success=True,
     )
+
+
+# ============================================================================
+# Device Claim Endpoints
+# ============================================================================
+
+
+@router.post(
+    "/devices/claim/{serial_number}",
+    response_model=DeviceClaimResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Device not found or already claimed"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+    },
+)
+async def claim_device(
+    serial_number: str,
+    site_id: UUID,
+    current_user: User = Depends(get_current_user),
+    registration_service: RegistrationService = Depends(get_registration_service),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """
+    Claim an orphan device by serial number.
+
+    The device must be in 'orphan' state (not already claimed).
+    Device will be attached to the specified site.
+    """
+    # Get user's organizations
+    orgs = await uow.organizations.get_by_owner_id(current_user.id)
+    if not orgs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no organization. Please contact support.",
+        )
+
+    organization = orgs[0]
+
+    # Verify site belongs to user's organization
+    site = await uow.sites.get_by_id(site_id)
+    if not site or site.organization_id != organization.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Site not found or does not belong to your organization.",
+        )
+
+    # Claim the device
+    device, error = await registration_service.claim_device_for_user(
+        user_id=current_user.id,
+        site_id=site_id,
+        organization_id=organization.id,
+        device_serial=serial_number,
+    )
+
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error,
+        )
+
+    return DeviceClaimResponse(
+        id=device.id,
+        serial_number=device.serial_number,
+        device_type=device.device_type,
+        manufacturer=device.manufacturer,
+        status=device.status,
+    )
+
+
+@router.get(
+    "/devices/available",
+    response_model=List[DeviceClaimResponse],
+    responses={
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+    },
+)
+async def get_available_devices(
+    current_user: User = Depends(get_current_user),
+    registration_service: RegistrationService = Depends(get_registration_service),
+):
+    """
+    Get list of orphan devices available for claiming.
+
+    Returns all devices that are in 'orphan' state and can be claimed.
+    """
+    devices = await registration_service.get_orphan_devices()
+
+    return [
+        DeviceClaimResponse(
+            id=device.id,
+            serial_number=device.serial_number,
+            device_type=device.device_type,
+            manufacturer=device.manufacturer,
+            status=device.status,
+        )
+        for device in devices
+    ]

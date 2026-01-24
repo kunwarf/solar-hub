@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Zap, Eye, EyeOff, Loader2, Cpu } from 'lucide-react';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -27,6 +27,7 @@ const Auth = () => {
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [deviceSerial, setDeviceSerial] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +62,7 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!signupEmail || !signupPassword || !firstName || !lastName) {
       toast({
         title: 'Error',
@@ -70,7 +71,7 @@ const Auth = () => {
       });
       return;
     }
-    
+
     if (signupPassword !== signupConfirmPassword) {
       toast({
         title: 'Error',
@@ -79,7 +80,7 @@ const Auth = () => {
       });
       return;
     }
-    
+
     if (signupPassword.length < 8) {
       toast({
         title: 'Error',
@@ -88,15 +89,29 @@ const Auth = () => {
       });
       return;
     }
-    
+
     setIsLoading(true);
-    const result = await signup(signupEmail, signupPassword, firstName, lastName);
+    const result = await signup(
+      signupEmail,
+      signupPassword,
+      firstName,
+      lastName,
+      undefined, // phone
+      deviceSerial || undefined // device serial
+    );
     setIsLoading(false);
-    
+
     if (result.success) {
+      let description = 'Welcome to SolarSync.';
+      if (result.site) {
+        description += ` Your default site "${result.site.name}" has been created.`;
+      }
+      if (result.device) {
+        description += ` Device "${result.device.serial_number}" has been claimed.`;
+      }
       toast({
         title: 'Account created!',
-        description: 'Welcome to SolarSync.',
+        description,
       });
       navigate('/');
     } else {
@@ -277,7 +292,25 @@ const Auth = () => {
                         disabled={isLoading}
                       />
                     </div>
-                    
+
+                    <div className="space-y-2">
+                      <Label htmlFor="device-serial" className="flex items-center gap-2">
+                        <Cpu className="h-4 w-4 text-muted-foreground" />
+                        Device Serial Number (Optional)
+                      </Label>
+                      <Input
+                        id="device-serial"
+                        type="text"
+                        placeholder="e.g., ESP-INV-001"
+                        value={deviceSerial}
+                        onChange={(e) => setDeviceSerial(e.target.value)}
+                        disabled={isLoading}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        If you have a device logger, enter its serial number to claim it during registration.
+                      </p>
+                    </div>
+
                     <Button type="submit" className="w-full" disabled={isLoading}>
                       {isLoading ? (
                         <>

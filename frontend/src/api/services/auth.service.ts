@@ -14,6 +14,8 @@ import type {
   RegisterRequest,
   RegisterResponse,
   UserPreferences,
+  SiteInfo,
+  DeviceClaimInfo,
 } from '../types';
 
 // Mock data for development/offline mode
@@ -165,7 +167,14 @@ class AuthService {
    */
   async register(
     data: RegisterRequest
-  ): Promise<{ success: boolean; message?: string; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    user?: User;
+    site?: SiteInfo;
+    device?: DeviceClaimInfo;
+    error?: string;
+  }> {
     const apiAvailable = await this.isApiAvailable();
 
     if (apiAvailable) {
@@ -174,7 +183,13 @@ class AuthService {
           API_ENDPOINTS.auth.register,
           data
         );
-        return { success: true, message: response.data.message };
+        return {
+          success: response.data.success,
+          message: response.data.message,
+          user: response.data.user,
+          site: response.data.site,
+          device: response.data.device,
+        };
       } catch (error: unknown) {
         const apiError = error as { message?: string };
         return { success: false, error: apiError.message || 'Registration failed' };
@@ -194,7 +209,14 @@ class AuthService {
    */
   private async mockRegister(
     data: RegisterRequest
-  ): Promise<{ success: boolean; message?: string; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    user?: User;
+    site?: SiteInfo;
+    device?: DeviceClaimInfo;
+    error?: string;
+  }> {
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     if (mockUsers.has(data.email.toLowerCase())) {
@@ -226,9 +248,31 @@ class AuthService {
 
     mockUsers.set(data.email.toLowerCase(), { password: data.password, user: newUser });
 
+    // Create mock site
+    const mockSite: SiteInfo = {
+      id: `mock-site-${Date.now()}`,
+      name: 'My Home',
+      is_default: true,
+    };
+
+    // Create mock device if serial was provided
+    let mockDevice: DeviceClaimInfo | undefined;
+    if (data.device_serial) {
+      mockDevice = {
+        id: `mock-device-${Date.now()}`,
+        serial_number: data.device_serial,
+        device_type: 'inverter',
+        manufacturer: 'Mock Manufacturer',
+        status: 'claimed',
+      };
+    }
+
     return {
       success: true,
       message: 'Account created successfully. Please check your email to verify your account.',
+      user: newUser,
+      site: mockSite,
+      device: mockDevice,
     };
   }
 

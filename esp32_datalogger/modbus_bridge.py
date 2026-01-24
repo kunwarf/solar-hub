@@ -4,12 +4,113 @@ Modbus TCP Bridge for ESP32 Data Logger.
 Connects TO the server and forwards Modbus TCP requests to RTU devices.
 The server sends READ/WRITE requests, this bridge forwards them to the
 inverter via Modbus RTU and returns the responses.
+
+On startup, the device self-registers with System B using its serial number.
 """
 import socket
 import struct
 import time
+import json
 
 from config import get_config
+
+
+def http_post_json(url, data, timeout=10):
+    """
+    Simple HTTP POST with JSON body (MicroPython compatible).
+
+    Args:
+        url: Full URL (e.g., http://host:port/path)
+        data: Dict to send as JSON body
+        timeout: Request timeout in seconds
+
+    Returns:
+        Tuple of (status_code, response_dict or None)
+    """
+    try:
+        # Parse URL
+        if url.startswith("http://"):
+            url = url[7:]
+        elif url.startswith("https://"):
+            raise ValueError("HTTPS not supported in simple client")
+
+        # Split host:port and path
+        if "/" in url:
+            host_port, path = url.split("/", 1)
+            path = "/" + path
+        else:
+            host_port = url
+            path = "/"
+
+        if ":" in host_port:
+            host, port = host_port.split(":")
+            port = int(port)
+        else:
+            host = host_port
+            port = 80
+
+        # Create JSON body
+        body = json.dumps(data)
+
+        # Build HTTP request
+        request = (
+            "POST {} HTTP/1.1\r\n"
+            "Host: {}:{}\r\n"
+            "Content-Type: application/json\r\n"
+            "Content-Length: {}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            "{}"
+        ).format(path, host, port, len(body), body)
+
+        # Connect and send
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+        sock.sendall(request.encode())
+
+        # Receive response
+        response = b""
+        while True:
+            try:
+                chunk = sock.recv(1024)
+                if not chunk:
+                    break
+                response += chunk
+            except:
+                break
+
+        sock.close()
+
+        # Parse response
+        response = response.decode("utf-8", errors="ignore")
+
+        # Split headers and body
+        if "\r\n\r\n" in response:
+            headers, body = response.split("\r\n\r\n", 1)
+        else:
+            headers = response
+            body = ""
+
+        # Get status code
+        first_line = headers.split("\r\n")[0]
+        parts = first_line.split(" ")
+        if len(parts) >= 2:
+            status_code = int(parts[1])
+        else:
+            status_code = 0
+
+        # Parse JSON body
+        try:
+            result = json.loads(body)
+        except:
+            result = None
+
+        return status_code, result
+
+    except Exception as e:
+        print("[HTTP] Error:", e)
+        return 0, None
 
 
 class ModbusBridge:
@@ -36,6 +137,8 @@ class ModbusBridge:
         self.socket = None
         self._connected = False
         self._running = False
+        self._registered = False
+        self._device_id = None
 
         # Stats
         self.stats = {
@@ -95,6 +198,62 @@ class ModbusBridge:
         """Check if connected to server."""
         return self._connected
 
+    def is_registered(self):
+        """Check if device is registered with System B."""
+        return self._registered
+
+    def get_device_id(self):
+        """Get the device ID assigned by System B."""
+        return self._device_id
+
+    def register_device(self):
+        """
+        Self-register the device with System B.
+
+        Returns:
+            True if registration successful, False otherwise.
+        """
+        api_config = self.config.get("api", {})
+        device_config = self.config.get("device", {})
+
+        base_url = api_config.get("base_url", "http://localhost:8001")
+        endpoint = api_config.get("register_endpoint", "/api/v1/devices/self-register")
+
+        # Build registration payload
+        serial = device_config.get("serial", "")
+        if not serial:
+            print("[Bridge] No serial number configured, skipping registration")
+            return False
+
+        payload = {
+            "serial_number": serial,
+            "device_type": device_config.get("type", "inverter"),
+            "firmware_version": device_config.get("firmware_version", "1.0.0"),
+            "manufacturer": device_config.get("manufacturer", "SolarHub"),
+            "protocol": device_config.get("protocol", "modbus_tcp"),
+            "model": device_config.get("model"),
+        }
+
+        url = base_url + endpoint
+        print("[Bridge] Registering device: {} -> {}".format(serial, url))
+
+        status_code, response = http_post_json(url, payload)
+
+        if status_code == 200:
+            self._registered = True
+            self._device_id = response.get("device_id") if response else None
+            is_claimed = response.get("is_claimed", False) if response else False
+            polling_ms = response.get("polling_interval_ms", 5000) if response else 5000
+            print("[Bridge] Registration successful!")
+            print("[Bridge]   Device ID: {}".format(self._device_id))
+            print("[Bridge]   Claimed: {}".format(is_claimed))
+            print("[Bridge]   Polling: {}ms".format(polling_ms))
+            return True
+        else:
+            error = response.get("detail") if response else "Unknown error"
+            print("[Bridge] Registration failed: {} - {}".format(status_code, error))
+            return False
+
     def run(self):
         """
         Main bridge loop.
@@ -115,6 +274,13 @@ class ModbusBridge:
                     time.sleep(reconnect_delay)
                     self.stats["reconnects"] += 1
                     continue
+
+                # Register device with System B after successful connection
+                if not self._registered:
+                    if self.register_device():
+                        print("[Bridge] Device registered with System B")
+                    else:
+                        print("[Bridge] Registration failed, continuing anyway...")
 
             try:
                 # Set read timeout for keepalive

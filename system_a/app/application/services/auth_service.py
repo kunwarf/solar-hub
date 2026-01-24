@@ -40,6 +40,7 @@ class RegisterRequest:
     first_name: str
     last_name: str
     phone: Optional[str] = None
+    device_serial: Optional[str] = None
 
 
 @dataclass

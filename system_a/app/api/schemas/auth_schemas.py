@@ -22,6 +22,12 @@ class RegisterRequest(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100, description="First name")
     last_name: str = Field(..., min_length=1, max_length=100, description="Last name")
     phone: Optional[str] = Field(None, description="Phone number (Pakistani format preferred)")
+    device_serial: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=100,
+        description="Optional device serial number to claim during registration"
+    )
 
     @field_validator('password')
     @classmethod
@@ -176,6 +182,31 @@ class AuthResponse(BaseModel):
 
     user: UserResponse
     tokens: TokenResponse
+
+
+class SiteResponse(BaseModel):
+    """Site data in registration response."""
+    id: UUID
+    name: str
+    is_default: bool = True
+
+
+class DeviceClaimResponse(BaseModel):
+    """Device data in registration response."""
+    id: UUID
+    serial_number: str
+    device_type: str
+    manufacturer: Optional[str] = None
+    status: str
+
+
+class RegisterResponse(BaseModel):
+    """Response for user registration with optional device claim."""
+    success: bool
+    message: str
+    user: UserResponse
+    site: Optional[SiteResponse] = None
+    device: Optional[DeviceClaimResponse] = None
 
 
 class MessageResponse(BaseModel):

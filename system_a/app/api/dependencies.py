@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ..application.services.auth_service import AuthService
 from ..application.services.telemetry_service import TelemetryService
+from ..application.services.registration_service import RegistrationService
 from ..application.interfaces.unit_of_work import UnitOfWork
 from ..domain.entities.user import User, UserRole, UserStatus
 from ..infrastructure.database.connection import (
@@ -20,7 +21,7 @@ from ..infrastructure.database.repositories import (
     SQLAlchemyTelemetryRepository,
 )
 from ..infrastructure.security import BcryptPasswordHasher, JWTHandler
-from ..infrastructure.external import SMTPEmailService, MockEmailService
+from ..infrastructure.external import SMTPEmailService, MockEmailService, SystemBClient
 from ..application.interfaces.services import EmailService
 from ..config import get_settings
 
@@ -34,6 +35,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 _password_hasher: Optional[BcryptPasswordHasher] = None
 _jwt_handler: Optional[JWTHandler] = None
 _email_service: Optional[EmailService] = None
+_system_b_client: Optional[SystemBClient] = None
 
 
 def get_password_hasher() -> BcryptPasswordHasher:
@@ -75,6 +77,18 @@ def get_email_service() -> EmailService:
     return _email_service
 
 
+def get_system_b_client_instance() -> SystemBClient:
+    """Get System B client singleton instance."""
+    global _system_b_client
+    if _system_b_client is None:
+        _system_b_client = SystemBClient(
+            base_url=settings.system_b.url,
+            timeout=settings.system_b.timeout,
+            api_key=settings.system_b.api_key,
+        )
+    return _system_b_client
+
+
 async def get_unit_of_work() -> AsyncGenerator[UnitOfWork, None]:
     """
     Provide Unit of Work for request lifecycle.
@@ -99,6 +113,21 @@ def get_auth_service(
         token_service=jwt_handler,
         email_service=email_service,
         base_url=settings.app.frontend_url if hasattr(settings.app, 'frontend_url') else "http://localhost:3000",
+    )
+
+
+def get_registration_service(
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    password_hasher: BcryptPasswordHasher = Depends(get_password_hasher),
+    jwt_handler: JWTHandler = Depends(get_jwt_handler),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
+) -> RegistrationService:
+    """Get registration service instance."""
+    return RegistrationService(
+        user_repository=uow.users,
+        password_hasher=password_hasher,
+        token_service=jwt_handler,
+        system_b_client=system_b_client,
     )
 
 

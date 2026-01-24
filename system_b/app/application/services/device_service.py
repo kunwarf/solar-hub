@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from ...domain.entities.device import DeviceRegistry, DeviceSession
+from ...domain.entities.device import DeviceRegistry, DeviceSession, DeviceStatus
 from ...domain.entities.telemetry import DeviceType, ConnectionStatus
 from ...domain.entities.event import DeviceEvent, EventType, EventSeverity
 from ...infrastructure.database.repositories import DeviceRegistryRepository, EventRepository
@@ -83,6 +83,195 @@ class DeviceService:
         logger.info(f"Registered device {device_id} ({serial_number})")
 
         return created
+
+    async def register_orphan_device(
+        self,
+        serial_number: str,
+        device_type: DeviceType,
+        firmware_version: Optional[str] = None,
+        manufacturer: Optional[str] = None,
+        protocol: Optional[str] = None,
+        capabilities: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+    ) -> DeviceRegistry:
+        """
+        Register an orphan device (ESP self-registration).
+
+        This is called when a device connects and registers itself.
+        The device starts in orphan state until claimed by a user.
+
+        Args:
+            serial_number: Device serial number (unique identifier).
+            device_type: Type of device (inverter, battery, meter).
+            firmware_version: Device firmware version.
+            manufacturer: Device manufacturer (e.g., "Solis", "Growatt").
+            protocol: Communication protocol (e.g., "modbus_tcp").
+            capabilities: Device capabilities metadata.
+            model: Device model.
+
+        Returns:
+            Created or existing DeviceRegistry entity.
+        """
+        # Check if device already exists
+        existing = await self._device_repo.get_by_serial_number(serial_number)
+        if existing:
+            # Update connection info and return existing device
+            existing.connection_status = ConnectionStatus.CONNECTED
+            existing.last_connected_at = datetime.now(timezone.utc)
+            existing.reconnect_count += 1
+            if firmware_version:
+                existing.firmware_version = firmware_version
+            if manufacturer:
+                existing.manufacturer = manufacturer
+            if protocol:
+                existing.protocol = protocol
+            if capabilities:
+                existing.capabilities = capabilities
+            if model:
+                existing.model = model
+
+            updated = await self._device_repo.update(existing)
+            logger.info(f"Device {serial_number} reconnected (id: {existing.device_id})")
+            return updated
+
+        # Create new orphan device
+        from uuid import uuid4
+        device_id = uuid4()
+
+        device = DeviceRegistry(
+            device_id=device_id,
+            id=device_id,
+            device_type=device_type,
+            serial_number=serial_number,
+            firmware_version=firmware_version,
+            manufacturer=manufacturer,
+            protocol=protocol,
+            capabilities=capabilities,
+            model=model,
+            status=DeviceStatus.ORPHAN,
+            connection_status=ConnectionStatus.CONNECTED,
+            last_connected_at=datetime.now(timezone.utc),
+            reconnect_count=1,
+        )
+
+        created = await self._device_repo.create(device)
+        logger.info(f"Registered orphan device {serial_number} (id: {device_id})")
+
+        return created
+
+    async def claim_device(
+        self,
+        device_id: UUID,
+        owner_id: UUID,
+        site_id: UUID,
+        organization_id: UUID,
+    ) -> Optional[DeviceRegistry]:
+        """
+        Claim an orphan device for a user.
+
+        Args:
+            device_id: Device UUID.
+            owner_id: User UUID who is claiming.
+            site_id: Site UUID to attach device to.
+            organization_id: Organization UUID.
+
+        Returns:
+            Updated DeviceRegistry, or None if not found.
+
+        Raises:
+            ValueError: If device is already claimed.
+        """
+        device = await self._device_repo.get_by_id(device_id)
+        if not device:
+            return None
+
+        if device.is_claimed():
+            raise ValueError(f"Device {device_id} is already claimed")
+
+        device.claim(owner_id, site_id, organization_id)
+        updated = await self._device_repo.update(device)
+
+        logger.info(f"Device {device_id} claimed by user {owner_id}")
+
+        return updated
+
+    async def claim_device_by_serial(
+        self,
+        serial_number: str,
+        owner_id: UUID,
+        site_id: UUID,
+        organization_id: UUID,
+    ) -> Optional[DeviceRegistry]:
+        """
+        Claim an orphan device by serial number.
+
+        Args:
+            serial_number: Device serial number.
+            owner_id: User UUID who is claiming.
+            site_id: Site UUID to attach device to.
+            organization_id: Organization UUID.
+
+        Returns:
+            Updated DeviceRegistry, or None if not found.
+
+        Raises:
+            ValueError: If device is already claimed.
+        """
+        device = await self._device_repo.get_by_serial_number(serial_number)
+        if not device:
+            return None
+
+        if device.is_claimed():
+            raise ValueError(f"Device {serial_number} is already claimed")
+
+        device.claim(owner_id, site_id, organization_id)
+        updated = await self._device_repo.update(device)
+
+        logger.info(f"Device {serial_number} claimed by user {owner_id}")
+
+        return updated
+
+    async def release_device(self, device_id: UUID) -> Optional[DeviceRegistry]:
+        """
+        Release a claimed device (make it orphan again).
+
+        Args:
+            device_id: Device UUID.
+
+        Returns:
+            Updated DeviceRegistry, or None if not found.
+        """
+        device = await self._device_repo.get_by_id(device_id)
+        if not device:
+            return None
+
+        device.release()
+        updated = await self._device_repo.update(device)
+
+        logger.info(f"Device {device_id} released")
+
+        return updated
+
+    async def get_orphan_devices(self) -> List[DeviceRegistry]:
+        """
+        Get all orphan devices (not claimed by any user).
+
+        Returns:
+            List of orphan DeviceRegistry entities.
+        """
+        return await self._device_repo.get_by_status(DeviceStatus.ORPHAN)
+
+    async def get_user_devices(self, owner_id: UUID) -> List[DeviceRegistry]:
+        """
+        Get all devices owned by a user.
+
+        Args:
+            owner_id: User UUID.
+
+        Returns:
+            List of DeviceRegistry entities owned by the user.
+        """
+        return await self._device_repo.get_by_owner(owner_id)
 
     async def sync_device_from_system_a(
         self,

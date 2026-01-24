@@ -473,3 +473,336 @@ class TestGenerateDeviceToken:
             )
 
             assert response.status_code == 404
+
+
+class TestDeviceSelfRegister:
+    """Test device self-registration endpoint (ESP flow)."""
+
+    def test_self_register_new_device(self, client):
+        """Test new device self-registration."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_device = MagicMock()
+            mock_device.device_id = uuid4()
+            mock_device.serial_number = "ESP-INV-001"
+            mock_device.polling_interval_seconds = 30
+            mock_device.reconnect_count = 1
+            mock_device.is_claimed = MagicMock(return_value=False)
+
+            mock_service = MagicMock()
+            mock_service.register_orphan_device = AsyncMock(return_value=mock_device)
+            MockService.return_value = mock_service
+
+            response = client.post(
+                "/api/v1/devices/self-register",
+                json={
+                    "serial_number": "ESP-INV-001",
+                    "device_type": "inverter",
+                    "firmware_version": "1.0.0",
+                    "manufacturer": "Test Mfg",
+                    "protocol": "modbus_tcp",
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
+            assert data["device_id"] is not None
+            assert data["is_claimed"] is False
+            assert data["polling_interval_ms"] == 30000
+
+    def test_self_register_reconnect(self, client):
+        """Test device reconnection (already registered)."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_device = MagicMock()
+            mock_device.device_id = uuid4()
+            mock_device.serial_number = "ESP-INV-001"
+            mock_device.polling_interval_seconds = 30
+            mock_device.reconnect_count = 5  # Multiple reconnects
+            mock_device.is_claimed = MagicMock(return_value=True)
+
+            mock_service = MagicMock()
+            mock_service.register_orphan_device = AsyncMock(return_value=mock_device)
+            MockService.return_value = mock_service
+
+            response = client.post(
+                "/api/v1/devices/self-register",
+                json={
+                    "serial_number": "ESP-INV-001",
+                    "device_type": "inverter",
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "reconnected" in data["message"].lower()
+            assert data["is_claimed"] is True
+
+    def test_self_register_invalid_device_type(self, client):
+        """Test self-registration with invalid device type."""
+        response = client.post(
+            "/api/v1/devices/self-register",
+            json={
+                "serial_number": "ESP-INV-001",
+                "device_type": "invalid_type",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "invalid device_type" in response.json()["detail"].lower()
+
+
+class TestDeviceClaim:
+    """Test device claim endpoint."""
+
+    def test_claim_orphan_device_success(self, client, sample_device_id):
+        """Test claiming an orphan device."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            owner_id = uuid4()
+            site_id = uuid4()
+            org_id = uuid4()
+
+            mock_device = MagicMock()
+            mock_device.device_id = sample_device_id
+            mock_device.serial_number = "ESP-INV-001"
+            mock_device.device_type = MagicMock(value="inverter")
+            mock_device.manufacturer = "Test Mfg"
+            mock_device.model = "TEST-001"
+            mock_device.firmware_version = "1.0.0"
+            mock_device.protocol = "modbus_tcp"
+            mock_device.status = "claimed"
+            mock_device.owner_id = owner_id
+            mock_device.site_id = site_id
+            mock_device.organization_id = org_id
+            mock_device.connection_status = MagicMock(value="disconnected")
+            mock_device.last_connected_at = None
+            mock_device.last_telemetry_at = None
+            mock_device.capabilities = []
+            mock_device.polling_interval_seconds = 30
+            mock_device.created_at = datetime.now(timezone.utc)
+
+            mock_service = MagicMock()
+            mock_service.claim_device = AsyncMock(return_value=mock_device)
+            MockService.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/devices/{sample_device_id}/claim",
+                json={
+                    "owner_id": str(owner_id),
+                    "site_id": str(site_id),
+                    "organization_id": str(org_id),
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["device"]["status"] == "claimed"
+            assert data["device"]["owner_id"] == str(owner_id)
+
+    def test_claim_already_claimed_device(self, client, sample_device_id):
+        """Test claiming an already claimed device."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_service = MagicMock()
+            mock_service.claim_device = AsyncMock(
+                side_effect=ValueError("Device is already claimed")
+            )
+            MockService.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/devices/{sample_device_id}/claim",
+                json={
+                    "owner_id": str(uuid4()),
+                    "site_id": str(uuid4()),
+                    "organization_id": str(uuid4()),
+                },
+            )
+
+            assert response.status_code == 409
+
+    def test_claim_nonexistent_device(self, client, sample_device_id):
+        """Test claiming a non-existent device."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_service = MagicMock()
+            mock_service.claim_device = AsyncMock(return_value=None)
+            MockService.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/devices/{sample_device_id}/claim",
+                json={
+                    "owner_id": str(uuid4()),
+                    "site_id": str(uuid4()),
+                    "organization_id": str(uuid4()),
+                },
+            )
+
+            assert response.status_code == 404
+
+
+class TestDeviceRelease:
+    """Test device release endpoint."""
+
+    def test_release_claimed_device(self, client, sample_device_id):
+        """Test releasing a claimed device."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_device = MagicMock()
+            mock_device.device_id = sample_device_id
+            mock_device.serial_number = "ESP-INV-001"
+            mock_device.device_type = MagicMock(value="inverter")
+            mock_device.manufacturer = "Test Mfg"
+            mock_device.model = "TEST-001"
+            mock_device.firmware_version = "1.0.0"
+            mock_device.protocol = "modbus_tcp"
+            mock_device.status = "orphan"
+            mock_device.owner_id = None
+            mock_device.site_id = None
+            mock_device.organization_id = None
+            mock_device.connection_status = MagicMock(value="disconnected")
+            mock_device.last_connected_at = None
+            mock_device.last_telemetry_at = None
+            mock_device.capabilities = []
+            mock_device.polling_interval_seconds = 30
+            mock_device.created_at = datetime.now(timezone.utc)
+
+            mock_service = MagicMock()
+            mock_service.release_device = AsyncMock(return_value=mock_device)
+            MockService.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/devices/{sample_device_id}/release",
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["device"]["status"] == "orphan"
+            assert data["device"]["owner_id"] is None
+
+    def test_release_nonexistent_device(self, client, sample_device_id):
+        """Test releasing a non-existent device."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_service = MagicMock()
+            mock_service.release_device = AsyncMock(return_value=None)
+            MockService.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/devices/{sample_device_id}/release",
+            )
+
+            assert response.status_code == 404
+
+
+class TestGetOrphanDevices:
+    """Test get orphan devices endpoint."""
+
+    def test_get_orphan_devices(self, client):
+        """Test getting all orphan devices."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_device = MagicMock()
+            mock_device.device_id = uuid4()
+            mock_device.serial_number = "ESP-INV-001"
+            mock_device.device_type = MagicMock(value="inverter")
+            mock_device.manufacturer = "Test Mfg"
+            mock_device.model = "TEST-001"
+            mock_device.firmware_version = "1.0.0"
+            mock_device.protocol = "modbus_tcp"
+            mock_device.status = "orphan"
+            mock_device.owner_id = None
+            mock_device.site_id = None
+            mock_device.organization_id = None
+            mock_device.connection_status = MagicMock(value="disconnected")
+            mock_device.last_connected_at = None
+            mock_device.last_telemetry_at = None
+            mock_device.capabilities = []
+            mock_device.polling_interval_seconds = 30
+            mock_device.created_at = datetime.now(timezone.utc)
+
+            mock_service = MagicMock()
+            mock_service.get_orphan_devices = AsyncMock(return_value=[mock_device])
+            MockService.return_value = mock_service
+
+            response = client.get("/api/v1/devices/orphan")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 1
+            assert data[0]["status"] == "orphan"
+
+    def test_get_orphan_devices_empty(self, client):
+        """Test getting orphan devices when none exist."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo, \
+             patch("app.api.v1.devices.DeviceService") as MockService:
+
+            mock_service = MagicMock()
+            mock_service.get_orphan_devices = AsyncMock(return_value=[])
+            MockService.return_value = mock_service
+
+            response = client.get("/api/v1/devices/orphan")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 0
+
+
+class TestGetDeviceBySerial:
+    """Test get device by serial number endpoint."""
+
+    def test_get_device_by_serial_found(self, client):
+        """Test getting device by serial number."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo:
+
+            mock_device = MagicMock()
+            mock_device.device_id = uuid4()
+            mock_device.serial_number = "ESP-INV-001"
+            mock_device.device_type = MagicMock(value="inverter")
+            mock_device.manufacturer = "Test Mfg"
+            mock_device.model = "TEST-001"
+            mock_device.firmware_version = "1.0.0"
+            mock_device.protocol = "modbus_tcp"
+            mock_device.status = "orphan"
+            mock_device.owner_id = None
+            mock_device.site_id = None
+            mock_device.organization_id = None
+            mock_device.connection_status = MagicMock(value="disconnected")
+            mock_device.last_connected_at = None
+            mock_device.last_telemetry_at = None
+            mock_device.capabilities = []
+            mock_device.polling_interval_seconds = 30
+            mock_device.created_at = datetime.now(timezone.utc)
+
+            mock_repo = MagicMock()
+            mock_repo.get_by_serial_number = AsyncMock(return_value=mock_device)
+            MockRepo.return_value = mock_repo
+
+            response = client.get("/api/v1/devices/serial/ESP-INV-001")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["serial_number"] == "ESP-INV-001"
+
+    def test_get_device_by_serial_not_found(self, client):
+        """Test getting non-existent device by serial."""
+        with patch("app.api.v1.devices.DeviceRegistryRepository") as MockRepo:
+
+            mock_repo = MagicMock()
+            mock_repo.get_by_serial_number = AsyncMock(return_value=None)
+            MockRepo.return_value = mock_repo
+
+            response = client.get("/api/v1/devices/serial/NONEXISTENT")
+
+            assert response.status_code == 404

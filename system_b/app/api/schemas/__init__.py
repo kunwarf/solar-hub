@@ -13,6 +13,11 @@ from .telemetry_schemas import (
 )
 from .device_schemas import (
     DeviceRegisterRequest,
+    DeviceSelfRegisterRequest,
+    DeviceSelfRegisterResponse,
+    DeviceClaimRequest,
+    DeviceClaimResponse,
+    DeviceFullResponse,
     DeviceSyncRequest,
     DeviceUpdateRequest,
     DeviceResponse,
@@ -23,6 +28,13 @@ from .device_schemas import (
     DeviceAuthRequest,
     DeviceAuthResponse,
     DeviceTokenResponse,
+    # Serial number schemas
+    SerialNumberGenerateRequest,
+    SerialNumberGenerateResponse,
+    SerialNumberValidateRequest,
+    SerialNumberValidateResponse,
+    SerialNumberBatchValidateRequest,
+    SerialNumberBatchValidateResponse,
 )
 from .command_schemas import (
     CommandCreateRequest,
@@ -57,6 +69,11 @@ __all__ = [
     "IngestResponse",
     # Device
     "DeviceRegisterRequest",
+    "DeviceSelfRegisterRequest",
+    "DeviceSelfRegisterResponse",
+    "DeviceClaimRequest",
+    "DeviceClaimResponse",
+    "DeviceFullResponse",
     "DeviceSyncRequest",
     "DeviceUpdateRequest",
     "DeviceResponse",
@@ -67,6 +84,13 @@ __all__ = [
     "DeviceAuthRequest",
     "DeviceAuthResponse",
     "DeviceTokenResponse",
+    # Serial Number
+    "SerialNumberGenerateRequest",
+    "SerialNumberGenerateResponse",
+    "SerialNumberValidateRequest",
+    "SerialNumberValidateResponse",
+    "SerialNumberBatchValidateRequest",
+    "SerialNumberBatchValidateResponse",
     # Command
     "CommandCreateRequest",
     "CommandResponse",

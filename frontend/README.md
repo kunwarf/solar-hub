@@ -453,17 +453,68 @@ sudo systemctl reload nginx
 
 #### Step 3: Configure Firewall
 
-Allow port 8080 through the firewall:
+**CRITICAL:** If you can access from localhost but not from external machines, the firewall is likely blocking the port.
+
+**Check current firewall status:**
 
 ```bash
-# UFW (Ubuntu/Debian)
+# Check UFW status (Ubuntu/Debian)
+sudo ufw status
+
+# Check if your port is allowed
+sudo ufw status | grep 8080
+# Or if using a different port (e.g., 8050):
+sudo ufw status | grep 8050
+```
+
+**Allow the port through UFW (Ubuntu/Debian):**
+
+```bash
+# Replace 8080 with your actual port if different (e.g., 8050)
 sudo ufw allow 8080/tcp
+
+# Or allow a specific port range
+sudo ufw allow 8050:8060/tcp
+
+# Reload firewall
 sudo ufw reload
 
-# Or firewalld (CentOS/RHEL)
-sudo firewall-cmd --permanent --add-port=8080/tcp
-sudo firewall-cmd --reload
+# Verify the rule was added
+sudo ufw status numbered
 ```
+
+**For firewalld (CentOS/RHEL):**
+
+```bash
+# Allow the port
+sudo firewall-cmd --permanent --add-port=8080/tcp
+# Or if using different port:
+sudo firewall-cmd --permanent --add-port=8050/tcp
+
+# Reload firewall
+sudo firewall-cmd --reload
+
+# Verify
+sudo firewall-cmd --list-ports
+```
+
+**Test firewall configuration:**
+
+```bash
+# From your local machine, test if port is accessible
+# Replace with your server IP and port
+telnet 182.180.150.107 8050
+# Or
+nc -zv 182.180.150.107 8050
+
+# If connection is refused, firewall is blocking
+# If connection succeeds, firewall is configured correctly
+```
+
+**Note:** If you're using a different port (like 8050 instead of 8080), make sure to:
+1. Update the nginx config to listen on that port
+2. Allow that specific port in the firewall
+3. Update all references in this guide to use your actual port
 
 #### Step 4: Test the Deployment
 
@@ -493,6 +544,51 @@ sudo tail -f /var/log/nginx/error.log
 - `curl http://localhost:8080` returns HTML content (not 500 error)
 - Browser shows the Solar Hub application when accessing `http://YOUR_SERVER_IP:8080`
 - No errors in `/var/log/nginx/solarhub-frontend-error.log`
+
+**⚠️ Important: If HTML loads but app is blank/not working:**
+
+If you see HTML in curl but nothing shows in the browser, the issue is likely:
+
+1. **API URLs are pointing to localhost** - The frontend was built with `localhost` URLs, which won't work from external browsers
+2. **JavaScript files not loading** - Check browser console (F12) for errors
+3. **CORS issues** - Backend might be blocking requests
+
+**Fix: Update .env and rebuild:**
+
+```bash
+# Edit .env file with your server's IP address
+cd /opt/solarhub/app/solar-hub/frontend
+nano .env
+```
+
+Update these lines (replace `182.180.150.107` with your actual server IP):
+```env
+VITE_API_BASE_URL=http://182.180.150.107:8000/api/v1
+VITE_WS_URL=ws://182.180.150.107:8000/ws
+VITE_USE_MOCK_FALLBACK=false
+```
+
+**CRITICAL: Rebuild after changing .env:**
+```bash
+# Rebuild with new environment variables
+npm run build
+
+# Fix permissions again (if needed)
+sudo chown -R www-data:www-data /opt/solarhub/app/solar-hub/frontend/dist
+sudo chmod -R 755 /opt/solarhub/app/solar-hub/frontend/dist
+
+# Test again
+curl http://localhost:8080
+```
+
+**Check browser console for errors:**
+1. Open browser developer tools (F12)
+2. Go to Console tab
+3. Look for errors like:
+   - `Failed to fetch` → API URL is wrong or backend not accessible
+   - `net::ERR_CONNECTION_REFUSED` → Backend not running or wrong port
+   - `CORS policy` → Backend CORS configuration issue
+   - `404` on assets → nginx not serving static files correctly
 
 **Note about the http2 deprecation warning:**
 
@@ -716,16 +812,196 @@ curl http://localhost:8080
 - Rebuild after changing `.env`: `npm run build`
 - Verify backend is running on port 8000
 
-**Issue: Port 8080 not accessible from outside**
-- Check firewall rules: `sudo ufw status`
-- Verify nginx is listening: `sudo netstat -tlnp | grep 8080`
-- Check if another service is using port 8080: `sudo lsof -i :8080`
+**Issue: Port 8080 (or 8050) not accessible from outside**
+
+**Symptoms:**
+- Works with `curl http://localhost:8080` on server
+- Doesn't work from external browser or `curl http://SERVER_IP:8080` from another machine
+- Connection timeout or "Connection refused"
+
+**Fix:**
+
+1. **Check if firewall is blocking:**
+   ```bash
+   # Check UFW status
+   sudo ufw status
+   
+   # Check if your port is in the list
+   sudo ufw status | grep 8080
+   # Or
+   sudo ufw status | grep 8050
+   ```
+
+2. **Allow the port:**
+   ```bash
+   # Replace with your actual port
+   sudo ufw allow 8080/tcp
+   # Or
+   sudo ufw allow 8050/tcp
+   
+   sudo ufw reload
+   ```
+
+3. **Verify nginx is listening on the correct interface:**
+   ```bash
+   # Should show 0.0.0.0:8080 (listening on all interfaces)
+   sudo netstat -tlnp | grep 8080
+   # If it shows 127.0.0.1:8080, nginx is only listening on localhost
+   ```
+
+4. **Test from external machine:**
+   ```bash
+   # From another machine
+   curl http://182.180.150.107:8050
+   # Or
+   telnet 182.180.150.107 8050
+   ```
+
+5. **Check if another service is using the port:**
+   ```bash
+   sudo lsof -i :8080
+   # Or
+   sudo lsof -i :8050
+   ```
 
 **Issue: Port 8080 already in use**
 - Find what's using it: `sudo lsof -i :8080`
 - Choose a different port (e.g., 8081, 3000, 9000)
 - Update the nginx config to use the new port
 - Update firewall rules for the new port
+
+**Issue: Backend API returns "Not Found"**
+
+If you get `{"detail":"Not Found"}` when testing the API:
+
+1. **Wrong endpoint path** - The health endpoint is `/health`, NOT `/api/v1/health`:
+   ```bash
+   # Correct:
+   curl http://localhost:8000/health
+   
+   # Wrong:
+   curl http://localhost:8000/api/v1/health  # Returns 404
+   ```
+
+2. **API endpoints structure:**
+   - Health: `/health` (no prefix)
+   - Root: `/` (returns app info)
+   - API v1: `/api/v1/*` (all API endpoints)
+   - Docs: `/docs` (if debug mode enabled)
+
+3. **Test correct endpoints:**
+   ```bash
+   # Health check
+   curl http://localhost:8000/health
+   
+   # Root endpoint
+   curl http://localhost:8000/
+   
+   # API endpoint (example)
+   curl http://localhost:8000/api/v1/auth/login
+   ```
+
+**Issue: HTML loads but app is blank/white screen in browser**
+
+This means the HTML is served but JavaScript isn't working. Common causes:
+
+1. **API URLs point to localhost** (MOST COMMON):
+   ```bash
+   # Check what's in your .env
+   cat /opt/solarhub/app/solar-hub/frontend/.env | grep VITE_API_BASE_URL
+   
+   # If it shows localhost, update it:
+   nano /opt/solarhub/app/solar-hub/frontend/.env
+   # Change to:
+   VITE_API_BASE_URL=http://182.180.150.107:8000/api/v1
+   VITE_WS_URL=ws://182.180.150.107:8000/ws
+   
+   # REBUILD (critical - env vars are baked into the build)
+   cd /opt/solarhub/app/solar-hub/frontend
+   npm run build
+   ```
+
+2. **JavaScript files not loading**:
+   - Open browser console (F12) → Network tab
+   - Refresh page
+   - Check if `/assets/index-*.js` files return 200 OK
+   - If 404, check nginx config root path
+
+3. **Backend not accessible**:
+   ```bash
+   # IMPORTANT: Health endpoint is /health, NOT /api/v1/health
+   # Test if backend is reachable from server
+   curl http://localhost:8000/health
+   curl http://localhost:8000/  # Root endpoint
+   
+   # Test from your browser's machine (replace with your server IP)
+   curl http://182.180.150.107:8000/health
+   ```
+
+4. **Backend connection refused when using IP address**:
+   
+   If `curl http://localhost:8000/health` works but `curl http://192.168.88.200:8000/health` fails:
+   
+   **Problem:** Backend is only listening on localhost, not all interfaces
+   
+   **Fix:**
+   
+   **Option 1: Check systemd service file (MOST COMMON ISSUE)**
+   
+   The systemd service file might have `--host 127.0.0.1` hardcoded:
+   ```bash
+   # Check the service file
+   sudo cat /etc/systemd/system/solarhub-platform.service | grep ExecStart
+   
+   # If it shows --host 127.0.0.1, fix it:
+   sudo nano /etc/systemd/system/solarhub-platform.service
+   # Change: --host 127.0.0.1
+   # To:     --host 0.0.0.0
+   
+   # Or use sed (quick fix):
+   sudo sed -i 's/--host 127.0.0.1/--host 0.0.0.0/g' /etc/systemd/system/solarhub-platform.service
+   
+   # Reload systemd and restart
+   sudo systemctl daemon-reload
+   sudo systemctl restart solarhub-platform
+   ```
+   
+   **Option 2: Check backend .env file**
+   ```bash
+   # Check backend .env file
+   cd /opt/solarhub/app/solar-hub/system_a
+   cat .env | grep HOST
+   
+   # Make sure HOST is set to 0.0.0.0 (not 127.0.0.1 or localhost)
+   nano .env
+   ```
+   
+   Add or update:
+   ```env
+   HOST=0.0.0.0
+   PORT=8000
+   ```
+   
+   Then restart the backend:
+   ```bash
+   sudo systemctl restart solarhub-platform
+   ```
+   
+   **Verify it's listening on all interfaces:**
+   ```bash
+   sudo netstat -tlnp | grep 8000
+   # Should show: 0.0.0.0:8000 (not 127.0.0.1:8000)
+   ```
+   
+   **Also check firewall:**
+   ```bash
+   sudo ufw allow 8000/tcp
+   sudo ufw reload
+   ```
+
+4. **CORS errors in browser console**:
+   - Backend needs to allow requests from your frontend domain
+   - Check backend CORS configuration
 
 #### Updating the Frontend
 
@@ -743,6 +1019,122 @@ npm run build
 # Reload nginx
 sudo systemctl reload nginx
 ```
+
+#### Changing the Backend API Port
+
+If you need to change the backend API port from 8000 to a different port (e.g., 2222), you need to update multiple places:
+
+**Step 1: Update Backend Configuration**
+
+```bash
+# Edit System A backend .env file
+cd /opt/solarhub/app/solar-hub/system_a
+nano .env
+```
+
+Add or update:
+```env
+PORT=2222
+```
+
+**Step 2: Update Frontend Configuration**
+
+```bash
+# Edit frontend .env file
+cd /opt/solarhub/app/solar-hub/frontend
+nano .env
+```
+
+Update the API URLs (replace `YOUR_SERVER_IP` with your actual IP):
+```env
+VITE_API_BASE_URL=http://YOUR_SERVER_IP:2222/api/v1
+VITE_WS_URL=ws://YOUR_SERVER_IP:2222/ws
+```
+
+**Step 3: Rebuild Frontend**
+
+```bash
+cd /opt/solarhub/app/solar-hub/frontend
+npm run build
+```
+
+**Step 4: Update Nginx Configuration (if using reverse proxy)**
+
+If you have nginx proxying to the backend, update the upstream:
+
+```bash
+sudo nano /etc/nginx/sites-available/solarhub
+```
+
+Find and update:
+```nginx
+upstream system_a {
+    server 127.0.0.1:2222;  # Changed from 8000
+    keepalive 32;
+}
+```
+
+Then reload nginx:
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+**Step 5: Update System B Configuration (if applicable)**
+
+If System B references System A, update it:
+
+```bash
+cd /opt/solarhub/app/solar-hub/system_b
+nano .env
+```
+
+Update:
+```env
+SYSTEM_A_URL=http://localhost:2222
+```
+
+**Step 6: Update Firewall Rules**
+
+```bash
+# Remove old port (if needed)
+sudo ufw delete allow 8000/tcp
+
+# Allow new port
+sudo ufw allow 2222/tcp
+sudo ufw reload
+```
+
+**Step 7: Restart Backend Services**
+
+```bash
+# Restart System A
+sudo systemctl restart solarhub-platform
+
+# Restart System B (if applicable)
+sudo systemctl restart solarhub-telemetry
+
+# Verify services are running on new port
+sudo netstat -tlnp | grep 2222
+```
+
+**Step 8: Test**
+
+```bash
+# Test backend API (note: health endpoint is /health, not /api/v1/health)
+curl http://localhost:2222/health
+
+# Test from external machine
+curl http://YOUR_SERVER_IP:2222/health
+
+# Test frontend (should now connect to new port)
+curl http://YOUR_SERVER_IP:8050
+```
+
+**Important Notes:**
+- The health endpoint is `/health`, not `/api/v1/health`
+- API endpoints are under `/api/v1/` (e.g., `/api/v1/auth/login`)
+- The root endpoint `/` returns basic info
 
 ### Option 1: Static Hosting (Recommended)
 

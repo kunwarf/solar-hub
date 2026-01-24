@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.telemetry_model import DeviceRegistryModel
-from ....domain.entities.device import DeviceRegistry, DeviceSession
+from ....domain.entities.device import DeviceRegistry, DeviceSession, DeviceStatus
 from ....domain.entities.telemetry import DeviceType, ConnectionStatus
 
 logger = logging.getLogger(__name__)
@@ -128,6 +128,12 @@ class DeviceRegistryRepository:
             organization_id=device.organization_id,
             device_type=device.device_type.value if isinstance(device.device_type, DeviceType) else device.device_type,
             serial_number=device.serial_number,
+            manufacturer=device.manufacturer,
+            model=device.model,
+            firmware_version=device.firmware_version,
+            status=device.status,
+            owner_id=device.owner_id,
+            capabilities=device.capabilities,
             auth_token_hash=device.auth_token_hash,
             token_expires_at=device.token_expires_at,
             connection_status=device.connection_status.value if isinstance(device.connection_status, ConnectionStatus) else device.connection_status,
@@ -139,6 +145,7 @@ class DeviceRegistryRepository:
             polling_interval_seconds=device.polling_interval_seconds,
             last_polled_at=device.last_polled_at,
             next_poll_at=device.next_poll_at,
+            last_telemetry_at=device.last_telemetry_at,
             metadata_=device.metadata,
             created_at=device.created_at,
         )
@@ -169,6 +176,12 @@ class DeviceRegistryRepository:
                 organization_id=device.organization_id,
                 device_type=device.device_type.value if isinstance(device.device_type, DeviceType) else device.device_type,
                 serial_number=device.serial_number,
+                manufacturer=device.manufacturer,
+                model=device.model,
+                firmware_version=device.firmware_version,
+                status=device.status,
+                owner_id=device.owner_id,
+                capabilities=device.capabilities,
                 auth_token_hash=device.auth_token_hash,
                 token_expires_at=device.token_expires_at,
                 connection_status=device.connection_status.value if isinstance(device.connection_status, ConnectionStatus) else device.connection_status,
@@ -180,6 +193,7 @@ class DeviceRegistryRepository:
                 polling_interval_seconds=device.polling_interval_seconds,
                 last_polled_at=device.last_polled_at,
                 next_poll_at=device.next_poll_at,
+                last_telemetry_at=device.last_telemetry_at,
                 metadata_=device.metadata,
                 updated_at=device.updated_at,
             )
@@ -668,6 +682,50 @@ class DeviceRegistryRepository:
         return {row.device_type: row.count for row in rows}
 
     # =========================================================================
+    # Orphan Device Management
+    # =========================================================================
+
+    async def get_by_status(self, status: str) -> List[DeviceRegistry]:
+        """
+        Get devices by ownership status.
+
+        Args:
+            status: Device status (orphan or claimed).
+
+        Returns:
+            List of DeviceRegistry entities with the given status.
+        """
+        query = (
+            select(DeviceRegistryModel)
+            .where(DeviceRegistryModel.status == status)
+            .order_by(DeviceRegistryModel.created_at.desc())
+        )
+        result = await self._session.execute(query)
+        models = result.scalars().all()
+
+        return [self._model_to_entity(m) for m in models]
+
+    async def get_by_owner(self, owner_id: UUID) -> List[DeviceRegistry]:
+        """
+        Get all devices owned by a user.
+
+        Args:
+            owner_id: User UUID.
+
+        Returns:
+            List of DeviceRegistry entities owned by the user.
+        """
+        query = (
+            select(DeviceRegistryModel)
+            .where(DeviceRegistryModel.owner_id == owner_id)
+            .order_by(DeviceRegistryModel.site_id, DeviceRegistryModel.device_type)
+        )
+        result = await self._session.execute(query)
+        models = result.scalars().all()
+
+        return [self._model_to_entity(m) for m in models]
+
+    # =========================================================================
     # Helper Methods
     # =========================================================================
 
@@ -680,6 +738,12 @@ class DeviceRegistryRepository:
             organization_id=model.organization_id,
             device_type=DeviceType(model.device_type) if model.device_type else DeviceType.INVERTER,
             serial_number=model.serial_number,
+            manufacturer=model.manufacturer,
+            model=model.model,
+            firmware_version=model.firmware_version,
+            status=model.status or DeviceStatus.ORPHAN,
+            owner_id=model.owner_id,
+            capabilities=model.capabilities,
             auth_token_hash=model.auth_token_hash,
             token_expires_at=model.token_expires_at,
             connection_status=ConnectionStatus(model.connection_status) if model.connection_status else ConnectionStatus.DISCONNECTED,
@@ -691,6 +755,7 @@ class DeviceRegistryRepository:
             polling_interval_seconds=model.polling_interval_seconds,
             last_polled_at=model.last_polled_at,
             next_poll_at=model.next_poll_at,
+            last_telemetry_at=model.last_telemetry_at,
             metadata=model.metadata_,
             created_at=model.created_at,
             updated_at=model.updated_at,

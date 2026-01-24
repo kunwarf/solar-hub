@@ -137,11 +137,29 @@ export interface RegisterRequest {
   first_name: string;
   last_name: string;
   phone?: string;
+  device_serial?: string;
+}
+
+export interface SiteInfo {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
+export interface DeviceClaimInfo {
+  id: string;
+  serial_number: string;
+  device_type: string;
+  manufacturer?: string;
+  status: string;
 }
 
 export interface RegisterResponse {
+  success: boolean;
   message: string;
-  user_id: string;
+  user: User;
+  site?: SiteInfo;
+  device?: DeviceClaimInfo;
 }
 
 // ============================================================================

@@ -8,6 +8,14 @@ from .email_templates import (
     get_alert_notification_template,
     get_welcome_email_template,
 )
+from .system_b_client import (
+    SystemBClient,
+    DeviceInfo,
+    SystemBClientError,
+    DeviceNotFoundError,
+    DeviceAlreadyClaimedError,
+    get_system_b_client,
+)
 
 __all__ = [
     'SMTPEmailService',
@@ -17,4 +25,11 @@ __all__ = [
     'get_password_reset_email_template',
     'get_alert_notification_template',
     'get_welcome_email_template',
+    # System B Client
+    'SystemBClient',
+    'DeviceInfo',
+    'SystemBClientError',
+    'DeviceNotFoundError',
+    'DeviceAlreadyClaimedError',
+    'get_system_b_client',
 ]

@@ -13,7 +13,15 @@ import React, {
   useCallback,
   ReactNode,
 } from 'react';
-import { authService, User, UserRole } from '@/api';
+import { authService, User, UserRole, SiteInfo, DeviceClaimInfo } from '@/api';
+
+interface SignupResult {
+  success: boolean;
+  error?: string;
+  user?: User;
+  site?: SiteInfo;
+  device?: DeviceClaimInfo;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -28,8 +36,9 @@ interface AuthContextType {
     password: string,
     firstName: string,
     lastName: string,
-    phone?: string
-  ) => Promise<{ success: boolean; error?: string }>;
+    phone?: string,
+    deviceSerial?: string
+  ) => Promise<SignupResult>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
   hasRole: (roles: UserRole | UserRole[]) => boolean;
@@ -85,8 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string,
       firstName: string,
       lastName: string,
-      phone?: string
-    ): Promise<{ success: boolean; error?: string }> => {
+      phone?: string,
+      deviceSerial?: string
+    ): Promise<SignupResult> => {
       setIsLoading(true);
       try {
         const result = await authService.register({
@@ -95,8 +105,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           first_name: firstName,
           last_name: lastName,
           phone,
+          device_serial: deviceSerial,
         });
-        return { success: result.success, error: result.error };
+        return {
+          success: result.success,
+          error: result.error,
+          user: result.user,
+          site: result.site,
+          device: result.device,
+        };
       } catch (error) {
         return { success: false, error: 'An unexpected error occurred' };
       } finally {

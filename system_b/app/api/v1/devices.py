@@ -14,6 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dependencies import get_db_session, get_device_service, get_auth_service
 from ..schemas import (
     DeviceRegisterRequest,
+    DeviceSelfRegisterRequest,
+    DeviceSelfRegisterResponse,
+    DeviceClaimRequest,
+    DeviceClaimResponse,
+    DeviceFullResponse,
     DeviceSyncRequest,
     DeviceUpdateRequest,
     DeviceResponse,
@@ -24,8 +29,16 @@ from ..schemas import (
     DeviceAuthRequest,
     DeviceAuthResponse,
     DeviceTokenResponse,
+    # Serial number schemas
+    SerialNumberGenerateRequest,
+    SerialNumberGenerateResponse,
+    SerialNumberValidateRequest,
+    SerialNumberValidateResponse,
+    SerialNumberBatchValidateRequest,
+    SerialNumberBatchValidateResponse,
 )
 from ...application.services import DeviceService, DeviceAuthService
+from ...application.services.serial_number_service import get_serial_number_service, SerialNumberService
 from ...infrastructure.database.repositories import DeviceRegistryRepository
 from ...domain.entities.telemetry import ConnectionStatus
 
@@ -175,6 +188,257 @@ async def register_device(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Device registration failed: {str(e)}",
         )
+
+
+def device_to_full_response(device) -> DeviceFullResponse:
+    """Convert DeviceRegistry entity to DeviceFullResponse schema."""
+    return DeviceFullResponse(
+        id=device.device_id,
+        serial_number=device.serial_number,
+        device_type=device.device_type.value if hasattr(device.device_type, 'value') else str(device.device_type),
+        manufacturer=device.manufacturer,
+        model=device.model,
+        firmware_version=device.firmware_version,
+        protocol=device.protocol,
+        status=device.status,
+        owner_id=device.owner_id,
+        site_id=device.site_id,
+        organization_id=device.organization_id,
+        connection_status=device.connection_status.value if hasattr(device.connection_status, 'value') else str(device.connection_status),
+        last_connected_at=device.last_connected_at,
+        last_telemetry_at=device.last_telemetry_at,
+        capabilities=device.capabilities,
+        polling_interval_seconds=device.polling_interval_seconds,
+        created_at=device.created_at,
+    )
+
+
+@router.post(
+    "/self-register",
+    response_model=DeviceSelfRegisterResponse,
+    summary="Device self-registration (ESP)",
+    description="Register an orphan device. Called by ESP logger on power-up. "
+                "Device starts in 'orphan' state until claimed by a user.",
+)
+async def self_register_device(
+    request: DeviceSelfRegisterRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> DeviceSelfRegisterResponse:
+    """
+    Device self-registration endpoint for ESP loggers.
+
+    This is called when an ESP device powers on and connects to System B.
+    The device registers with its serial number and starts polling immediately.
+    Device is in 'orphan' state until claimed by a user during registration.
+
+    Serial numbers must be valid SolarHub format with correct check digits.
+    """
+    from ...domain.entities.telemetry import DeviceType
+
+    device_repo = DeviceRegistryRepository(session)
+    service = DeviceService(device_repo, None)
+
+    try:
+        # Validate serial number format and check digits
+        serial_service = get_serial_number_service()
+        is_valid, error = serial_service.validate(request.serial_number)
+
+        if not is_valid:
+            logger.warning(f"Invalid serial number: {request.serial_number} - {error}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid serial number: {error}",
+            )
+
+        # Get normalized serial number
+        normalized_serial = request.serial_number.upper().replace("-", "").replace(" ", "")
+
+        # Convert device_type string to DeviceType enum
+        try:
+            device_type_enum = DeviceType(request.device_type.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid device_type: {request.device_type}. Must be one of: inverter, battery, meter",
+            )
+
+        # Register orphan device (or reconnect existing)
+        device = await service.register_orphan_device(
+            serial_number=normalized_serial,
+            device_type=device_type_enum,
+            firmware_version=request.firmware_version,
+            manufacturer=request.manufacturer,
+            protocol=request.protocol,
+            capabilities=request.capabilities,
+            model=request.model,
+        )
+
+        # Determine if this was a new registration or reconnection
+        is_reconnect = device.reconnect_count > 1
+        message = "Device reconnected" if is_reconnect else "Device registered successfully"
+
+        logger.info(f"Device self-registered: {request.serial_number} (id: {device.device_id}, reconnect: {is_reconnect})")
+
+        return DeviceSelfRegisterResponse(
+            status="success",
+            device_id=device.device_id,
+            message=message,
+            polling_interval_ms=device.polling_interval_seconds * 1000,
+            is_claimed=device.is_claimed(),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Failed to self-register device: {e}\n{error_details}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Device self-registration failed: {str(e)}",
+        )
+
+
+@router.get(
+    "/serial/{serial_number}",
+    response_model=DeviceFullResponse,
+    summary="Get device by serial number",
+    description="Get device details by serial number.",
+)
+async def get_device_by_serial(
+    serial_number: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> DeviceFullResponse:
+    """
+    Get device by serial number.
+
+    Used by System A to check device status before claiming.
+    """
+    device_repo = DeviceRegistryRepository(session)
+    device = await device_repo.get_by_serial_number(serial_number)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found. Please ensure your device is powered on and connected.",
+        )
+
+    return device_to_full_response(device)
+
+
+@router.put(
+    "/{device_id}/claim",
+    response_model=DeviceClaimResponse,
+    summary="Claim an orphan device",
+    description="Claim an orphan device for a user. Called by System A during user registration or device claim.",
+)
+async def claim_device(
+    device_id: UUID,
+    request: DeviceClaimRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> DeviceClaimResponse:
+    """
+    Claim an orphan device for a user.
+
+    This is called by System A when:
+    1. A user registers with a device serial number
+    2. A user claims a device after registration
+    """
+    device_repo = DeviceRegistryRepository(session)
+    service = DeviceService(device_repo, None)
+
+    try:
+        device = await service.claim_device(
+            device_id=device_id,
+            owner_id=request.owner_id,
+            site_id=request.site_id,
+            organization_id=request.organization_id,
+        )
+
+        if not device:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Device not found",
+            )
+
+        logger.info(f"Device {device_id} claimed by user {request.owner_id}")
+
+        return DeviceClaimResponse(
+            success=True,
+            message="Device claimed successfully",
+            device=device_to_full_response(device),
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to claim device: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Device claim failed: {str(e)}",
+        )
+
+
+@router.put(
+    "/{device_id}/release",
+    response_model=DeviceClaimResponse,
+    summary="Release a claimed device",
+    description="Release a claimed device (make it orphan again).",
+)
+async def release_device(
+    device_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+) -> DeviceClaimResponse:
+    """
+    Release a claimed device (make it orphan again).
+
+    This removes the device from the user's account.
+    """
+    device_repo = DeviceRegistryRepository(session)
+    service = DeviceService(device_repo, None)
+
+    device = await service.release_device(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    logger.info(f"Device {device_id} released")
+
+    return DeviceClaimResponse(
+        success=True,
+        message="Device released successfully",
+        device=device_to_full_response(device),
+    )
+
+
+@router.get(
+    "/orphan",
+    response_model=List[DeviceFullResponse],
+    summary="Get all orphan devices",
+    description="Get all orphan devices (not yet claimed by any user).",
+)
+async def get_orphan_devices(
+    session: AsyncSession = Depends(get_db_session),
+) -> List[DeviceFullResponse]:
+    """
+    Get all orphan devices.
+
+    Used for admin purposes to see devices that haven't been claimed.
+    """
+    device_repo = DeviceRegistryRepository(session)
+    service = DeviceService(device_repo, None)
+
+    devices = await service.get_orphan_devices()
+
+    return [device_to_full_response(d) for d in devices]
 
 
 @router.post(
@@ -528,4 +792,153 @@ async def generate_device_token(
         device_id=device_id,
         token=token,
         expires_in_days=expires_in_days,
+    )
+
+
+# ============================================================================
+# Serial Number API Endpoints
+# ============================================================================
+
+
+@router.post(
+    "/serial/generate",
+    response_model=SerialNumberGenerateResponse,
+    summary="Generate serial numbers",
+    description="Generate new serial numbers with check digits for devices.",
+)
+async def generate_serial_numbers(
+    request: SerialNumberGenerateRequest,
+) -> SerialNumberGenerateResponse:
+    """
+    Generate serial numbers for new devices.
+
+    Serial number format: MMHH-TTNN-NNNN-NNCC (16 characters)
+    - MM: Manufacturer code (SH for SolarHub)
+    - HH: Hardware revision (01, 02, etc.)
+    - TT: Device type code (IN=inverter, BT=battery, MT=meter, GW=gateway)
+    - NNNNNNNN: Random alphanumeric (8 chars)
+    - CC: Check digits (2 chars)
+    """
+    serial_service = get_serial_number_service()
+
+    serial_numbers = serial_service.generate(
+        device_type=request.device_type,
+        hardware_revision=request.hardware_revision,
+        count=request.count,
+    )
+
+    formatted = [serial_service.format_display(sn) for sn in serial_numbers]
+
+    # Get the device type code for the response
+    from ...application.services.serial_number_service import DEVICE_TYPE_TO_CODE, DeviceTypeCode
+    device_type_code = DEVICE_TYPE_TO_CODE.get(
+        request.device_type.lower(),
+        DeviceTypeCode.OTHER
+    ).value
+
+    return SerialNumberGenerateResponse(
+        serial_numbers=serial_numbers,
+        formatted=formatted,
+        count=len(serial_numbers),
+        device_type=device_type_code,
+    )
+
+
+@router.post(
+    "/serial/validate",
+    response_model=SerialNumberValidateResponse,
+    summary="Validate a serial number",
+    description="Validate a serial number and extract its components.",
+)
+async def validate_serial_number(
+    request: SerialNumberValidateRequest,
+) -> SerialNumberValidateResponse:
+    """
+    Validate a serial number.
+
+    Returns validation result and parsed components if valid.
+    """
+    serial_service = get_serial_number_service()
+
+    is_valid, error = serial_service.validate(request.serial_number)
+
+    if is_valid:
+        info = serial_service.parse(request.serial_number)
+        return SerialNumberValidateResponse(
+            serial_number=info.serial_number,
+            is_valid=True,
+            error=None,
+            formatted=serial_service.format_display(info.serial_number),
+            manufacturer_code=info.manufacturer_code,
+            hardware_revision=info.hardware_revision,
+            device_type_code=info.device_type_code,
+            device_type=info.device_type,
+        )
+    else:
+        # Normalize serial for response
+        normalized = request.serial_number.upper().replace("-", "").replace(" ", "")
+        return SerialNumberValidateResponse(
+            serial_number=normalized,
+            is_valid=False,
+            error=error,
+            formatted=None,
+            manufacturer_code=None,
+            hardware_revision=None,
+            device_type_code=None,
+            device_type=None,
+        )
+
+
+@router.post(
+    "/serial/validate/batch",
+    response_model=SerialNumberBatchValidateResponse,
+    summary="Validate multiple serial numbers",
+    description="Validate a batch of serial numbers.",
+)
+async def validate_serial_numbers_batch(
+    request: SerialNumberBatchValidateRequest,
+) -> SerialNumberBatchValidateResponse:
+    """
+    Validate multiple serial numbers in a single request.
+    """
+    serial_service = get_serial_number_service()
+
+    results = []
+    valid_count = 0
+    invalid_count = 0
+
+    for serial in request.serial_numbers:
+        is_valid, error = serial_service.validate(serial)
+
+        if is_valid:
+            info = serial_service.parse(serial)
+            results.append(SerialNumberValidateResponse(
+                serial_number=info.serial_number,
+                is_valid=True,
+                error=None,
+                formatted=serial_service.format_display(info.serial_number),
+                manufacturer_code=info.manufacturer_code,
+                hardware_revision=info.hardware_revision,
+                device_type_code=info.device_type_code,
+                device_type=info.device_type,
+            ))
+            valid_count += 1
+        else:
+            normalized = serial.upper().replace("-", "").replace(" ", "")
+            results.append(SerialNumberValidateResponse(
+                serial_number=normalized,
+                is_valid=False,
+                error=error,
+                formatted=None,
+                manufacturer_code=None,
+                hardware_revision=None,
+                device_type_code=None,
+                device_type=None,
+            ))
+            invalid_count += 1
+
+    return SerialNumberBatchValidateResponse(
+        results=results,
+        valid_count=valid_count,
+        invalid_count=invalid_count,
     )
