@@ -122,8 +122,7 @@ class AuthService:
         user.add_domain_event(UserCreated(
             user_id=user.id,
             email=user.email,
-            first_name=user.first_name,
-            last_name=user.last_name,
+            role=user.role.value,
         ))
 
         # Save user
