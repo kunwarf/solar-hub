@@ -119,6 +119,33 @@ class StorageSettings(BaseSettings):
     buffer_max_size: int = Field(default=10000, description="Maximum buffer size before force flush")
 
 
+class RedisCacheSettings(BaseSettings):
+    """Redis cache configuration for real-time telemetry sharing with System A."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="REDIS_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    host: str = Field(default="localhost", description="Redis host")
+    port: int = Field(default=6379, description="Redis port")
+    db: int = Field(default=0, description="Redis database (shared with System A)")
+    password: Optional[str] = Field(default=None, description="Redis password")
+    ssl: bool = Field(default=False, description="Use SSL connection")
+
+    # Cache TTL settings (in seconds)
+    telemetry_ttl: int = Field(default=120, description="TTL for telemetry cache (2 minutes)")
+    status_ttl: int = Field(default=120, description="TTL for device status cache (2 minutes)")
+
+    @property
+    def url(self) -> str:
+        """Build Redis URL."""
+        auth = f":{self.password}@" if self.password else ""
+        protocol = "rediss" if self.ssl else "redis"
+        return f"{protocol}://{auth}{self.host}:{self.port}/{self.db}"
+
+
 class DeviceServerSettings(BaseSettings):
     """Main configuration for Device Server."""
 
@@ -150,6 +177,7 @@ class DeviceServerSettings(BaseSettings):
     polling: PollingSettings = Field(default_factory=PollingSettings)
     system_a: SystemAClientSettings = Field(default_factory=SystemAClientSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    redis: RedisCacheSettings = Field(default_factory=RedisCacheSettings)
 
     @property
     def protocols_file(self) -> Path:

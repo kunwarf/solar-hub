@@ -90,7 +90,7 @@ export const API_ENDPOINTS = {
     status: (id: string) => `/devices/${id}/status`,
   },
 
-  // Dashboards
+  // Dashboards (legacy - organization/site focused)
   dashboards: {
     overview: '/dashboards/overview',
     organization: '/dashboards/organization',
@@ -98,6 +98,19 @@ export const API_ENDPOINTS = {
     sitePower: (siteId: string) => `/dashboards/site/${siteId}/power`,
     siteEnergy: (siteId: string) => `/dashboards/site/${siteId}/energy`,
     comparison: (siteId: string) => `/dashboards/site/${siteId}/comparison`,
+  },
+
+  // Dashboard Widgets (new - device/serial focused, reads from Redis cache)
+  dashboard: {
+    powerFlow: '/dashboard/power-flow',
+    stats: '/dashboard/stats',
+    battery: '/dashboard/battery',
+    deviceStatus: '/dashboard/device-status',
+    alerts: '/dashboard/alerts',
+    environmental: '/dashboard/environmental',
+    energyChart: '/dashboard/energy-chart',
+    billing: '/dashboard/billing',
+    all: '/dashboard/all',
   },
 
   // Billing

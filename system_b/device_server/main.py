@@ -26,6 +26,7 @@ from .devices.device_state import DeviceStatus
 from .polling.scheduler import PollingScheduler
 from .storage.timescale_writer import TimescaleWriter
 from .storage.system_a_client import SystemAClient
+from .storage.redis_cache import TelemetryCacheWriter
 
 # Configure logging
 logging.basicConfig(
@@ -68,6 +69,7 @@ class DeviceServer:
         self.polling_scheduler: Optional[PollingScheduler] = None
         self.timescale_writer: Optional[TimescaleWriter] = None
         self.system_a_client: Optional[SystemAClient] = None
+        self.redis_cache: Optional[TelemetryCacheWriter] = None
 
         # State
         self._running = False
@@ -108,9 +110,11 @@ class DeviceServer:
         # Initialize storage
         self.timescale_writer = TimescaleWriter(self.settings)
         self.system_a_client = SystemAClient(self.settings)
+        self.redis_cache = TelemetryCacheWriter(self.settings)
 
         await self.timescale_writer.connect()
         await self.system_a_client.connect()
+        await self.redis_cache.connect()
 
         # Start polling scheduler
         await self.polling_scheduler.start()
@@ -155,6 +159,9 @@ class DeviceServer:
 
         if self.system_a_client:
             await self.system_a_client.disconnect()
+
+        if self.redis_cache:
+            await self.redis_cache.disconnect()
 
         logger.info("Device Server stopped")
 
@@ -269,11 +276,17 @@ class DeviceServer:
         telemetry: dict,
     ) -> None:
         """Handle collected telemetry."""
-        # Write to TimescaleDB
+        # Write to TimescaleDB for historical storage
         if self.timescale_writer:
             await self.timescale_writer.write(device_id, telemetry.copy())
 
-        # Update System A snapshot
+        # Write to Redis cache for real-time access by System A
+        # Use serial number as the universal identifier
+        serial_number = telemetry.get("_serial_number")
+        if self.redis_cache and serial_number:
+            await self.redis_cache.write_telemetry(serial_number, telemetry.copy())
+
+        # Update System A snapshot (legacy - will be removed after full migration)
         if self.system_a_client:
             await self.system_a_client.update_device_snapshot(
                 device_id, telemetry.copy()
@@ -285,6 +298,11 @@ class DeviceServer:
         device_state,
     ) -> None:
         """Handle device going offline due to poll failures."""
+        # Update Redis cache with offline status
+        if self.redis_cache and device_state and device_state.serial_number:
+            await self.redis_cache.write_status(device_state.serial_number, "offline")
+
+        # Update System A (legacy)
         if self.system_a_client:
             await self.system_a_client.update_device_status(
                 device_id,

@@ -9,6 +9,7 @@ from .organizations import router as organizations_router
 from .sites import router as sites_router
 from .devices import router as devices_router
 from .dashboards import router as dashboards_router
+from .dashboard_widgets import router as dashboard_widgets_router
 from .alerts import router as alerts_router
 from .billing import router as billing_router
 from .protocol_definitions import router as protocol_definitions_router
@@ -24,6 +25,7 @@ api_router.include_router(organizations_router)
 api_router.include_router(sites_router)
 api_router.include_router(devices_router)
 api_router.include_router(dashboards_router)
+api_router.include_router(dashboard_widgets_router)
 api_router.include_router(alerts_router)
 api_router.include_router(billing_router)
 api_router.include_router(protocol_definitions_router)

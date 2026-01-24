@@ -15,6 +15,177 @@ import type {
   PowerSnapshot,
 } from '../types';
 
+// New widget API response types (from Redis cache)
+// Each response includes site context and per-device breakdown
+
+// Per-device breakdown types
+export interface DevicePowerData {
+  serial_number: string;
+  pv_power_w: number;
+  grid_power_w: number;
+  load_power_w: number;
+  battery_power_w: number;
+  battery_soc_pct: number;
+  is_charging: boolean;
+  online: boolean;
+}
+
+export interface DeviceStatsData {
+  serial_number: string;
+  energy_today_kwh: number;
+  peak_power_kw: number;
+  online: boolean;
+}
+
+export interface DeviceBatteryData {
+  serial_number: string;
+  soc_pct: number;
+  power_w: number;
+  is_charging: boolean;
+  online: boolean;
+}
+
+export interface DeviceStatusItem {
+  serial_number: string;
+  status: string;
+  last_seen: number | null;
+  working_mode: string | null;
+  faults: string[];
+  warnings: string[];
+  online: boolean;
+}
+
+// Site-level response types with aggregated data
+export interface PowerFlowData {
+  // Context
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+  timestamp: string | null;
+
+  // Aggregated power (sum of all devices)
+  pv_power_w: number;
+  grid_power_w: number;
+  load_power_w: number;
+  battery_power_w: number;
+  battery_soc_pct: number;  // Average across devices
+  is_charging: boolean;
+  grid_connected: boolean;
+
+  // Status
+  online: boolean;
+  stale: boolean;
+  devices_online: number;
+  devices_total: number;
+
+  // Per-device breakdown
+  devices: DevicePowerData[];
+}
+
+export interface StatsData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+
+  // Aggregated stats (sum of all devices)
+  energy_today_kwh: number;
+  energy_month_kwh: number;
+  peak_power_kw: number;
+  co2_saved_kg: number;
+  online: boolean;
+  devices_online: number;
+  devices_total: number;
+
+  // Per-device breakdown
+  devices: DeviceStatsData[];
+}
+
+export interface BatteryStatusData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+
+  // Aggregated battery stats
+  avg_soc_pct: number;
+  total_power_w: number;
+  is_charging: boolean;
+  online: boolean;
+  devices_online: number;
+  devices_total: number;
+
+  // Per-device breakdown
+  devices: DeviceBatteryData[];
+}
+
+export interface DeviceStatusData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+
+  // Site-level status summary
+  devices_online: number;
+  devices_offline: number;
+  devices_total: number;
+  total_faults: number;
+  total_warnings: number;
+  grid_connected: boolean;
+
+  // Per-device breakdown
+  devices: DeviceStatusItem[];
+}
+
+export interface AlertItem {
+  id: string;
+  serial_number: string;
+  severity: string;
+  message: string;
+  timestamp: string;
+}
+
+export interface AlertsData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+
+  // Site-level alerts (aggregated from all devices)
+  active_alerts: AlertItem[];
+  total_count: number;
+  critical_count: number;
+}
+
+export interface EnvironmentalData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+
+  // Site-level environmental impact (sum of all devices)
+  co2_avoided_kg: number;
+  trees_equivalent: number;
+  coal_avoided_kg: number;
+}
+
+export interface BillingData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+
+  // Site-level billing (sum of all devices)
+  estimated_savings_today: number;
+  estimated_savings_month: number;
+  grid_import_cost: number;
+  grid_export_credit: number;
+}
+
+export interface AllWidgetsData {
+  power_flow: PowerFlowData;
+  stats: StatsData;
+  battery: BatteryStatusData;
+  device_status: DeviceStatusData;
+  alerts: AlertsData;
+  environmental: EnvironmentalData;
+  billing: BillingData;
+}
+
 // Mock dashboard data
 const mockDashboardOverview: DashboardOverview = {
   organization_id: 'mock-org-1',
@@ -342,6 +513,293 @@ class DashboardService {
     const connected = await checkApiHealth();
     const latency = Date.now() - start;
     return { connected, latency: connected ? latency : undefined };
+  }
+
+  // =========================================================================
+  // New Widget APIs (read from Redis cache via System A)
+  // Site-level aggregation with per-device breakdown
+  // =========================================================================
+
+  /**
+   * Get real-time power flow data from Redis cache
+   * Returns aggregated data for all devices in the site
+   */
+  async getPowerFlow(siteId?: string): Promise<PowerFlowData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<PowerFlowData>(
+        API_ENDPOINTS.dashboard.powerFlow,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch power flow, using mock:', error);
+      const mock = generateMockPowerSnapshot();
+      return {
+        organization_id: 'mock-org',
+        site_id: siteId || 'mock-site',
+        site_name: 'My Home',
+        timestamp: new Date().toISOString(),
+        pv_power_w: mock.solar_power_kw * 1000,
+        grid_power_w: mock.grid_power_kw * 1000,
+        load_power_w: mock.consumption_kw * 1000,
+        battery_power_w: mock.battery_power_kw * 1000,
+        battery_soc_pct: mock.battery_soc,
+        is_charging: mock.battery_power_kw < 0,
+        grid_connected: true,
+        online: true,
+        stale: false,
+        devices_online: 1,
+        devices_total: 1,
+        devices: [{
+          serial_number: 'mock-device',
+          pv_power_w: mock.solar_power_kw * 1000,
+          grid_power_w: mock.grid_power_kw * 1000,
+          load_power_w: mock.consumption_kw * 1000,
+          battery_power_w: mock.battery_power_kw * 1000,
+          battery_soc_pct: mock.battery_soc,
+          is_charging: mock.battery_power_kw < 0,
+          online: true,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Get statistics data for stats cards
+   * Returns aggregated stats for all devices in the site
+   */
+  async getStats(siteId?: string): Promise<StatsData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<StatsData>(
+        API_ENDPOINTS.dashboard.stats,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch stats, using mock:', error);
+      return {
+        organization_id: 'mock-org',
+        site_id: siteId || 'mock-site',
+        site_name: 'My Home',
+        energy_today_kwh: 28.5,
+        energy_month_kwh: 856.2,
+        peak_power_kw: 5.2,
+        co2_saved_kg: 13.5,
+        online: true,
+        devices_online: 1,
+        devices_total: 1,
+        devices: [{
+          serial_number: 'mock-device',
+          energy_today_kwh: 28.5,
+          peak_power_kw: 5.2,
+          online: true,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Get battery status
+   * Returns aggregated battery stats for all devices in the site
+   */
+  async getBatteryStatus(siteId?: string): Promise<BatteryStatusData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<BatteryStatusData>(
+        API_ENDPOINTS.dashboard.battery,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch battery status, using mock:', error);
+      return {
+        organization_id: 'mock-org',
+        site_id: siteId || 'mock-site',
+        site_name: 'My Home',
+        avg_soc_pct: 75,
+        total_power_w: 800,
+        is_charging: true,
+        online: true,
+        devices_online: 1,
+        devices_total: 1,
+        devices: [{
+          serial_number: 'mock-device',
+          soc_pct: 75,
+          power_w: 800,
+          is_charging: true,
+          online: true,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Get device status
+   * Returns status of all devices in the site
+   */
+  async getDeviceStatus(siteId?: string): Promise<DeviceStatusData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<DeviceStatusData>(
+        API_ENDPOINTS.dashboard.deviceStatus,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch device status, using mock:', error);
+      return {
+        organization_id: 'mock-org',
+        site_id: siteId || 'mock-site',
+        site_name: 'My Home',
+        devices_online: 1,
+        devices_offline: 0,
+        devices_total: 1,
+        total_faults: 0,
+        total_warnings: 0,
+        grid_connected: true,
+        devices: [{
+          serial_number: 'mock-device',
+          status: 'online',
+          last_seen: Math.floor(Date.now() / 1000),
+          working_mode: 'auto',
+          faults: [],
+          warnings: [],
+          online: true,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Get active alerts
+   * Returns alerts from all devices in the site
+   */
+  async getAlerts(siteId?: string): Promise<AlertsData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<AlertsData>(
+        API_ENDPOINTS.dashboard.alerts,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch alerts, using mock:', error);
+      return {
+        organization_id: 'mock-org',
+        site_id: siteId || 'mock-site',
+        site_name: 'My Home',
+        active_alerts: [],
+        total_count: 0,
+        critical_count: 0,
+      };
+    }
+  }
+
+  /**
+   * Get environmental impact data
+   * Returns aggregated environmental impact for all devices in the site
+   */
+  async getEnvironmental(siteId?: string): Promise<EnvironmentalData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<EnvironmentalData>(
+        API_ENDPOINTS.dashboard.environmental,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch environmental data, using mock:', error);
+      return {
+        organization_id: 'mock-org',
+        site_id: siteId || 'mock-site',
+        site_name: 'My Home',
+        co2_avoided_kg: 13.5,
+        trees_equivalent: 0.6,
+        coal_avoided_kg: 11.4,
+      };
+    }
+  }
+
+  /**
+   * Get billing summary
+   * Returns aggregated billing for all devices in the site
+   */
+  async getBilling(siteId?: string): Promise<BillingData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<BillingData>(
+        API_ENDPOINTS.dashboard.billing,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch billing data, using mock:', error);
+      return {
+        organization_id: 'mock-org',
+        site_id: siteId || 'mock-site',
+        site_name: 'My Home',
+        estimated_savings_today: 712,
+        estimated_savings_month: 21360,
+        grid_import_cost: 93,
+        grid_export_credit: 279,
+      };
+    }
+  }
+
+  /**
+   * Get all widget data in a single request (for initial load)
+   * Returns aggregated data for all devices in the site with per-device breakdown
+   */
+  async getAllWidgets(siteId?: string): Promise<AllWidgetsData> {
+    try {
+      const params: Record<string, string> = {};
+      if (siteId) params.site_id = siteId;
+
+      const response = await apiClient.get<AllWidgetsData>(
+        API_ENDPOINTS.dashboard.all,
+        { params }
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch all widgets, fetching individually:', error);
+      // Fallback to individual fetches
+      const [powerFlow, stats, battery, deviceStatus, alerts, environmental, billing] =
+        await Promise.all([
+          this.getPowerFlow(siteId),
+          this.getStats(siteId),
+          this.getBatteryStatus(siteId),
+          this.getDeviceStatus(siteId),
+          this.getAlerts(siteId),
+          this.getEnvironmental(siteId),
+          this.getBilling(siteId),
+        ]);
+
+      return {
+        power_flow: powerFlow,
+        stats,
+        battery,
+        device_status: deviceStatus,
+        alerts,
+        environmental,
+        billing,
+      };
+    }
   }
 }
 

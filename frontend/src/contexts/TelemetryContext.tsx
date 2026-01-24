@@ -15,7 +15,7 @@ import React, {
   useEffect,
 } from 'react';
 import { useWebSocket, ConnectionStatus } from '@/hooks/use-websocket';
-import { dashboardService, PowerSnapshot } from '@/api';
+import { dashboardService, PowerSnapshot, PowerFlowData } from '@/api';
 
 export interface TelemetryData {
   timestamp: string;
@@ -47,7 +47,7 @@ interface TelemetryContextType {
   refresh: () => Promise<void>;
 }
 
-// Convert API PowerSnapshot to TelemetryData
+// Convert API PowerSnapshot to TelemetryData (legacy)
 function powerSnapshotToTelemetry(snapshot: PowerSnapshot): TelemetryData {
   return {
     timestamp: snapshot.timestamp,
@@ -58,6 +58,21 @@ function powerSnapshotToTelemetry(snapshot: PowerSnapshot): TelemetryData {
     consumption: snapshot.consumption_kw,
     gridPower: Math.abs(snapshot.grid_power_kw),
     isGridExporting: snapshot.is_exporting,
+  };
+}
+
+// Convert PowerFlowData (from Redis cache) to TelemetryData
+// Now uses site-level aggregated data
+function powerFlowToTelemetry(data: PowerFlowData): TelemetryData {
+  return {
+    timestamp: data.timestamp || new Date().toISOString(),
+    solarPower: data.pv_power_w / 1000,  // Convert W to kW
+    batteryPower: Math.abs(data.battery_power_w) / 1000,
+    batteryLevel: data.battery_soc_pct,
+    isCharging: data.is_charging,
+    consumption: data.load_power_w / 1000,
+    gridPower: Math.abs(data.grid_power_w) / 1000,
+    isGridExporting: data.grid_power_w < 0,
   };
 }
 
@@ -94,7 +109,24 @@ export const TelemetryProvider = ({
   });
 
   // Fetch telemetry via HTTP (polling fallback)
+  // Uses new widget API (reads from Redis cache) with fallback to legacy API
   const fetchTelemetry = useCallback(async () => {
+    try {
+      // Try new widget API first (reads from Redis cache)
+      // Uses site-level aggregated data from all devices
+      const powerFlow = await dashboardService.getPowerFlow(siteId);
+      if (powerFlow.online) {
+        const telemetryData = powerFlowToTelemetry(powerFlow);
+        setTelemetry(telemetryData);
+        setLastUpdated(new Date());
+        setDataReceivedAt(Date.now());
+        return;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch from widget API, trying legacy:', error);
+    }
+
+    // Fallback to legacy API
     try {
       const snapshot = await dashboardService.getCurrentPower(siteId);
       const telemetryData = powerSnapshotToTelemetry(snapshot);
