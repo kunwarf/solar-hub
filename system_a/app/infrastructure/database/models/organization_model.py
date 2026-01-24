@@ -9,7 +9,7 @@ from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import relationship
 
-from .base import BaseModel, TimestampMixin, UUIDMixin, Base
+from .base import BaseModel, TimestampMixin, UUIDMixin, VersionMixin, Base
 from ....domain.entities.organization import (
     Organization, OrganizationMember, OrganizationSettings,
     OrganizationStatus, MembershipStatus
@@ -17,7 +17,7 @@ from ....domain.entities.organization import (
 from ....domain.entities.user import UserRole
 
 
-class OrganizationMemberModel(Base, UUIDMixin, TimestampMixin):
+class OrganizationMemberModel(Base, UUIDMixin, TimestampMixin, VersionMixin):
     """SQLAlchemy model for organization_members table."""
 
     __tablename__ = 'organization_members'
