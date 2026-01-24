@@ -93,8 +93,13 @@ async def register(
             detail=result.error,
         )
 
-    # Send verification email (non-blocking, don't fail registration if email fails)
-    await auth_service.send_verification_email(result.user)
+    # Send verification email only if user needs verification
+    # (Skip if user is already active - email verification is currently disabled)
+    if not result.user.is_verified:
+        try:
+            await auth_service.send_verification_email(result.user)
+        except Exception:
+            pass  # Non-blocking, don't fail registration if email fails
 
     # Build response
     user_response = UserResponse(
