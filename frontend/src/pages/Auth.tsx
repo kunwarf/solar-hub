@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, Eye, EyeOff, Loader2, Cpu } from 'lucide-react';
+import { Zap, Eye, EyeOff, Loader2, Cpu, AlertCircle } from 'lucide-react';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -16,7 +17,8 @@ const Auth = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
+  const [error, setError] = useState<string | null>(null);
+
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -31,20 +33,17 @@ const Auth = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setError(null);
+
     if (!loginEmail || !loginPassword) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all fields',
-        variant: 'destructive',
-      });
+      setError('Please fill in all fields');
       return;
     }
-    
+
     setIsLoading(true);
     const result = await login(loginEmail, loginPassword);
     setIsLoading(false);
-    
+
     if (result.success) {
       toast({
         title: 'Welcome back!',
@@ -52,6 +51,7 @@ const Auth = () => {
       });
       navigate('/');
     } else {
+      setError(result.error || 'Login failed. Please check your credentials.');
       toast({
         title: 'Login failed',
         description: result.error,
@@ -62,31 +62,20 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
     if (!signupEmail || !signupPassword || !firstName || !lastName) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all fields',
-        variant: 'destructive',
-      });
+      setError('Please fill in all required fields');
       return;
     }
 
     if (signupPassword !== signupConfirmPassword) {
-      toast({
-        title: 'Error',
-        description: 'Passwords do not match',
-        variant: 'destructive',
-      });
+      setError('Passwords do not match');
       return;
     }
 
     if (signupPassword.length < 8) {
-      toast({
-        title: 'Error',
-        description: 'Password must be at least 8 characters',
-        variant: 'destructive',
-      });
+      setError('Password must be at least 8 characters');
       return;
     }
 
@@ -115,6 +104,7 @@ const Auth = () => {
       });
       navigate('/');
     } else {
+      setError(result.error || 'Registration failed. Please try again.');
       toast({
         title: 'Signup failed',
         description: result.error,
@@ -135,7 +125,7 @@ const Auth = () => {
         </div>
         
         <Card className="border-border/50 shadow-xl">
-          <Tabs defaultValue="login" className="w-full">
+          <Tabs defaultValue="login" className="w-full" onValueChange={() => setError(null)}>
             <CardHeader className="pb-4">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
@@ -151,7 +141,14 @@ const Auth = () => {
                   <CardDescription>
                     Enter your credentials to access your dashboard
                   </CardDescription>
-                  
+
+                  {error && (
+                    <Alert variant="destructive" className="mt-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+
                   <form onSubmit={handleLogin} className="space-y-4 mt-4">
                     <div className="space-y-2">
                       <Label htmlFor="login-email">Email</Label>
@@ -217,7 +214,14 @@ const Auth = () => {
                   <CardDescription>
                     Enter your details to get started
                   </CardDescription>
-                  
+
+                  {error && (
+                    <Alert variant="destructive" className="mt-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+
                   <form onSubmit={handleSignup} className="space-y-4 mt-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
