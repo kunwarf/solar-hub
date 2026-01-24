@@ -13,7 +13,8 @@ export const API_CONFIG = {
   wsUrl: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws',
 
   // Enable mock mode when API is unavailable
-  useMockFallback: import.meta.env.VITE_USE_MOCK_FALLBACK === 'true' || true,
+  // Default to true in development if env var is not set
+  useMockFallback: import.meta.env.VITE_USE_MOCK_FALLBACK !== 'false',
 
   // Request timeout in milliseconds
   timeout: 30000,
@@ -139,6 +140,22 @@ export const API_ENDPOINTS = {
     scanHost: '/discovery/scan-host',
     scanStatus: (id: string) => `/discovery/scans/${id}/status`,
     scanResults: (id: string) => `/discovery/scans/${id}/results`,
+  },
+};
+
+// System B API Configuration (Telemetry/Device Server)
+export const SYSTEM_B_CONFIG = {
+  baseUrl: import.meta.env.VITE_SYSTEM_B_API_URL || 'http://localhost:8001/api/v1',
+};
+
+// System B API Endpoints
+export const SYSTEM_B_ENDPOINTS = {
+  devices: {
+    bySerial: (serial: string) => `/devices/serial/${serial}`,
+    claim: (deviceId: string) => `/devices/${deviceId}/claim`,
+    release: (deviceId: string) => `/devices/${deviceId}/release`,
+    orphans: '/devices/orphan',
+    validateSerial: '/devices/serial/validate',
   },
 };
 

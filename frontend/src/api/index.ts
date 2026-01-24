@@ -5,7 +5,7 @@
  */
 
 // Configuration
-export { API_CONFIG, API_ENDPOINTS } from './config';
+export { API_CONFIG, API_ENDPOINTS, SYSTEM_B_CONFIG, SYSTEM_B_ENDPOINTS } from './config';
 
 // Client
 export { default as apiClient, tokenStorage, checkApiHealth } from './client';

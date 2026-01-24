@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState, SearchSuggestions } from "@/components/ui/empty-state";
-import { Plus, Search, Filter, HardHat, Activity, Settings, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, Search, Filter, HardHat, Activity, Settings, RefreshCw, Loader2, QrCode } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useUserRole } from "@/contexts/UserRoleContext";
 import { SwipeableItem } from "@/components/mobile/SwipeableItem";
@@ -123,6 +123,15 @@ const DevicesPage = () => {
               <Button className="w-full sm:w-auto gap-2" onClick={() => navigate("/devices/manage")}>
                 <Plus className="w-4 h-4" />
                 <span className="sm:inline">Add Device</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto gap-2"
+                onClick={() => navigate("/devices/claim")}
+              >
+                <QrCode className="w-4 h-4" />
+                <span className="sm:inline">Claim Device</span>
               </Button>
               
               {showCommissioning && (

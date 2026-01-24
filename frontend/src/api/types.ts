@@ -540,3 +540,45 @@ export interface ApiErrorResponse {
 }
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+// ============================================================================
+// Orphan Device & Device Claiming (System B)
+// ============================================================================
+
+export interface OrphanDevice {
+  id: string;
+  serial_number: string;
+  device_type: string;
+  manufacturer?: string;
+  model?: string;
+  firmware_version?: string;
+  protocol?: string;
+  status: 'orphan' | 'claimed';
+  owner_id?: string;
+  site_id?: string;
+  organization_id?: string;
+  connection_status: string;
+  last_connected_at?: string;
+  last_telemetry_at?: string;
+  capabilities?: Record<string, unknown>;
+  polling_interval_seconds: number;
+  created_at: string;
+}
+
+export interface ClaimDeviceRequest {
+  owner_id: string;
+  site_id: string;
+  organization_id: string;
+}
+
+export interface ClaimDeviceResponse {
+  success: boolean;
+  message: string;
+  device?: OrphanDevice;
+}
+
+export interface DeviceLookupResult {
+  found: boolean;
+  device?: OrphanDevice;
+  error?: string;
+}

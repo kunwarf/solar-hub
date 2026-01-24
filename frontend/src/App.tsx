@@ -33,6 +33,7 @@ import Savings from "./pages/Savings";
 import UserManagement from "./pages/UserManagement";
 import Commissioning from "./pages/Commissioning";
 import Install from "./pages/Install";
+import ClaimDevice from "./pages/ClaimDevice";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -76,6 +77,7 @@ const App = () => (
                               <Route path="/outages" element={<ProtectedRoute><Outages /></ProtectedRoute>} />
                               <Route path="/savings" element={<ProtectedRoute><Savings /></ProtectedRoute>} />
                               <Route path="/commissioning" element={<ProtectedRoute><Commissioning /></ProtectedRoute>} />
+                              <Route path="/devices/claim" element={<ProtectedRoute><ClaimDevice /></ProtectedRoute>} />
                               <Route path="/install" element={<Install />} />
                               <Route path="*" element={<NotFound />} />
                             </Routes>

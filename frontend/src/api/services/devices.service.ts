@@ -6,7 +6,8 @@
  */
 
 import apiClient, { checkApiHealth } from '../client';
-import { API_CONFIG, API_ENDPOINTS } from '../config';
+import axios from 'axios';
+import { API_CONFIG, API_ENDPOINTS, SYSTEM_B_CONFIG, SYSTEM_B_ENDPOINTS } from '../config';
 import type {
   Device,
   DeviceType,
@@ -15,6 +16,10 @@ import type {
   DeviceCommand,
   PaginatedResponse,
   PaginationParams,
+  OrphanDevice,
+  ClaimDeviceRequest,
+  ClaimDeviceResponse,
+  DeviceLookupResult,
 } from '../types';
 
 // Mock devices data
@@ -448,6 +453,115 @@ class DevicesService {
     }
 
     return null;
+  }
+
+  // ============================================================================
+  // System B Device Claiming Methods
+  // ============================================================================
+
+  /**
+   * Look up a device by serial number from System B
+   */
+  async getDeviceBySerial(serialNumber: string): Promise<DeviceLookupResult> {
+    try {
+      const response = await axios.get<OrphanDevice>(
+        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.bySerial(serialNumber)}`
+      );
+      return {
+        found: true,
+        device: response.data,
+      };
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: { detail?: string } } };
+      if (axiosError.response?.status === 404) {
+        return {
+          found: false,
+          error: 'Device not found. Please ensure your device is powered on and connected.',
+        };
+      }
+      return {
+        found: false,
+        error: axiosError.response?.data?.detail || 'Failed to look up device',
+      };
+    }
+  }
+
+  /**
+   * Claim an orphan device for a user
+   */
+  async claimDevice(
+    deviceId: string,
+    request: ClaimDeviceRequest
+  ): Promise<ClaimDeviceResponse> {
+    try {
+      const response = await axios.put<ClaimDeviceResponse>(
+        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.claim(deviceId)}`,
+        request
+      );
+      return response.data;
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      return {
+        success: false,
+        message: axiosError.response?.data?.detail || 'Failed to claim device',
+      };
+    }
+  }
+
+  /**
+   * Release a claimed device (make it orphan again)
+   */
+  async releaseDevice(deviceId: string): Promise<ClaimDeviceResponse> {
+    try {
+      const response = await axios.put<ClaimDeviceResponse>(
+        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.release(deviceId)}`
+      );
+      return response.data;
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      return {
+        success: false,
+        message: axiosError.response?.data?.detail || 'Failed to release device',
+      };
+    }
+  }
+
+  /**
+   * Get all orphan devices (admin only)
+   */
+  async getOrphanDevices(): Promise<OrphanDevice[]> {
+    try {
+      const response = await axios.get<OrphanDevice[]>(
+        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.orphans}`
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch orphan devices:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Validate a serial number format
+   */
+  async validateSerial(serialNumber: string): Promise<{ is_valid: boolean; error?: string; device_type?: string }> {
+    try {
+      const response = await axios.post<{
+        is_valid: boolean;
+        error?: string;
+        device_type?: string;
+      }>(
+        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.validateSerial}`,
+        { serial_number: serialNumber }
+      );
+      return response.data;
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      return {
+        is_valid: false,
+        error: axiosError.response?.data?.detail || 'Validation failed',
+      };
+    }
   }
 }
 

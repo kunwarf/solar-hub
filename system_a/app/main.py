@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     # Startup
     print(f"Starting {settings.app_name} v{settings.app_version}")
     print(f"Environment: {settings.environment}")
+    print(f"CORS allowed origins: {settings.cors.allowed_origins}")
 
     # Initialize database
     try:
