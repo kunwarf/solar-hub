@@ -357,17 +357,34 @@ async def update_device_snapshot(
 ):
     """
     Update device telemetry snapshot from System B.
-    
+
     This endpoint is called by System B to push latest device telemetry.
     It does not require authentication as it uses API key authentication
     via the System A client in System B.
     """
+    import logging
+    logger = logging.getLogger("system_a")
+
     device = await uow.devices.get_by_id(device_id)
 
+    # If not found by ID, try to find by serial number from snapshot
     if not device:
+        serial_number = request.snapshot.get('device_serial_number')
+        if serial_number:
+            device = await uow.devices.get_by_serial_number(str(serial_number))
+            if device:
+                logger.info(f"Device found by serial number {serial_number} (ID mismatch: {device_id})")
+
+    if not device:
+        serial_number = request.snapshot.get('device_serial_number', 'unknown')
+        logger.warning(
+            f"Device not found in System A. "
+            f"ID: {device_id}, Serial: {serial_number}. "
+            f"User needs to register and claim this device first."
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found",
+            detail=f"Device not found. Serial: {serial_number}. Please register and claim this device first.",
         )
 
     # Parse timestamp if provided
