@@ -17,10 +17,16 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+export interface ValidationErrorDetail {
+  field: string;
+  message: string;
+  type: string;
+}
+
 export interface ApiError {
   error: string;
   message: string;
-  details?: Record<string, unknown>;
+  details?: ValidationErrorDetail[] | Record<string, unknown>;
 }
 
 export interface TokenPair {
@@ -158,10 +164,32 @@ apiClient.interceptors.response.use(
     }
 
     // Format error response
-    const apiError: ApiError = error.response?.data || {
-      error: 'NETWORK_ERROR',
-      message: error.message || 'Network error occurred',
-    };
+    const responseData = error.response?.data;
+    let apiError: ApiError;
+
+    if (responseData) {
+      apiError = responseData;
+
+      // If this is a validation error with details, format a user-friendly message
+      if (responseData.error === 'VALIDATION_ERROR' && Array.isArray(responseData.details)) {
+        const details = responseData.details as ValidationErrorDetail[];
+        if (details.length > 0) {
+          // Create a message from the first error detail for better UX
+          const firstError = details[0];
+          apiError.message = firstError.message;
+
+          // If there are multiple errors, append count
+          if (details.length > 1) {
+            apiError.message += ` (and ${details.length - 1} more issue${details.length > 2 ? 's' : ''})`;
+          }
+        }
+      }
+    } else {
+      apiError = {
+        error: 'NETWORK_ERROR',
+        message: error.message || 'Network error occurred',
+      };
+    }
 
     return Promise.reject(apiError);
   }
