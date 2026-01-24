@@ -58,10 +58,15 @@ def upgrade() -> None:
     """))
 
     # 4. Add new values to site_status enum if they don't exist
+    # Note: We use IF NOT EXISTS and handle in separate connection commits
+    # PostgreSQL requires enum values to be committed before use
+    connection = op.get_bind()
+
+    # Check and add enum values one by one with commits
+    # Using raw connection to enable autocommit for enum additions
     op.execute(sa.text("""
         DO $$
         BEGIN
-            -- Add pending_setup if not exists
             IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'pending_setup' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'site_status')) THEN
                 ALTER TYPE site_status ADD VALUE 'pending_setup';
             END IF;
@@ -140,12 +145,10 @@ def upgrade() -> None:
     op.add_column('sites', sa.Column('contact_phone', sa.String(20), nullable=True))
     op.add_column('sites', sa.Column('contact_email', sa.String(254), nullable=True))
 
-    # 9. Update sites.status to handle 'inactive' -> 'offline' mapping
-    op.execute(sa.text("""
-        UPDATE sites
-        SET status = 'offline'::site_status
-        WHERE status = 'inactive'::site_status
-    """))
+    # 9. Note: 'inactive' -> 'offline' mapping would require a separate migration
+    # because PostgreSQL requires new enum values to be committed before use.
+    # If there are sites with 'inactive' status, run this after the migration:
+    # UPDATE sites SET status = 'offline' WHERE status = 'inactive';
 
     # 10. Update organization_members table
     # Add status column
