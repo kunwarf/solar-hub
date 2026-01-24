@@ -8,13 +8,16 @@ This is the main backend for:
 - Billing simulation
 - AI-powered analytics
 """
+import json
 import logging
 import sys
+import time
 import traceback
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -32,6 +35,117 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 logger = logging.getLogger("system_a")
+
+
+class RequestLoggingMiddleware:
+    """Middleware to log request details including body."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
+        path = request.url.path
+
+        # Skip logging for health checks and static files
+        if path in ["/health", "/", "/docs", "/openapi.json", "/redoc"]:
+            await self.app(scope, receive, send)
+            return
+
+        # Capture request details
+        start_time = time.time()
+        client_ip = request.client.host if request.client else "unknown"
+        method = request.method
+        query_params = dict(request.query_params)
+
+        # Read body and create a new receive function that returns cached body
+        body = b""
+        body_for_log = None
+
+        async def receive_wrapper():
+            nonlocal body
+            message = await receive()
+            if message["type"] == "http.request":
+                body = message.get("body", b"")
+            return message
+
+        # For methods with body, read it first
+        if method in ["POST", "PUT", "PATCH"]:
+            # Consume the body
+            chunks = []
+            while True:
+                message = await receive()
+                chunk = message.get("body", b"")
+                chunks.append(chunk)
+                if not message.get("more_body", False):
+                    break
+            body = b"".join(chunks)
+
+            if body:
+                try:
+                    body_for_log = json.loads(body.decode("utf-8"))
+                    if isinstance(body_for_log, dict):
+                        body_for_log = mask_sensitive_fields(body_for_log.copy())
+                except json.JSONDecodeError:
+                    body_for_log = body.decode("utf-8")[:500]
+
+            # Store body in scope for later access
+            scope["_body"] = body
+
+            # Create new receive that returns cached body
+            body_sent = False
+
+            async def cached_receive():
+                nonlocal body_sent
+                if not body_sent:
+                    body_sent = True
+                    return {"type": "http.request", "body": body, "more_body": False}
+                return {"type": "http.request", "body": b"", "more_body": False}
+
+            receive = cached_receive
+
+        # Log request
+        logger.info("=" * 60)
+        logger.info(f"REQUEST: {method} {path}")
+        logger.info(f"Client: {client_ip}")
+        if query_params:
+            logger.info(f"Query params: {query_params}")
+        if body_for_log:
+            logger.info(f"Request body: {json.dumps(body_for_log, indent=2, default=str)}")
+
+        # Track response status
+        response_status = [None]
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                response_status[0] = message["status"]
+            await send(message)
+
+        # Process request
+        await self.app(scope, receive, send_wrapper)
+
+        # Log response
+        duration = time.time() - start_time
+        status_code = response_status[0] or "unknown"
+        logger.info(f"RESPONSE: {status_code} ({duration:.3f}s)")
+        logger.info("=" * 60)
+
+
+def mask_sensitive_fields(data: dict) -> dict:
+    """Mask sensitive fields in request data for logging."""
+    sensitive_fields = ["password", "password_hash", "token", "secret", "api_key", "credit_card"]
+    for field in sensitive_fields:
+        if field in data:
+            data[field] = "***MASKED***"
+        # Check nested with common patterns
+        for key in list(data.keys()):
+            if any(s in key.lower() for s in sensitive_fields):
+                data[key] = "***MASKED***"
+    return data
 
 
 @asynccontextmanager
@@ -91,6 +205,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Add request logging middleware (raw ASGI middleware for proper body caching)
+    app.add_middleware(RequestLoggingMiddleware)
+
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
@@ -118,6 +235,61 @@ def register_exception_handlers(app: FastAPI) -> None:
         ValidationException,
         AuthorizationException,
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_handler(request: Request, exc: RequestValidationError):
+        """Handle Pydantic validation errors with detailed logging."""
+        errors = exc.errors()
+
+        # Log detailed validation errors
+        logger.error("=" * 60)
+        logger.error(f"VALIDATION ERROR on {request.method} {request.url.path}")
+        logger.error(f"Client: {request.client.host if request.client else 'unknown'}")
+
+        # Try to get cached body from scope (set by middleware)
+        cached_body = request.scope.get("_body")
+        if cached_body:
+            try:
+                body_json = json.loads(cached_body.decode("utf-8"))
+                masked_body = mask_sensitive_fields(body_json.copy()) if isinstance(body_json, dict) else body_json
+                logger.error(f"Request body received: {json.dumps(masked_body, indent=2, default=str)}")
+            except:
+                logger.error(f"Request body (raw): {cached_body.decode('utf-8')[:1000]}")
+
+        logger.error(f"Validation errors ({len(errors)} total):")
+        for i, error in enumerate(errors, 1):
+            field_path = " -> ".join(str(loc) for loc in error.get("loc", []))
+            error_type = error.get("type", "unknown")
+            error_msg = error.get("msg", "no message")
+            error_input = error.get("input", "N/A")
+
+            logger.error(f"  [{i}] Field: {field_path}")
+            logger.error(f"      Type: {error_type}")
+            logger.error(f"      Message: {error_msg}")
+            if "password" not in str(field_path).lower():
+                logger.error(f"      Input value: {error_input}")
+            else:
+                logger.error(f"      Input value: ***MASKED***")
+        logger.error("=" * 60)
+
+        # Return user-friendly error response
+        formatted_errors = []
+        for error in errors:
+            field_path = ".".join(str(loc) for loc in error.get("loc", []) if loc != "body")
+            formatted_errors.append({
+                "field": field_path,
+                "message": error.get("msg", "Validation error"),
+                "type": error.get("type", "unknown"),
+            })
+
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "error": "VALIDATION_ERROR",
+                "message": "Request validation failed",
+                "details": formatted_errors,
+            },
+        )
 
     @app.exception_handler(DomainException)
     async def domain_exception_handler(request: Request, exc: DomainException):
