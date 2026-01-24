@@ -3,6 +3,7 @@
  *
  * Provides real-time telemetry data via WebSocket with HTTP polling fallback.
  * Integrates with the backend dashboard service.
+ * Only polls when user is authenticated to avoid 401 spam.
  */
 
 import React, {
@@ -13,9 +14,11 @@ import React, {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
 } from 'react';
 import { useWebSocket, ConnectionStatus } from '@/hooks/use-websocket';
 import { dashboardService, PowerSnapshot, PowerFlowData } from '@/api';
+import { useAuth } from '@/hooks/use-auth';
 
 export interface TelemetryData {
   timestamp: string;
@@ -89,10 +92,13 @@ export const TelemetryProvider = ({
   siteId,
   pollingInterval = 5000,
 }: TelemetryProviderProps) => {
+  const { isAuthenticated } = useAuth();
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [dataReceivedAt, setDataReceivedAt] = useState<number | null>(null);
   const [usePolling, setUsePolling] = useState(false);
+  const [authError, setAuthError] = useState(false);
+  const fetchCountRef = useRef(0);
 
   // Handle WebSocket messages
   const handleMessage = useCallback((data: TelemetryData) => {
@@ -100,17 +106,23 @@ export const TelemetryProvider = ({
     setLastUpdated(new Date());
     setDataReceivedAt(Date.now());
     setUsePolling(false); // WebSocket is working
+    setAuthError(false);
   }, []);
 
-  // WebSocket connection
+  // WebSocket connection - only enable when authenticated
   const { status, reconnect, retryCount, nextRetryIn } = useWebSocket({
     onMessage: handleMessage,
-    enabled: true,
+    enabled: isAuthenticated && !authError,
   });
 
   // Fetch telemetry via HTTP (polling fallback)
   // Uses new widget API (reads from Redis cache) with fallback to legacy API
   const fetchTelemetry = useCallback(async () => {
+    // Don't fetch if not authenticated or if we've had auth errors
+    if (!isAuthenticated || authError) {
+      return;
+    }
+
     try {
       // Try new widget API first (reads from Redis cache)
       // Uses site-level aggregated data from all devices
@@ -120,9 +132,17 @@ export const TelemetryProvider = ({
         setTelemetry(telemetryData);
         setLastUpdated(new Date());
         setDataReceivedAt(Date.now());
+        setAuthError(false);
+        fetchCountRef.current = 0;
         return;
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Check for 401 Unauthorized - stop polling
+      if (error?.response?.status === 401 || error?.status === 401) {
+        console.warn('Authentication error, stopping telemetry polling');
+        setAuthError(true);
+        return;
+      }
       console.warn('Failed to fetch from widget API, trying legacy:', error);
     }
 
@@ -133,25 +153,53 @@ export const TelemetryProvider = ({
       setTelemetry(telemetryData);
       setLastUpdated(new Date());
       setDataReceivedAt(Date.now());
-    } catch (error) {
+      setAuthError(false);
+      fetchCountRef.current = 0;
+    } catch (error: any) {
+      // Check for 401 Unauthorized - stop polling
+      if (error?.response?.status === 401 || error?.status === 401) {
+        console.warn('Authentication error, stopping telemetry polling');
+        setAuthError(true);
+        return;
+      }
       console.warn('Failed to fetch telemetry:', error);
+      // Increment fetch count and stop if too many failures
+      fetchCountRef.current += 1;
+      if (fetchCountRef.current > 5) {
+        console.warn('Too many fetch failures, pausing telemetry');
+        setAuthError(true);
+      }
     }
-  }, [siteId]);
+  }, [siteId, isAuthenticated, authError]);
 
   // Manual refresh
   const refresh = useCallback(async () => {
+    setAuthError(false); // Reset auth error on manual refresh
+    fetchCountRef.current = 0;
     await fetchTelemetry();
   }, [fetchTelemetry]);
 
+  // Reset auth error when authentication state changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      setAuthError(false);
+      fetchCountRef.current = 0;
+    }
+  }, [isAuthenticated]);
+
   // Switch to polling if WebSocket fails after several retries
   useEffect(() => {
-    if (status === 'error' && retryCount >= 3) {
+    if (status === 'error' && retryCount >= 3 && isAuthenticated && !authError) {
       setUsePolling(true);
     }
-  }, [status, retryCount]);
+  }, [status, retryCount, isAuthenticated, authError]);
 
-  // Polling fallback
+  // Polling fallback - only when authenticated and no auth errors
   useEffect(() => {
+    if (!isAuthenticated || authError) {
+      return;
+    }
+
     if (usePolling || status === 'error') {
       // Initial fetch
       fetchTelemetry();
@@ -160,14 +208,14 @@ export const TelemetryProvider = ({
       const interval = setInterval(fetchTelemetry, pollingInterval);
       return () => clearInterval(interval);
     }
-  }, [usePolling, status, fetchTelemetry, pollingInterval]);
+  }, [usePolling, status, fetchTelemetry, pollingInterval, isAuthenticated, authError]);
 
-  // Initial telemetry fetch (even if WebSocket is connecting)
+  // Initial telemetry fetch (only when authenticated)
   useEffect(() => {
-    if (!telemetry) {
+    if (!telemetry && isAuthenticated && !authError) {
       fetchTelemetry();
     }
-  }, [fetchTelemetry, telemetry]);
+  }, [fetchTelemetry, telemetry, isAuthenticated, authError]);
 
   const isLive = (status === 'connected' || usePolling) && telemetry !== null;
 
