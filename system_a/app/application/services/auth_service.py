@@ -112,7 +112,7 @@ class AuthService:
             password_hash=password_hash,
             first_name=request.first_name.strip(),
             last_name=request.last_name.strip(),
-            status=UserStatus.PENDING_VERIFICATION,
+            status=UserStatus.PENDING,
             role=UserRole.VIEWER,  # Default role
             preferences=UserPreferences(),
         )
