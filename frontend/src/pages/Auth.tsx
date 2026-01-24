@@ -79,6 +79,24 @@ const Auth = () => {
       return;
     }
 
+    // Check password complexity
+    if (!/[A-Z]/.test(signupPassword)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(signupPassword)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(signupPassword)) {
+      setError('Password must contain at least one digit');
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(signupPassword)) {
+      setError('Password must contain at least one special character (!@#$%^&*...)');
+      return;
+    }
+
     setIsLoading(true);
     const result = await signup(
       signupEmail,
@@ -283,6 +301,9 @@ const Auth = () => {
                           )}
                         </Button>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        Must include uppercase, lowercase, number, and special character (!@#$%...)
+                      </p>
                     </div>
                     
                     <div className="space-y-2">
