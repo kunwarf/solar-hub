@@ -47,6 +47,18 @@ def upgrade() -> None:
         END $$;
     """))
 
+    # 2b. Add super_admin to org_member_role enum if not exists
+    op.execute(sa.text("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'super_admin' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'org_member_role')) THEN
+                ALTER TYPE org_member_role ADD VALUE 'super_admin';
+            END IF;
+        EXCEPTION
+            WHEN duplicate_object THEN NULL;
+        END $$;
+    """))
+
     # 3. Create site_type enum
     op.execute(sa.text("""
         DO $$

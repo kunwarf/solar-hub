@@ -35,7 +35,7 @@ class OrganizationMemberModel(Base, UUIDMixin, TimestampMixin):
         index=True
     )
     role = Column(
-        Enum(UserRole, name='user_role', values_callable=lambda e: [x.value for x in e]),
+        Enum(UserRole, name='org_member_role', values_callable=lambda e: [x.value for x in e]),
         nullable=False
     )
     status = Column(
