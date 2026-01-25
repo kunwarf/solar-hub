@@ -1,10 +1,13 @@
 """
 Authentication API endpoints.
 """
+import logging
 from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+logger = logging.getLogger(__name__)
 
 from ..dependencies import (
     get_auth_service,
@@ -476,25 +479,34 @@ async def claim_device(
     The device must be in 'orphan' state (not already claimed).
     Device will be attached to the specified site.
     """
+    logger.info("=== DEVICE CLAIM REQUEST ===")
+    logger.info("Serial: %s, Site ID: %s, User: %s", serial_number, site_id, current_user.id)
+
     # Get user's organizations
     orgs = await uow.organizations.get_by_owner_id(current_user.id)
+    logger.info("User organizations: %s", [str(o.id) for o in orgs] if orgs else "None")
     if not orgs:
+        logger.warning("User has no organization")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User has no organization. Please contact support.",
         )
 
     organization = orgs[0]
+    logger.info("Using organization: %s", organization.id)
 
     # Verify site belongs to user's organization
     site = await uow.sites.get_by_id(site_id)
+    logger.info("Site lookup: %s, org_id: %s", site.id if site else "None", site.organization_id if site else "None")
     if not site or site.organization_id != organization.id:
+        logger.warning("Site not found or doesn't belong to org")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Site not found or does not belong to your organization.",
         )
 
     # Claim the device
+    logger.info("Calling claim_device_for_user...")
     device, error = await registration_service.claim_device_for_user(
         user_id=current_user.id,
         site_id=site_id,
@@ -503,11 +515,13 @@ async def claim_device(
     )
 
     if error:
+        logger.warning("Claim failed: %s", error)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error,
         )
 
+    logger.info("=== DEVICE CLAIM SUCCESS: %s ===", device.serial_number)
     return DeviceClaimResponse(
         id=device.id,
         serial_number=device.serial_number,
@@ -533,7 +547,12 @@ async def get_available_devices(
 
     Returns all devices that are in 'orphan' state and can be claimed.
     """
+    logger.info("=== GET AVAILABLE DEVICES REQUEST ===")
+    logger.info("User: %s", current_user.id)
     devices = await registration_service.get_orphan_devices()
+    logger.info("Found %d orphan devices", len(devices))
+    for d in devices:
+        logger.info("  Device: %s (%s)", d.serial_number, d.device_type)
 
     return [
         DeviceClaimResponse(

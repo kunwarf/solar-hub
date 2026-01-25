@@ -113,9 +113,13 @@ class SystemBClient:
         """
         try:
             client = await self._get_client()
-            response = await client.get(f"/api/v1/devices/serial/{serial_number}")
+            url = f"/api/v1/devices/serial/{serial_number}"
+            logger.info("System B request: GET %s%s", self._base_url, url)
+            response = await client.get(url)
+            logger.info("System B response: status=%d, body=%s", response.status_code, response.text[:500] if response.text else "empty")
 
             if response.status_code == 404:
+                logger.warning("Device not found in System B: %s", serial_number)
                 return None
 
             response.raise_for_status()
@@ -173,14 +177,15 @@ class SystemBClient:
         """
         try:
             client = await self._get_client()
-            response = await client.put(
-                f"/api/v1/devices/{device_id}/claim",
-                json={
-                    "owner_id": str(owner_id),
-                    "site_id": str(site_id),
-                    "organization_id": str(organization_id),
-                }
-            )
+            url = f"/api/v1/devices/{device_id}/claim"
+            payload = {
+                "owner_id": str(owner_id),
+                "site_id": str(site_id),
+                "organization_id": str(organization_id),
+            }
+            logger.info("System B request: PUT %s%s, payload=%s", self._base_url, url, payload)
+            response = await client.put(url, json=payload)
+            logger.info("System B response: status=%d, body=%s", response.status_code, response.text[:500] if response.text else "empty")
 
             if response.status_code == 404:
                 raise DeviceNotFoundError("Device not found", status_code=404)
@@ -284,7 +289,10 @@ class SystemBClient:
         """
         try:
             client = await self._get_client()
-            response = await client.get("/api/v1/devices/orphan")
+            url = "/api/v1/devices/orphan"
+            logger.info("System B request: GET %s%s", self._base_url, url)
+            response = await client.get(url)
+            logger.info("System B response: status=%d, body=%s", response.status_code, response.text[:500] if response.text else "empty")
             response.raise_for_status()
             data = response.json()
 
@@ -329,5 +337,6 @@ def get_system_b_client() -> SystemBClient:
         import os
         base_url = os.getenv("SYSTEM_B_URL", "http://localhost:8001")
         api_key = os.getenv("SYSTEM_B_API_KEY")
+        logger.info("Creating System B client with base_url=%s", base_url)
         _system_b_client = SystemBClient(base_url=base_url, api_key=api_key)
     return _system_b_client
