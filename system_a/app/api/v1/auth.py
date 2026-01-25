@@ -194,10 +194,10 @@ async def login(
     return AuthResponse(
         user=UserResponse(
             id=result.user.id,
-            email=result.user.email,
+            email=str(result.user.email),
             first_name=result.user.first_name,
             last_name=result.user.last_name,
-            phone=result.user.phone,
+            phone=str(result.user.phone) if result.user.phone else None,
             role=result.user.role.value,
             status=result.user.status.value,
             is_verified=result.user.is_verified,
@@ -263,10 +263,10 @@ async def get_current_user_profile(
     """
     return UserResponse(
         id=current_user.id,
-        email=current_user.email,
+        email=str(current_user.email),
         first_name=current_user.first_name,
         last_name=current_user.last_name,
-        phone=current_user.phone,
+        phone=str(current_user.phone) if current_user.phone else None,
         role=current_user.role.value,
         status=current_user.status.value,
         is_verified=current_user.is_verified,
