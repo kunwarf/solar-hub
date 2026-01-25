@@ -101,11 +101,52 @@ def map_disco_provider(disco: Optional[str]) -> Optional[DiscoProvider]:
 
 def site_to_response(site: Site) -> SiteResponse:
     """Convert Site domain entity to response schema."""
+    # Handle optional geo_location
+    geo_location = site.geo_location
+    geo_location_schema = GeoLocationSchema(
+        latitude=geo_location.latitude if geo_location else 0.0,
+        longitude=geo_location.longitude if geo_location else 0.0,
+    )
+
+    # Handle optional configuration
+    config = site.configuration
+    if config:
+        config_schema = SiteConfigurationSchema(
+            system_capacity_kw=config.system_capacity_kw,
+            panel_count=config.panel_count,
+            panel_wattage=config.panel_wattage,
+            inverter_capacity_kw=config.inverter_capacity_kw,
+            inverter_count=config.inverter_count,
+            battery_capacity_kwh=config.battery_capacity_kwh,
+            battery_count=config.battery_count,
+            grid_connection_type=config.grid_connection_type.value,
+            net_metering_enabled=config.net_metering_enabled,
+            disco_provider=config.disco_provider.value if config.disco_provider else None,
+            tariff_category=config.tariff_category,
+            reference_number=config.reference_number,
+        )
+    else:
+        # Default configuration for sites without one
+        config_schema = SiteConfigurationSchema(
+            system_capacity_kw=0.0,
+            panel_count=0,
+            panel_wattage=0,
+            inverter_capacity_kw=0.0,
+            inverter_count=0,
+            battery_capacity_kwh=None,
+            battery_count=None,
+            grid_connection_type="grid_tied",
+            net_metering_enabled=False,
+            disco_provider=None,
+            tariff_category=None,
+            reference_number=None,
+        )
+
     return SiteResponse(
         id=site.id,
         organization_id=site.organization_id,
         name=site.name,
-        description=site.description,
+        description=site.notes,  # Use notes as description
         address=AddressSchema(
             street=site.address.street,
             city=site.address.city,
@@ -113,28 +154,12 @@ def site_to_response(site: Site) -> SiteResponse:
             postal_code=site.address.postal_code,
             country=site.address.country,
         ),
-        geo_location=GeoLocationSchema(
-            latitude=site.geo_location.latitude,
-            longitude=site.geo_location.longitude,
-        ),
+        geo_location=geo_location_schema,
         timezone=site.timezone,
         status=site.status.value,
         site_type=site.site_type.value,
-        configuration=SiteConfigurationSchema(
-            system_capacity_kw=site.configuration.system_capacity_kw,
-            panel_count=site.configuration.panel_count,
-            panel_wattage=site.configuration.panel_wattage,
-            inverter_capacity_kw=site.configuration.inverter_capacity_kw,
-            inverter_count=site.configuration.inverter_count,
-            battery_capacity_kwh=site.configuration.battery_capacity_kwh,
-            battery_count=site.configuration.battery_count,
-            grid_connection_type=site.configuration.grid_connection_type.value,
-            net_metering_enabled=site.configuration.net_metering_enabled,
-            disco_provider=site.configuration.disco_provider.value if site.configuration.disco_provider else None,
-            tariff_category=site.configuration.tariff_category,
-            reference_number=site.configuration.reference_number,
-        ),
-        commissioned_at=site.commissioned_at,
+        configuration=config_schema,
+        commissioned_at=None,  # Site doesn't track this currently
         created_at=site.created_at,
         updated_at=site.updated_at,
     )
