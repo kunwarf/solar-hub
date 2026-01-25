@@ -135,9 +135,9 @@ def site_to_response(site: Site) -> SiteResponse:
         name=site.name,
         description=site.notes,  # Use notes as description
         address=AddressSchema(
-            street=site.address.street,
+            street=site.address.street_address,
             city=site.address.city,
-            state=site.address.state,
+            state=site.address.province,
             postal_code=site.address.postal_code,
             country=site.address.country,
         ),
