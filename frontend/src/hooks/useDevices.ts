@@ -23,6 +23,19 @@ interface UseDevicesOptions {
   refreshInterval?: number;
 }
 
+// Type for device formatted for UI components
+export interface DeviceForUI {
+  id: string;
+  name: string;
+  type: DeviceType;
+  status: DeviceStatus;
+  model: string;
+  serialNumber: string;
+  value: string;
+  unit: string;
+  metrics: Array<{ label: string; value: string; unit: string }>;
+}
+
 interface UseDevicesReturn {
   devices: Device[];
   total: number;
@@ -183,7 +196,7 @@ export function useDeviceCommand() {
 /**
  * Convert API Device format to the format expected by UI components
  */
-export function formatDeviceForUI(device: Device) {
+export function formatDeviceForUI(device: Device): DeviceForUI {
   const metrics: Array<{ label: string; value: string; unit: string }> = [];
 
   if (device.latest_metrics) {
