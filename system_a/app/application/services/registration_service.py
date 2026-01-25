@@ -337,16 +337,8 @@ class RegistrationService:
                     # Check if device already exists in System A
                     existing_device = await uow.devices.get_by_serial_number(device_serial)
                     if not existing_device:
-                        # Create default connection config
-                        connection_config = ConnectionConfig(
-                            protocol=self._map_protocol_type(claimed_info.protocol),
-                            host=None,  # Will be configured later
-                            port=502 if claimed_info.protocol == 'modbus_tcp' else None,
-                            polling_interval_seconds=60,
-                            timeout_seconds=10,
-                        )
-
                         # Create device in System A
+                        # Connection is managed by System B, so we don't need connection_config
                         device = Device(
                             id=claimed_info.id,  # Use same ID as System B
                             site_id=site_id,
@@ -358,7 +350,7 @@ class RegistrationService:
                             serial_number=claimed_info.serial_number,
                             firmware_version=claimed_info.firmware_version,
                             status=DeviceStatus.ONLINE if claimed_info.connection_status == "connected" else DeviceStatus.PENDING,
-                            connection_config=connection_config,
+                            connection_config=None,  # Connection managed by System B
                         )
 
                         await uow.devices.add(device)

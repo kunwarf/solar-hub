@@ -117,6 +117,11 @@ async def check_site_access(
 
 def device_to_response(device: Device) -> DeviceResponse:
     """Convert Device domain entity to response schema."""
+    # Get protocol from connection_config if available, otherwise default
+    protocol = "modbus_tcp"
+    if device.connection_config:
+        protocol = device.connection_config.protocol.value
+
     return DeviceResponse(
         id=device.id,
         site_id=device.site_id,
@@ -126,9 +131,9 @@ def device_to_response(device: Device) -> DeviceResponse:
         model=device.model,
         serial_number=device.serial_number,
         name=device.name,
-        description=device.description,
+        description=None,  # Device entity doesn't have description
         status=device.status.value,
-        protocol=device.protocol.value,
+        protocol=protocol,
         firmware_version=device.firmware_version,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
