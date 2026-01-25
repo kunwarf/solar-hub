@@ -213,7 +213,6 @@ class AuthService:
         user.record_login_success()
         user.add_domain_event(UserLoggedIn(
             user_id=user.id,
-            email=user.email,
         ))
 
         await uow.users.update(user)
