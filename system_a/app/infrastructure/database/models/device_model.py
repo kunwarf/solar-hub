@@ -34,7 +34,7 @@ class DeviceModel(BaseModel):
         index=True
     )
     device_type = Column(
-        Enum(DeviceType, name='device_type'),
+        Enum(DeviceType, name='device_type', values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         index=True
     )
@@ -45,7 +45,7 @@ class DeviceModel(BaseModel):
     firmware_version = Column(String(50), nullable=True)
 
     status = Column(
-        Enum(DeviceStatus, name='device_status'),
+        Enum(DeviceStatus, name='device_status', values_callable=lambda x: [e.value for e in x]),
         default=DeviceStatus.PENDING,
         nullable=False,
         index=True
