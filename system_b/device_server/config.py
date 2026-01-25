@@ -146,6 +146,27 @@ class RedisCacheSettings(BaseSettings):
         return f"{protocol}://{auth}{self.host}:{self.port}/{self.db}"
 
 
+class DeviceRegistryDBSettings(BaseSettings):
+    """PostgreSQL settings for querying the device registry (System B's main DB)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="SYSTEM_B_DATABASE_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    host: str = Field(default="localhost", description="PostgreSQL host")
+    port: int = Field(default=5432, description="PostgreSQL port")
+    name: str = Field(default="solar_hub", description="Database name")
+    user: str = Field(default="postgres", description="Database user")
+    password: str = Field(default="postgres", description="Database password")
+
+    @property
+    def url(self) -> str:
+        """Build async PostgreSQL URL."""
+        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+
 class DeviceServerSettings(BaseSettings):
     """Main configuration for Device Server."""
 
@@ -178,6 +199,7 @@ class DeviceServerSettings(BaseSettings):
     system_a: SystemAClientSettings = Field(default_factory=SystemAClientSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     redis: RedisCacheSettings = Field(default_factory=RedisCacheSettings)
+    device_registry_db: DeviceRegistryDBSettings = Field(default_factory=DeviceRegistryDBSettings)
 
     @property
     def protocols_file(self) -> Path:

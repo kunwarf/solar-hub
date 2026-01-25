@@ -39,9 +39,13 @@ class DeviceState:
     """
     # Identity
     device_id: UUID
-    serial_number: str
+    serial_number: str  # Modbus-identified serial (inverter serial)
     protocol_id: str
     device_type: str
+
+    # Data logger serial (from self-registration, used for Redis caching)
+    # This is the serial printed on the device that users see
+    data_logger_serial: Optional[str] = None
 
     # Connection
     connection_id: UUID

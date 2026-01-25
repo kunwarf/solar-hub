@@ -27,6 +27,7 @@ from .polling.scheduler import PollingScheduler
 from .storage.timescale_writer import TimescaleWriter
 from .storage.system_a_client import SystemAClient
 from .storage.redis_cache import TelemetryCacheWriter
+from .storage.device_registry_client import DeviceRegistryClient
 
 # Configure logging
 logging.basicConfig(
@@ -70,6 +71,7 @@ class DeviceServer:
         self.timescale_writer: Optional[TimescaleWriter] = None
         self.system_a_client: Optional[SystemAClient] = None
         self.redis_cache: Optional[TelemetryCacheWriter] = None
+        self.device_registry_client: Optional[DeviceRegistryClient] = None
 
         # State
         self._running = False
@@ -111,10 +113,15 @@ class DeviceServer:
         self.timescale_writer = TimescaleWriter(self.settings)
         self.system_a_client = SystemAClient(self.settings)
         self.redis_cache = TelemetryCacheWriter(self.settings)
+        self.device_registry_client = DeviceRegistryClient(self.settings)
 
         await self.timescale_writer.connect()
         await self.system_a_client.connect()
         await self.redis_cache.connect()
+        try:
+            await self.device_registry_client.connect()
+        except Exception as e:
+            logger.warning(f"Device registry client connection failed: {e} - serial linking disabled")
 
         # Start polling scheduler
         await self.polling_scheduler.start()
@@ -162,6 +169,9 @@ class DeviceServer:
 
         if self.redis_cache:
             await self.redis_cache.disconnect()
+
+        if self.device_registry_client:
+            await self.device_registry_client.disconnect()
 
         logger.info("Device Server stopped")
 
@@ -230,6 +240,42 @@ class DeviceServer:
         device_state,
     ) -> None:
         """Handle device added."""
+        # Link Modbus-identified serial with data logger serial from self-registration
+        # This is critical for telemetry caching - we cache under the data logger serial
+        # which is what the user sees on the device and uses to claim it
+        if self.device_registry_client:
+            # First, check if this inverter serial is already linked to a data logger
+            data_logger_serial = await self.device_registry_client.get_device_by_inverter_serial(
+                device_state.serial_number
+            )
+
+            if not data_logger_serial:
+                # Look for a recently self-registered orphan device of the same type
+                data_logger_serial = await self.device_registry_client.get_recent_orphan_serial(
+                    device_type=device_state.device_type,
+                    within_minutes=10,
+                )
+
+                if data_logger_serial:
+                    # Link the inverter serial to this data logger for future lookups
+                    await self.device_registry_client.update_inverter_serial(
+                        data_logger_serial=data_logger_serial,
+                        inverter_serial=device_state.serial_number,
+                    )
+
+            if data_logger_serial:
+                logger.info(
+                    f"Linked device: data_logger={data_logger_serial}, "
+                    f"inverter={device_state.serial_number}"
+                )
+                # Store the data logger serial for telemetry caching
+                device_state.data_logger_serial = data_logger_serial
+            else:
+                logger.warning(
+                    f"No data logger serial found for inverter {device_state.serial_number}. "
+                    f"Telemetry will be cached under inverter serial."
+                )
+
         # Register with System A (if configured)
         if self.system_a_client:
             # Get site ID (could be based on IP or other logic)
@@ -267,9 +313,12 @@ class DeviceServer:
         """Handle device status change."""
         # Update Redis cache with new status
         device_state = self.device_manager.get_device(device_id)
-        if self.redis_cache and device_state and device_state.serial_number:
-            status_str = "online" if new_status == DeviceStatus.ONLINE else "offline"
-            await self.redis_cache.write_status(device_state.serial_number, status_str)
+        if self.redis_cache and device_state:
+            # Use data_logger_serial for Redis caching (matches System A lookups)
+            cache_serial = device_state.data_logger_serial or device_state.serial_number
+            if cache_serial:
+                status_str = "online" if new_status == DeviceStatus.ONLINE else "offline"
+                await self.redis_cache.write_status(cache_serial, status_str)
 
     async def _on_telemetry(
         self,
@@ -282,10 +331,22 @@ class DeviceServer:
             await self.timescale_writer.write(device_id, telemetry.copy())
 
         # Write to Redis cache for real-time access by System A
-        # Use serial number as the universal identifier
-        serial_number = telemetry.get("_serial_number")
-        if self.redis_cache and serial_number:
-            await self.redis_cache.write_telemetry(serial_number, telemetry.copy())
+        # Use data_logger_serial (the serial printed on the device that users see)
+        # for Redis caching, as this is what System A uses to look up telemetry
+        device_state = self.device_manager.get_device(device_id) if self.device_manager else None
+
+        # Prefer data_logger_serial (from self-registration), fall back to Modbus serial
+        if device_state and device_state.data_logger_serial:
+            cache_serial = device_state.data_logger_serial
+            logger.debug(
+                f"Caching telemetry under data logger serial: {cache_serial} "
+                f"(inverter serial: {device_state.serial_number})"
+            )
+        else:
+            cache_serial = telemetry.get("_serial_number")
+
+        if self.redis_cache and cache_serial:
+            await self.redis_cache.write_telemetry(cache_serial, telemetry.copy())
 
     async def _on_poll_device_offline(
         self,
@@ -294,8 +355,11 @@ class DeviceServer:
     ) -> None:
         """Handle device going offline due to poll failures."""
         # Update Redis cache with offline status
-        if self.redis_cache and device_state and device_state.serial_number:
-            await self.redis_cache.write_status(device_state.serial_number, "offline")
+        if self.redis_cache and device_state:
+            # Use data_logger_serial for Redis caching (matches System A lookups)
+            cache_serial = device_state.data_logger_serial or device_state.serial_number
+            if cache_serial:
+                await self.redis_cache.write_status(cache_serial, "offline")
 
     def get_stats(self) -> dict:
         """Get server statistics."""

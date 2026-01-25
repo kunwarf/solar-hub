@@ -1,0 +1,210 @@
+"""
+Device Registry Client for the Device Server.
+
+Provides async database access to query the device registry
+for linking Modbus-identified devices with self-registered data loggers.
+"""
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+from uuid import UUID
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+
+from ..config import DeviceServerSettings, get_device_server_settings
+
+logger = logging.getLogger(__name__)
+
+
+class DeviceRegistryClient:
+    """
+    Async client for querying the device registry database.
+
+    Used by the device server to link Modbus-identified devices
+    (with inverter serial) back to self-registered data loggers
+    (with data logger serial).
+    """
+
+    def __init__(self, settings: Optional[DeviceServerSettings] = None):
+        self.settings = settings or get_device_server_settings()
+        self._engine = None
+        self._session_factory = None
+
+    async def connect(self) -> None:
+        """Connect to the device registry database."""
+        db_url = self.settings.device_registry_db.url
+        logger.info(f"Connecting to device registry database at {self.settings.device_registry_db.host}")
+
+        self._engine = create_async_engine(
+            db_url,
+            echo=False,
+            pool_size=5,
+            max_overflow=10,
+        )
+
+        self._session_factory = sessionmaker(
+            self._engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+        # Test connection
+        try:
+            async with self._engine.begin():
+                pass
+            logger.info("Device registry database connected")
+        except Exception as e:
+            logger.error(f"Failed to connect to device registry database: {e}")
+            raise
+
+    async def disconnect(self) -> None:
+        """Disconnect from the database."""
+        if self._engine:
+            await self._engine.dispose()
+            logger.info("Device registry database disconnected")
+
+    async def get_recent_orphan_serial(
+        self,
+        device_type: str,
+        within_minutes: int = 10,
+    ) -> Optional[str]:
+        """
+        Find the data logger serial for a recently self-registered orphan device.
+
+        When a data logger connects via TCP and is identified via Modbus,
+        we need to find its original self-registration serial (printed on device)
+        to use for telemetry caching.
+
+        Args:
+            device_type: Device type from Modbus identification (e.g., "inverter").
+            within_minutes: Look for devices registered within this time window.
+
+        Returns:
+            The data logger serial number if found, None otherwise.
+        """
+        if not self._session_factory:
+            logger.warning("Device registry client not connected")
+            return None
+
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=within_minutes)
+
+        try:
+            async with self._session_factory() as session:
+                # Query for recent orphan device of matching type
+                # Uses raw SQL for simplicity (avoids importing models)
+                result = await session.execute(
+                    text("""
+                    SELECT serial_number
+                    FROM device_registry
+                    WHERE status = 'orphan'
+                      AND device_type = :device_type
+                      AND created_at >= :cutoff
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """),
+                    {"device_type": device_type, "cutoff": cutoff},
+                )
+                row = result.fetchone()
+
+                if row:
+                    serial = row[0]
+                    logger.info(f"Found data logger serial for {device_type}: {serial}")
+                    return serial
+
+                logger.debug(f"No recent orphan device found for type {device_type}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error querying device registry: {e}")
+            return None
+
+    async def update_inverter_serial(
+        self,
+        data_logger_serial: str,
+        inverter_serial: str,
+    ) -> bool:
+        """
+        Update device metadata with the Modbus-identified inverter serial.
+
+        Args:
+            data_logger_serial: The data logger serial (from self-registration).
+            inverter_serial: The inverter serial (from Modbus identification).
+
+        Returns:
+            True if updated, False otherwise.
+        """
+        if not self._session_factory:
+            logger.warning("Device registry client not connected")
+            return False
+
+        try:
+            async with self._session_factory() as session:
+                # Update metadata with inverter serial
+                result = await session.execute(
+                    text("""
+                    UPDATE device_registry
+                    SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('inverter_serial', :inverter_serial),
+                        updated_at = :now
+                    WHERE serial_number = :data_logger_serial
+                    """),
+                    {
+                        "data_logger_serial": data_logger_serial,
+                        "inverter_serial": inverter_serial,
+                        "now": datetime.now(timezone.utc),
+                    },
+                )
+                await session.commit()
+
+                if result.rowcount > 0:
+                    logger.info(
+                        f"Updated device {data_logger_serial} with inverter serial {inverter_serial}"
+                    )
+                    return True
+
+                return False
+
+        except Exception as e:
+            logger.error(f"Error updating device registry: {e}")
+            return False
+
+    async def get_device_by_inverter_serial(
+        self,
+        inverter_serial: str,
+    ) -> Optional[str]:
+        """
+        Find data logger serial by inverter serial.
+
+        Used when a device reconnects and we need to find its data logger serial.
+
+        Args:
+            inverter_serial: The Modbus-identified inverter serial.
+
+        Returns:
+            The data logger serial if found, None otherwise.
+        """
+        if not self._session_factory:
+            return None
+
+        try:
+            async with self._session_factory() as session:
+                result = await session.execute(
+                    text("""
+                    SELECT serial_number
+                    FROM device_registry
+                    WHERE metadata->>'inverter_serial' = :inverter_serial
+                    LIMIT 1
+                    """),
+                    {"inverter_serial": inverter_serial},
+                )
+                row = result.fetchone()
+
+                if row:
+                    return row[0]
+
+                return None
+
+        except Exception as e:
+            logger.error(f"Error querying by inverter serial: {e}")
+            return None

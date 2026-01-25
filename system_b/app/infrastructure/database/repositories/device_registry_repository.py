@@ -705,6 +705,75 @@ class DeviceRegistryRepository:
 
         return [self._model_to_entity(m) for m in models]
 
+    async def get_recent_orphan_by_type(
+        self,
+        device_type: str,
+        within_minutes: int = 10,
+    ) -> Optional[DeviceRegistry]:
+        """
+        Get most recently registered orphan device of a specific type.
+
+        This is used to match a TCP connection (with Modbus-identified serial)
+        back to the device that self-registered via HTTP (with data logger serial).
+
+        Args:
+            device_type: Device type to match (e.g., "inverter").
+            within_minutes: Consider devices registered within this many minutes.
+
+        Returns:
+            Most recent orphan DeviceRegistry if found, None otherwise.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=within_minutes)
+
+        query = (
+            select(DeviceRegistryModel)
+            .where(
+                and_(
+                    DeviceRegistryModel.status == DeviceStatus.ORPHAN,
+                    DeviceRegistryModel.device_type == device_type,
+                    DeviceRegistryModel.created_at >= cutoff,
+                )
+            )
+            .order_by(DeviceRegistryModel.created_at.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(query)
+        model = result.scalar_one_or_none()
+
+        return self._model_to_entity(model) if model else None
+
+    async def update_inverter_serial(
+        self,
+        device_id: UUID,
+        inverter_serial: str,
+    ) -> None:
+        """
+        Update device metadata with the Modbus-identified inverter serial.
+
+        Args:
+            device_id: Device UUID.
+            inverter_serial: Serial number read from Modbus registers.
+        """
+        # Get current metadata
+        query = select(DeviceRegistryModel.metadata_).where(
+            DeviceRegistryModel.device_id == device_id
+        )
+        result = await self._session.execute(query)
+        current_metadata = result.scalar() or {}
+
+        # Update metadata with inverter serial
+        current_metadata["inverter_serial"] = inverter_serial
+
+        stmt = (
+            update(DeviceRegistryModel)
+            .where(DeviceRegistryModel.device_id == device_id)
+            .values(
+                metadata_=current_metadata,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        await self._session.execute(stmt)
+
     async def get_by_owner(self, owner_id: UUID) -> List[DeviceRegistry]:
         """
         Get all devices owned by a user.
