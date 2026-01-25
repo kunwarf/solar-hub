@@ -505,13 +505,14 @@ async def claim_device(
             detail="Site not found or does not belong to your organization.",
         )
 
-    # Claim the device
+    # Claim the device (also creates record in System A)
     logger.info("Calling claim_device_for_user...")
     device, error = await registration_service.claim_device_for_user(
         user_id=current_user.id,
         site_id=site_id,
         organization_id=organization.id,
         device_serial=serial_number,
+        uow=uow,  # Pass UoW to create device in System A
     )
 
     if error:

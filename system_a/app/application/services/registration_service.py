@@ -12,6 +12,13 @@ from ..interfaces.unit_of_work import UnitOfWork
 from ...domain.entities.user import User, UserStatus, UserRole, UserPreferences
 from ...domain.entities.organization import Organization
 from ...domain.entities.site import Site, SiteType, SiteStatus
+from ...domain.entities.device import (
+    Device,
+    DeviceType,
+    DeviceStatus,
+    ProtocolType,
+    ConnectionConfig,
+)
 from ...domain.value_objects.address import Address
 from ...domain.events.user_events import UserCreated
 from ...infrastructure.external.system_b_client import (
@@ -257,12 +264,41 @@ class RegistrationService:
             device_error=device_error,
         )
 
+    def _map_device_type(self, device_type_str: str) -> DeviceType:
+        """Map string to DeviceType enum."""
+        mapping = {
+            'inverter': DeviceType.INVERTER,
+            'meter': DeviceType.METER,
+            'battery': DeviceType.BATTERY,
+            'weather_station': DeviceType.WEATHER_STATION,
+            'sensor': DeviceType.SENSOR,
+            'gateway': DeviceType.GATEWAY,
+            'controller': DeviceType.CONTROLLER,
+            'other': DeviceType.OTHER,
+        }
+        return mapping.get(device_type_str.lower(), DeviceType.OTHER)
+
+    def _map_protocol_type(self, protocol_str: Optional[str]) -> ProtocolType:
+        """Map string to ProtocolType enum."""
+        if not protocol_str:
+            return ProtocolType.MODBUS_TCP
+        mapping = {
+            'modbus_tcp': ProtocolType.MODBUS_TCP,
+            'modbus_rtu': ProtocolType.MODBUS_RTU,
+            'mqtt': ProtocolType.MQTT,
+            'http': ProtocolType.HTTP,
+            'https': ProtocolType.HTTPS,
+            'custom': ProtocolType.CUSTOM,
+        }
+        return mapping.get(protocol_str.lower(), ProtocolType.MODBUS_TCP)
+
     async def claim_device_for_user(
         self,
         user_id: UUID,
         site_id: UUID,
         organization_id: UUID,
         device_serial: str,
+        uow: Optional[UnitOfWork] = None,
     ) -> tuple[Optional[DeviceClaimInfo], Optional[str]]:
         """
         Claim a device for an existing user.
@@ -272,6 +308,7 @@ class RegistrationService:
             site_id: Site UUID to attach device to
             organization_id: Organization UUID
             device_serial: Device serial number
+            uow: Optional UnitOfWork to create device in System A
 
         Returns:
             Tuple of (DeviceClaimInfo, error_message)
@@ -286,13 +323,56 @@ class RegistrationService:
             if device_info.is_claimed:
                 return None, f"Device '{device_serial}' is already claimed"
 
-            # Claim the device
+            # Claim the device in System B
             claimed_info = await self._system_b_client.claim_device(
                 device_id=device_info.id,
                 owner_id=user_id,
                 site_id=site_id,
                 organization_id=organization_id,
             )
+
+            # Create device record in System A if uow provided
+            if uow:
+                try:
+                    # Check if device already exists in System A
+                    existing_device = await uow.devices.get_by_serial_number(device_serial)
+                    if not existing_device:
+                        # Create default connection config
+                        connection_config = ConnectionConfig(
+                            protocol=self._map_protocol_type(claimed_info.protocol),
+                            host=None,  # Will be configured later
+                            port=502 if claimed_info.protocol == 'modbus_tcp' else None,
+                            polling_interval_seconds=60,
+                            timeout_seconds=10,
+                        )
+
+                        # Create device in System A
+                        device = Device(
+                            id=claimed_info.id,  # Use same ID as System B
+                            site_id=site_id,
+                            organization_id=organization_id,
+                            device_type=self._map_device_type(claimed_info.device_type),
+                            name=f"{claimed_info.manufacturer or 'Device'} {claimed_info.device_type.title()}",
+                            manufacturer=claimed_info.manufacturer or "Unknown",
+                            model=claimed_info.model or "Unknown",
+                            serial_number=claimed_info.serial_number,
+                            firmware_version=claimed_info.firmware_version,
+                            status=DeviceStatus.ONLINE if claimed_info.connection_status == "connected" else DeviceStatus.PENDING,
+                            connection_config=connection_config,
+                        )
+
+                        await uow.devices.add(device)
+                        await uow.commit()
+                        logger.info(
+                            "Device created in System A: serial=%s, id=%s",
+                            device_serial,
+                            claimed_info.id
+                        )
+                    else:
+                        logger.info("Device already exists in System A: %s", device_serial)
+                except Exception as e:
+                    logger.error("Failed to create device in System A: %s", e)
+                    # Don't fail the claim - device was claimed in System B
 
             return DeviceClaimInfo(
                 id=claimed_info.id,
