@@ -10,7 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from ..dependencies import (
     get_current_user,
     get_unit_of_work,
+    get_telemetry_cache,
 )
+from ...infrastructure.cache.telemetry_cache import TelemetryCacheReader
 from ..schemas.device_schemas import (
     ConnectionConfigSchema,
     DeviceCommandRequest,
@@ -704,3 +706,85 @@ async def get_device_metrics(
         pv_power_kw=device.latest_metrics.pv_power_kw,
         last_updated=device.latest_metrics.last_updated,
     )
+
+
+@router.get(
+    "/{device_id}/telemetry/realtime",
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_device_realtime_telemetry(
+    device_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    cache: TelemetryCacheReader = Depends(get_telemetry_cache),
+):
+    """
+    Get real-time telemetry from Redis cache.
+
+    System B writes telemetry to Redis, this endpoint reads it.
+    Returns the latest cached telemetry data for the device.
+    """
+    device = await uow.devices.get_by_id(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Check access
+    await check_site_access(device.site_id, current_user, uow)
+
+    # Get telemetry from Redis cache using device serial number
+    telemetry = await cache.get_telemetry(device.serial_number)
+    device_status = await cache.get_status(device.serial_number)
+    last_seen = await cache.get_last_seen(device.serial_number)
+
+    return {
+        "device_id": str(device.id),
+        "serial_number": device.serial_number,
+        "status": device_status or "unknown",
+        "last_seen": last_seen,
+        "telemetry": telemetry,
+    }
+
+
+@router.get(
+    "/serial/{serial_number}/telemetry/realtime",
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_device_realtime_telemetry_by_serial(
+    serial_number: str,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    cache: TelemetryCacheReader = Depends(get_telemetry_cache),
+):
+    """
+    Get real-time telemetry by serial number from Redis cache.
+
+    System B writes telemetry to Redis, this endpoint reads it.
+    """
+    # Find device by serial number
+    device = await uow.devices.get_by_serial_number(serial_number)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Check access
+    await check_site_access(device.site_id, current_user, uow)
+
+    # Get telemetry from Redis cache
+    telemetry = await cache.get_telemetry(serial_number)
+    device_status = await cache.get_status(serial_number)
+    last_seen = await cache.get_last_seen(serial_number)
+
+    return {
+        "device_id": str(device.id),
+        "serial_number": serial_number,
+        "status": device_status or "unknown",
+        "last_seen": last_seen,
+        "telemetry": telemetry,
+    }

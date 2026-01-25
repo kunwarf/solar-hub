@@ -20,6 +20,7 @@ from ..infrastructure.database.repositories import (
     SQLAlchemyUserRepository,
     SQLAlchemyTelemetryRepository,
 )
+from ..infrastructure.cache.telemetry_cache import TelemetryCacheReader, telemetry_cache
 from ..infrastructure.security import BcryptPasswordHasher, JWTHandler
 from ..infrastructure.external import SMTPEmailService, MockEmailService, SystemBClient
 from ..application.interfaces.services import EmailService
@@ -303,3 +304,12 @@ async def get_telemetry_service(
         device_repository=uow.devices,
         alert_repository=uow.alerts,
     )
+
+
+def get_telemetry_cache() -> TelemetryCacheReader:
+    """
+    Get telemetry cache reader for real-time telemetry from Redis.
+
+    System B writes telemetry to Redis, System A reads from it here.
+    """
+    return telemetry_cache
