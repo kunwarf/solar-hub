@@ -147,17 +147,17 @@ class RedisCacheSettings(BaseSettings):
 
 
 class DeviceRegistryDBSettings(BaseSettings):
-    """PostgreSQL settings for querying the device registry (System B's main DB)."""
+    """PostgreSQL settings for querying the device registry (uses same DB as TimescaleDB)."""
 
     model_config = SettingsConfigDict(
-        env_prefix="SYSTEM_B_DATABASE_",
+        env_prefix="TIMESCALE_",
         env_file=".env",
         extra="ignore",
     )
 
     host: str = Field(default="localhost", description="PostgreSQL host")
     port: int = Field(default=5432, description="PostgreSQL port")
-    name: str = Field(default="solar_hub", description="Database name")
+    name: str = Field(default="solar_hub_telemetry", description="Database name")
     user: str = Field(default="postgres", description="Database user")
     password: str = Field(default="postgres", description="Database password")
 
