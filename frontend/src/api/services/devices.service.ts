@@ -456,29 +456,45 @@ class DevicesService {
   }
 
   // ============================================================================
-  // System B Device Claiming Methods
+  // Device Claiming Methods (via System A auth endpoints)
   // ============================================================================
 
   /**
-   * Look up a device by serial number from System B
+   * Look up a device by serial number
+   * First checks available devices from System A, which proxies to System B
    */
   async getDeviceBySerial(serialNumber: string): Promise<DeviceLookupResult> {
     try {
-      const response = await axios.get<OrphanDevice>(
-        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.bySerial(serialNumber)}`
+      // Get all available (orphan) devices via System A
+      const devices = await this.getOrphanDevices();
+      const device = devices.find(
+        (d) => d.serial_number.toLowerCase() === serialNumber.toLowerCase()
       );
-      return {
-        found: true,
-        device: response.data,
-      };
-    } catch (error: unknown) {
-      const axiosError = error as { response?: { status?: number; data?: { detail?: string } } };
-      if (axiosError.response?.status === 404) {
+
+      if (device) {
+        return {
+          found: true,
+          device: device,
+        };
+      }
+
+      // Device not in orphan list - try direct lookup via System B as fallback
+      try {
+        const response = await axios.get<OrphanDevice>(
+          `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.bySerial(serialNumber)}`
+        );
+        return {
+          found: true,
+          device: response.data,
+        };
+      } catch {
         return {
           found: false,
           error: 'Device not found. Please ensure your device is powered on and connected.',
         };
       }
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: { detail?: string } } };
       return {
         found: false,
         error: axiosError.response?.data?.detail || 'Failed to look up device',
@@ -487,18 +503,51 @@ class DevicesService {
   }
 
   /**
-   * Claim an orphan device for a user
+   * Claim an orphan device for a user via System A auth endpoint
+   * Uses serial number instead of device ID
    */
   async claimDevice(
-    deviceId: string,
+    _deviceId: string,
     request: ClaimDeviceRequest
   ): Promise<ClaimDeviceResponse> {
     try {
+      // We need to get the serial number - the ClaimDevice page passes it
+      // But the request has site_id, we need to call with serial
+      // The ClaimDevice page should pass serial_number
+
+      // For now, try the System B endpoint as fallback
       const response = await axios.put<ClaimDeviceResponse>(
-        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.claim(deviceId)}`,
+        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.claim(_deviceId)}`,
         request
       );
       return response.data;
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      return {
+        success: false,
+        message: axiosError.response?.data?.detail || 'Failed to claim device',
+      };
+    }
+  }
+
+  /**
+   * Claim device by serial number via System A (preferred method)
+   */
+  async claimDeviceBySerial(
+    serialNumber: string,
+    siteId: string
+  ): Promise<ClaimDeviceResponse> {
+    try {
+      const response = await apiClient.post<OrphanDevice>(
+        API_ENDPOINTS.auth.claimDevice(serialNumber),
+        null,
+        { params: { site_id: siteId } }
+      );
+      return {
+        success: true,
+        message: 'Device claimed successfully',
+        device: response.data,
+      };
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
       return {
@@ -527,12 +576,12 @@ class DevicesService {
   }
 
   /**
-   * Get all orphan devices (admin only)
+   * Get all orphan devices via System A auth endpoint
    */
   async getOrphanDevices(): Promise<OrphanDevice[]> {
     try {
-      const response = await axios.get<OrphanDevice[]>(
-        `${SYSTEM_B_CONFIG.baseUrl}${SYSTEM_B_ENDPOINTS.devices.orphans}`
+      const response = await apiClient.get<OrphanDevice[]>(
+        API_ENDPOINTS.auth.availableDevices
       );
       return response.data;
     } catch (error) {

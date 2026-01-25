@@ -124,11 +124,12 @@ const ClaimDevicePage = () => {
     setIsClaiming(true);
 
     try {
-      const result = await devicesService.claimDevice(device.id, {
-        owner_id: user.id,
-        site_id: selectedSiteId,
-        organization_id: site.organization_id,
-      });
+      // Use claimDeviceBySerial which goes through System A auth endpoint
+      // This ensures proper authentication and logging
+      const result = await devicesService.claimDeviceBySerial(
+        device.serial_number,
+        selectedSiteId
+      );
 
       if (result.success) {
         toast.success("Device claimed successfully!");

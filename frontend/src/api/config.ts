@@ -44,6 +44,9 @@ export const API_ENDPOINTS = {
     resetPassword: '/auth/reset-password',
     verifyEmail: '/auth/verify-email',
     resendVerification: '/auth/resend-verification',
+    // Device claiming (proxied to System B)
+    claimDevice: (serial: string) => `/auth/devices/claim/${serial}`,
+    availableDevices: '/auth/devices/available',
   },
 
   // Users
