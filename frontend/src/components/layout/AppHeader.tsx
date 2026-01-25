@@ -41,16 +41,16 @@ export function AppHeader({ title, subtitle, rightContent }: AppHeaderProps) {
   const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
-    <header className="flex items-center justify-between py-4 px-6 border-b border-border bg-background/50 backdrop-blur-sm sticky top-0 z-40">
-      <div className="flex items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
-          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+    <header className="flex items-center justify-between py-3 sm:py-4 px-3 sm:px-6 border-b border-border bg-background/50 backdrop-blur-sm sticky top-0 z-40">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-2xl font-semibold text-foreground truncate">{title}</h1>
+          {subtitle && <p className="text-xs sm:text-sm text-muted-foreground truncate hidden md:block">{subtitle}</p>}
         </div>
-        {rightContent}
+        <div className="hidden md:flex items-center gap-3 flex-shrink-0">{rightContent}</div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
         {/* Date Display */}
         <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
           <Calendar className="w-4 h-4" />

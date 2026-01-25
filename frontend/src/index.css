@@ -238,7 +238,7 @@
   }
 
   .stat-card {
-    @apply glass-card p-5 relative overflow-hidden;
+    @apply glass-card relative overflow-hidden;
   }
 
   .stat-card::before {

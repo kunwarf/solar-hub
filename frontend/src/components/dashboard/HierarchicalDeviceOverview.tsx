@@ -406,6 +406,10 @@ export function HierarchicalDeviceOverview() {
         dashboardService.getStats(),
       ]);
 
+      // Debug: Log serial numbers for matching
+      console.log('[SystemOverview] Telemetry serials:', powerFlow.devices?.map(d => d.serial_number) || []);
+      console.log('[SystemOverview] Aggregated pv_power_w:', powerFlow.pv_power_w, 'W');
+
       if (powerFlow.devices && powerFlow.devices.length > 0) {
         const newTelemetryMap = new Map<string, DevicePowerData>();
         for (const device of powerFlow.devices) {
@@ -433,6 +437,13 @@ export function HierarchicalDeviceOverview() {
     const interval = setInterval(fetchTelemetry, 5000);
     return () => clearInterval(interval);
   }, [fetchTelemetry]);
+
+  // Debug: Log device serials for matching
+  useEffect(() => {
+    if (devices.length > 0) {
+      console.log('[SystemOverview] Device serials:', devices.map(d => d.serialNumber));
+    }
+  }, [devices]);
 
   // Group devices by type
   const { inverters, batteries, meters } = useMemo(() => {
@@ -470,6 +481,15 @@ export function HierarchicalDeviceOverview() {
         todayEnergy += stats.energy_today_kwh;
         peakPower = Math.max(peakPower, stats.peak_power_kw);
       }
+    }
+
+    // Debug: Show match result
+    if (inverters.length > 0) {
+      console.log('[SystemOverview] Inverter match result:', {
+        deviceSerials: inverters.map(d => d.serialNumber),
+        telemetrySerials: Array.from(telemetryMap.keys()),
+        totalPower: totalPower.toFixed(2) + ' kW'
+      });
     }
 
     return { totalPower, todayEnergy, peakPower };

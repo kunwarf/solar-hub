@@ -116,7 +116,7 @@ export function StatCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
-      className={cn("stat-card relative", styles.glow, compact && "p-3")}
+      className={cn("stat-card relative", styles.glow, compact ? "p-3" : "p-5")}
     >
       <div className={cn("flex items-start justify-between", compact ? "mb-2" : "mb-4")}>
         <div className={cn(
