@@ -95,12 +95,13 @@ class DeviceRegistryClient:
                 # Query for recently connected device of matching type
                 # Uses last_connected_at to match devices that just reconnected
                 # Does not filter by status - works for both orphan and claimed devices
+                # Use explicit type casts for asyncpg compatibility
                 result = await session.execute(
                     text("""
                     SELECT serial_number
                     FROM device_registry
-                    WHERE device_type = :device_type
-                      AND last_connected_at >= :cutoff
+                    WHERE device_type = :device_type::text
+                      AND last_connected_at >= :cutoff::timestamptz
                     ORDER BY last_connected_at DESC
                     LIMIT 1
                     """),
@@ -142,12 +143,13 @@ class DeviceRegistryClient:
         try:
             async with self._session_factory() as session:
                 # Update metadata with inverter serial
+                # Use explicit type casts for asyncpg compatibility
                 result = await session.execute(
                     text("""
                     UPDATE device_registry
-                    SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('inverter_serial', :inverter_serial),
-                        updated_at = :now
-                    WHERE serial_number = :data_logger_serial
+                    SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('inverter_serial', :inverter_serial::text),
+                        updated_at = :now::timestamptz
+                    WHERE serial_number = :data_logger_serial::text
                     """),
                     {
                         "data_logger_serial": data_logger_serial,
@@ -193,7 +195,7 @@ class DeviceRegistryClient:
                     text("""
                     SELECT serial_number
                     FROM device_registry
-                    WHERE metadata->>'inverter_serial' = :inverter_serial
+                    WHERE metadata->>'inverter_serial' = :inverter_serial::text
                     LIMIT 1
                     """),
                     {"inverter_serial": inverter_serial},
