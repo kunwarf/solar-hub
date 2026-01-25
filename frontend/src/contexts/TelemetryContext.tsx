@@ -96,42 +96,66 @@ export const TelemetryProvider = ({
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [dataReceivedAt, setDataReceivedAt] = useState<number | null>(null);
-  const [usePolling, setUsePolling] = useState(false);
   const [authError, setAuthError] = useState(false);
+  const [hasRealData, setHasRealData] = useState(false); // Track if we have real API data
   const fetchCountRef = useRef(0);
+  const initialFetchDoneRef = useRef(false);
 
-  // Handle WebSocket messages
+  // Handle WebSocket messages - only use if we don't have real API data yet
+  // The current WebSocket implementation uses mock data, so we prefer HTTP API
   const handleMessage = useCallback((data: TelemetryData) => {
-    setTelemetry(data);
-    setLastUpdated(new Date());
-    setDataReceivedAt(Date.now());
-    setUsePolling(false); // WebSocket is working
-    setAuthError(false);
-  }, []);
+    // Only use WebSocket data if we don't have real data from the API yet
+    // Once we have real API data, ignore the mock WebSocket data
+    if (!hasRealData) {
+      setTelemetry(data);
+      setLastUpdated(new Date());
+      setDataReceivedAt(Date.now());
+    }
+    // Keep polling enabled - the HTTP API provides real device data
+  }, [hasRealData]);
 
-  // WebSocket connection - only enable when authenticated
+  // WebSocket connection - disabled for now since it only provides mock data
+  // Enable this when a real WebSocket implementation exists
   const { status, reconnect, retryCount, nextRetryIn } = useWebSocket({
     onMessage: handleMessage,
-    enabled: isAuthenticated && !authError,
+    enabled: false, // Disabled: current implementation is mock-only
   });
 
-  // Fetch telemetry via HTTP (polling fallback)
-  // Uses new widget API (reads from Redis cache) with fallback to legacy API
+  // Fetch telemetry via HTTP (primary data source)
+  // Uses new widget API (reads from Redis cache where System B writes real device data)
   const fetchTelemetry = useCallback(async () => {
     // Don't fetch if not authenticated or if we've had auth errors
     if (!isAuthenticated || authError) {
+      console.log('[Telemetry] Skipping fetch: not authenticated or auth error');
       return;
     }
 
+    console.log('[Telemetry] Fetching power flow from API...');
+
     try {
-      // Try new widget API first (reads from Redis cache)
-      // Uses site-level aggregated data from all devices
+      // Use widget API which reads from Redis cache (populated by System B)
+      // This is the primary source of real device telemetry
       const powerFlow = await dashboardService.getPowerFlow(siteId);
+      console.log('[Telemetry] Received power flow:', powerFlow);
+
       if (powerFlow.online) {
         const telemetryData = powerFlowToTelemetry(powerFlow);
         setTelemetry(telemetryData);
         setLastUpdated(new Date());
         setDataReceivedAt(Date.now());
+        setHasRealData(true); // Mark that we have real API data
+        setAuthError(false);
+        fetchCountRef.current = 0;
+        console.log('[Telemetry] Updated with real data:', telemetryData);
+        return;
+      } else {
+        console.log('[Telemetry] Power flow returned online=false, devices may be offline');
+        // Even if offline, still use the API response (shows 0 values)
+        const telemetryData = powerFlowToTelemetry(powerFlow);
+        setTelemetry(telemetryData);
+        setLastUpdated(new Date());
+        setDataReceivedAt(Date.now());
+        setHasRealData(true);
         setAuthError(false);
         fetchCountRef.current = 0;
         return;
@@ -139,15 +163,16 @@ export const TelemetryProvider = ({
     } catch (error: any) {
       // Check for 401 Unauthorized - stop polling
       if (error?.response?.status === 401 || error?.status === 401) {
-        console.warn('Authentication error, stopping telemetry polling');
+        console.warn('[Telemetry] Authentication error, stopping polling');
         setAuthError(true);
         return;
       }
-      console.warn('Failed to fetch from widget API, trying legacy:', error);
+      console.warn('[Telemetry] Failed to fetch power flow:', error);
     }
 
-    // Fallback to legacy API
+    // Fallback to legacy API only if widget API completely fails
     try {
+      console.log('[Telemetry] Trying legacy API fallback...');
       const snapshot = await dashboardService.getCurrentPower(siteId);
       const telemetryData = powerSnapshotToTelemetry(snapshot);
       setTelemetry(telemetryData);
@@ -158,15 +183,15 @@ export const TelemetryProvider = ({
     } catch (error: any) {
       // Check for 401 Unauthorized - stop polling
       if (error?.response?.status === 401 || error?.status === 401) {
-        console.warn('Authentication error, stopping telemetry polling');
+        console.warn('[Telemetry] Authentication error, stopping polling');
         setAuthError(true);
         return;
       }
-      console.warn('Failed to fetch telemetry:', error);
+      console.warn('[Telemetry] Failed to fetch from legacy API:', error);
       // Increment fetch count and stop if too many failures
       fetchCountRef.current += 1;
       if (fetchCountRef.current > 5) {
-        console.warn('Too many fetch failures, pausing telemetry');
+        console.warn('[Telemetry] Too many fetch failures, pausing telemetry');
         setAuthError(true);
       }
     }
@@ -187,41 +212,44 @@ export const TelemetryProvider = ({
     }
   }, [isAuthenticated]);
 
-  // Switch to polling if WebSocket fails after several retries
-  useEffect(() => {
-    if (status === 'error' && retryCount >= 3 && isAuthenticated && !authError) {
-      setUsePolling(true);
-    }
-  }, [status, retryCount, isAuthenticated, authError]);
-
-  // Polling fallback - only when authenticated and no auth errors
+  // HTTP polling is the primary data source
+  // Polls the dashboard widget API which reads real device data from Redis
   useEffect(() => {
     if (!isAuthenticated || authError) {
+      console.log('[Telemetry] Polling disabled: not authenticated or auth error');
       return;
     }
 
-    if (usePolling || status === 'error') {
-      // Initial fetch
+    console.log('[Telemetry] Starting HTTP polling (interval:', pollingInterval, 'ms)');
+
+    // Initial fetch immediately when authenticated
+    if (!initialFetchDoneRef.current) {
+      initialFetchDoneRef.current = true;
       fetchTelemetry();
-
-      // Set up polling interval
-      const interval = setInterval(fetchTelemetry, pollingInterval);
-      return () => clearInterval(interval);
     }
-  }, [usePolling, status, fetchTelemetry, pollingInterval, isAuthenticated, authError]);
 
-  // Initial telemetry fetch (only when authenticated)
+    // Set up polling interval for continuous updates
+    const interval = setInterval(fetchTelemetry, pollingInterval);
+    return () => {
+      console.log('[Telemetry] Stopping HTTP polling');
+      clearInterval(interval);
+    };
+  }, [fetchTelemetry, pollingInterval, isAuthenticated, authError]);
+
+  // Reset initial fetch flag when auth state changes
   useEffect(() => {
-    if (!telemetry && isAuthenticated && !authError) {
-      fetchTelemetry();
+    if (!isAuthenticated) {
+      initialFetchDoneRef.current = false;
+      setHasRealData(false);
     }
-  }, [fetchTelemetry, telemetry, isAuthenticated, authError]);
+  }, [isAuthenticated]);
 
-  const isLive = (status === 'connected' || usePolling) && telemetry !== null;
+  // Consider live if we have real data from the API (not mock WebSocket data)
+  const isLive = hasRealData && telemetry !== null;
 
   const value = useMemo(
     () => ({
-      connectionStatus: usePolling ? 'connected' : status, // Show connected if polling works
+      connectionStatus: hasRealData ? 'connected' : (isAuthenticated ? 'connecting' : 'failed'),
       reconnect,
       retryCount,
       nextRetryIn,
@@ -231,7 +259,7 @@ export const TelemetryProvider = ({
       dataReceivedAt,
       refresh,
     }),
-    [status, usePolling, reconnect, retryCount, nextRetryIn, telemetry, lastUpdated, isLive, dataReceivedAt, refresh]
+    [hasRealData, isAuthenticated, reconnect, retryCount, nextRetryIn, telemetry, lastUpdated, isLive, dataReceivedAt, refresh]
   );
 
   return (
