@@ -327,7 +327,7 @@ const Index = () => {
         title="Dashboard" 
         subtitle="Real-time energy monitoring and analytics"
         rightContent={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <DashboardEditControls />
             <ConnectionStatusIndicator showLabel showReconnect />
             <SystemStatusIndicator compact />
@@ -344,8 +344,8 @@ const Index = () => {
             exit={{ opacity: 0, height: 0 }}
             className="bg-primary/5 border-b border-primary/20 overflow-hidden"
           >
-            <div className="container mx-auto px-6 py-3">
-              <div className="flex items-center gap-2 text-sm text-primary">
+            <div className="container mx-auto px-3 sm:px-6 py-2 sm:py-3">
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-primary">
                 <Info className="w-4 h-4" />
                 <span><strong>Edit Mode:</strong> Drag widgets by the handle to reorder. Click × to hide. Use "Add Widget" to show hidden widgets.</span>
               </div>
@@ -365,10 +365,10 @@ const Index = () => {
           strategy={gridLayout === "list" ? verticalListSortingStrategy : rectSortingStrategy}
         >
           <div className={cn(
-            "p-6",
-            gridLayout === "list" && "space-y-6",
-            gridLayout === "2x2" && "grid grid-cols-1 md:grid-cols-2 gap-6",
-            gridLayout === "3x3" && "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            "p-3 sm:p-6",
+            gridLayout === "list" && "space-y-3 sm:space-y-6",
+            gridLayout === "2x2" && "grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6",
+            gridLayout === "3x3" && "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6"
           )}>
             {/* Render widgets in order from visibleWidgets */}
             {visibleWidgets.map((widget) => (

@@ -110,7 +110,7 @@ function InverterCard({
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
           <MetricPill icon={Sun} label="Solar" value={solarPower.toFixed(1)} unit="kW" color="text-warning" />
           <MetricPill icon={Grid3X3} label="Grid" value={Math.abs(gridPower).toFixed(1)} unit="kW" color="text-primary" />
           <MetricPill icon={Home} label="Load" value={loadPower.toFixed(1)} unit="kW" color="text-success" />
@@ -161,7 +161,7 @@ function BatteryCard({
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
           <MetricPill
             icon={() => <DynamicBatteryIcon className="w-3 h-3" soc={soc} />}
             label="SOC"
@@ -176,8 +176,8 @@ function BatteryCard({
             unit="kW"
             color={isCharging ? "text-success" : "text-warning"}
           />
-          <MetricPill icon={Gauge} label="Volt" value="52.4" unit="V" color="text-muted-foreground" />
-          <MetricPill icon={Gauge} label="Temp" value="28" unit="°C" color="text-muted-foreground" />
+          <MetricPill icon={Gauge} label="Volt" value="--" unit="V" color="text-muted-foreground" />
+          <MetricPill icon={Gauge} label="Temp" value="--" unit="°C" color="text-muted-foreground" />
         </div>
       </div>
     </Link>
@@ -195,10 +195,11 @@ function MeterCard({
   const gridPower = telemetry?.grid_power_w !== undefined ? telemetry.grid_power_w / 1000 : 0;
   const isExporting = gridPower < 0;
 
-  // Mock cumulative values (would come from stats API in production)
-  const importKwh = 2.5;
-  const exportKwh = 8.2;
-  const netBalance = exportKwh - importKwh;
+  // Cumulative values would come from stats API
+  const hasCumulativeData = false; // TODO: get from stats API when available
+  const importKwh = hasCumulativeData ? 0 : null;
+  const exportKwh = hasCumulativeData ? 0 : null;
+  const netBalance = hasCumulativeData && importKwh !== null && exportKwh !== null ? exportKwh - importKwh : null;
 
   return (
     <Link to={`/telemetry?device=${device.id}`}>
@@ -236,7 +237,7 @@ function MeterCard({
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground">Import</p>
               <p className="font-mono text-sm font-medium text-foreground">
-                {importKwh.toFixed(1)}<span className="text-xs text-muted-foreground ml-0.5">kWh</span>
+                {importKwh !== null ? importKwh.toFixed(1) : "--"}<span className="text-xs text-muted-foreground ml-0.5">kWh</span>
               </p>
             </div>
           </div>
@@ -245,16 +246,16 @@ function MeterCard({
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground">Export</p>
               <p className="font-mono text-sm font-medium text-foreground">
-                {exportKwh.toFixed(1)}<span className="text-xs text-muted-foreground ml-0.5">kWh</span>
+                {exportKwh !== null ? exportKwh.toFixed(1) : "--"}<span className="text-xs text-muted-foreground ml-0.5">kWh</span>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 p-2 rounded-md bg-background/50">
-            {netBalance >= 0 ? <ArrowUp className="w-4 h-4 text-success" /> : <ArrowDown className="w-4 h-4 text-destructive" />}
+            {netBalance !== null && netBalance >= 0 ? <ArrowUp className="w-4 h-4 text-success" /> : <ArrowDown className="w-4 h-4 text-destructive" />}
             <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground">{netBalance >= 0 ? "Net Export" : "Net Import"}</p>
+              <p className="text-[10px] text-muted-foreground">{netBalance !== null && netBalance >= 0 ? "Net Export" : "Net Import"}</p>
               <p className="font-mono text-sm font-medium text-foreground">
-                +{Math.abs(netBalance).toFixed(1)}<span className="text-xs text-muted-foreground ml-0.5">kWh</span>
+                {netBalance !== null ? `${netBalance >= 0 ? '+' : ''}${Math.abs(netBalance).toFixed(1)}` : "--"}<span className="text-xs text-muted-foreground ml-0.5">kWh</span>
               </p>
             </div>
           </div>
@@ -356,11 +357,11 @@ function DeviceGroupCard({
                   </div>
                   <div className="flex items-center gap-1 p-1.5 rounded bg-background/50">
                     <span className="text-[10px] text-muted-foreground">Charged:</span>
-                    <span className="font-mono text-xs text-success">18.6 kWh</span>
+                    <span className="font-mono text-xs text-success">-- kWh</span>
                   </div>
                   <div className="flex items-center gap-1 p-1.5 rounded bg-background/50">
                     <span className="text-[10px] text-muted-foreground">Discharged:</span>
-                    <span className="font-mono text-xs text-warning">14.8 kWh</span>
+                    <span className="font-mono text-xs text-warning">-- kWh</span>
                   </div>
                 </>
               )}
@@ -501,11 +502,11 @@ export function HierarchicalDeviceOverview() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-6"
+        className="glass-card p-4 sm:p-6"
       >
-        <div className="flex items-center justify-center gap-2 py-8">
-          <Loader2 className="w-5 h-5 animate-spin text-primary" />
-          <span className="text-muted-foreground">Loading devices...</span>
+        <div className="flex items-center justify-center gap-2 py-6 sm:py-8">
+          <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-primary" />
+          <span className="text-sm sm:text-base text-muted-foreground">Loading devices...</span>
         </div>
       </motion.div>
     );
@@ -516,11 +517,11 @@ export function HierarchicalDeviceOverview() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-6"
+        className="glass-card p-4 sm:p-6"
       >
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">No devices found</p>
-          <Link to="/devices/manage" className="text-sm text-primary hover:underline mt-2 inline-block">
+        <div className="text-center py-6 sm:py-8">
+          <p className="text-sm sm:text-base text-muted-foreground">No devices found</p>
+          <Link to="/devices/manage" className="text-xs sm:text-sm text-primary hover:underline mt-2 inline-block">
             Add your first device
           </Link>
         </div>
@@ -533,19 +534,19 @@ export function HierarchicalDeviceOverview() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.4 }}
-      className="glass-card p-6"
+      className="glass-card p-4 sm:p-6"
     >
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-foreground">System Overview</h3>
-          <p className="text-sm text-muted-foreground">Home Solar System</p>
+          <h3 className="text-base sm:text-lg font-semibold text-foreground">System Overview</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground">Home Solar System</p>
         </div>
         <Link
           to="/devices"
-          className="text-sm text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+          className="text-xs sm:text-sm text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
         >
           View All
-          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </Link>
       </div>
 

@@ -100,14 +100,14 @@ const DevicesPage = () => {
         subtitle="Manage your solar installation equipment"
       />
       
-      <div className="p-6 space-y-6">
+      <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
         {/* Filters */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4"
+          className="glass-card p-3 sm:p-4"
         >
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 sm:gap-4">
             {/* Search */}
             <div className="relative w-full">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -115,15 +115,15 @@ const DevicesPage = () => {
                 placeholder="Search by name or serial..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-secondary/50"
+                className="pl-9 bg-secondary/50 h-9 sm:h-10 text-sm"
               />
             </div>
-            
+
             {/* Filter Row */}
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-[130px] bg-secondary/50">
-                  <Filter className="w-4 h-4 mr-2 flex-shrink-0" />
+                <SelectTrigger className="w-full sm:w-[130px] bg-secondary/50 h-9 sm:h-10 text-xs sm:text-sm">
+                  <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 flex-shrink-0" />
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -135,7 +135,7 @@ const DevicesPage = () => {
               </Select>
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[130px] bg-secondary/50">
+                <SelectTrigger className="w-full sm:w-[130px] bg-secondary/50 h-9 sm:h-10 text-xs sm:text-sm">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -146,28 +146,28 @@ const DevicesPage = () => {
                 </SelectContent>
               </Select>
 
-              <Button className="w-full sm:w-auto gap-2" onClick={() => navigate("/devices/manage")}>
-                <Plus className="w-4 h-4" />
-                <span className="sm:inline">Add Device</span>
+              <Button className="w-full sm:w-auto gap-1.5 sm:gap-2 h-9 sm:h-10 text-xs sm:text-sm" onClick={() => navigate("/devices/manage")}>
+                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Add</span>
               </Button>
 
               <Button
                 variant="outline"
-                className="w-full sm:w-auto gap-2"
+                className="w-full sm:w-auto gap-1.5 sm:gap-2 h-9 sm:h-10 text-xs sm:text-sm"
                 onClick={() => navigate("/devices/claim")}
               >
-                <QrCode className="w-4 h-4" />
-                <span className="sm:inline">Claim Device</span>
+                <QrCode className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Claim</span>
               </Button>
-              
+
               {showCommissioning && (
-                <Button 
-                  variant="outline" 
-                  className="w-full sm:w-auto gap-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                <Button
+                  variant="outline"
+                  className="col-span-2 sm:col-span-1 sm:w-auto gap-1.5 sm:gap-2 h-9 sm:h-10 text-xs sm:text-sm border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
                   onClick={() => navigate("/commissioning")}
                 >
-                  <HardHat className="w-4 h-4" />
-                  <span className="sm:inline">Commissioning</span>
+                  <HardHat className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Commissioning</span>
                 </Button>
               )}
             </div>
@@ -175,10 +175,10 @@ const DevicesPage = () => {
         </motion.div>
 
         {/* Device Count */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
           {isLoading ? (
             <span className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
               Loading devices...
             </span>
           ) : error ? (
@@ -189,7 +189,7 @@ const DevicesPage = () => {
         </div>
 
         {/* Device Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
           {filteredDevices.map((device, index) => {
             // Get real-time telemetry for this device by serial number
             const deviceTelemetry = telemetryMap.get(device.serialNumber);
