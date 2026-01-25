@@ -65,13 +65,13 @@ class DeviceRegistryClient:
             await self._engine.dispose()
             logger.info("Device registry database disconnected")
 
-    async def get_recent_orphan_serial(
+    async def get_recently_connected_serial(
         self,
         device_type: str,
         within_minutes: int = 10,
     ) -> Optional[str]:
         """
-        Find the data logger serial for a recently self-registered orphan device.
+        Find the data logger serial for a recently connected device.
 
         When a data logger connects via TCP and is identified via Modbus,
         we need to find its original self-registration serial (printed on device)
@@ -79,7 +79,7 @@ class DeviceRegistryClient:
 
         Args:
             device_type: Device type from Modbus identification (e.g., "inverter").
-            within_minutes: Look for devices registered within this time window.
+            within_minutes: Look for devices connected within this time window.
 
         Returns:
             The data logger serial number if found, None otherwise.
@@ -92,16 +92,16 @@ class DeviceRegistryClient:
 
         try:
             async with self._session_factory() as session:
-                # Query for recent orphan device of matching type
-                # Uses raw SQL for simplicity (avoids importing models)
+                # Query for recently connected device of matching type
+                # Uses last_connected_at to match devices that just reconnected
+                # Does not filter by status - works for both orphan and claimed devices
                 result = await session.execute(
                     text("""
                     SELECT serial_number
                     FROM device_registry
-                    WHERE status = 'orphan'
-                      AND device_type = :device_type
-                      AND created_at >= :cutoff
-                    ORDER BY created_at DESC
+                    WHERE device_type = :device_type
+                      AND last_connected_at >= :cutoff
+                    ORDER BY last_connected_at DESC
                     LIMIT 1
                     """),
                     {"device_type": device_type, "cutoff": cutoff},
@@ -113,7 +113,7 @@ class DeviceRegistryClient:
                     logger.info(f"Found data logger serial for {device_type}: {serial}")
                     return serial
 
-                logger.debug(f"No recent orphan device found for type {device_type}")
+                logger.debug(f"No recently connected device found for type {device_type}")
                 return None
 
         except Exception as e:

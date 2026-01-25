@@ -251,7 +251,7 @@ class DeviceServer:
 
             if not data_logger_serial:
                 # Look for a recently self-registered orphan device of the same type
-                data_logger_serial = await self.device_registry_client.get_recent_orphan_serial(
+                data_logger_serial = await self.device_registry_client.get_recently_connected_serial(
                     device_type=device_state.device_type,
                     within_minutes=10,
                 )
