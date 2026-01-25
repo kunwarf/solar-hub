@@ -43,13 +43,13 @@ class DeviceState:
     protocol_id: str
     device_type: str
 
-    # Data logger serial (from self-registration, used for Redis caching)
-    # This is the serial printed on the device that users see
-    data_logger_serial: Optional[str] = None
-
     # Connection
     connection_id: UUID
     remote_addr: str
+
+    # Data logger serial (from self-registration, used for Redis caching)
+    # This is the serial printed on the device that users see
+    data_logger_serial: Optional[str] = None
 
     # Status
     status: DeviceStatus = DeviceStatus.INITIALIZING
