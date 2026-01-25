@@ -212,52 +212,85 @@ class TelemetryCacheWriter:
         }
 
         # Extract power metrics
+        # Field names from Modbus register maps use _w suffix (e.g., pv1_power_w)
         power_data = {}
         power_mappings = {
-            "pv_total_w": ["pv_power", "pv_total_power", "solar_power"],
-            "pv1_w": ["pv1_power", "pv_power_1"],
-            "pv2_w": ["pv2_power", "pv_power_2"],
-            "grid_w": ["grid_power", "ac_power"],
-            "load_w": ["load_power", "consumption_power"],
-            "battery_w": ["battery_power", "bat_power"],
+            "pv_total_w": ["pv_power_w", "pv_power", "pv_total_power", "solar_power"],
+            "pv1_w": ["pv1_power_w", "pv1_power", "pv_power_1"],
+            "pv2_w": ["pv2_power_w", "pv2_power", "pv_power_2"],
+            "grid_w": ["grid_power_w", "grid_power", "ac_power"],
+            "load_w": ["load_power_w", "load_power", "consumption_power"],
+            "battery_w": ["battery_power_w", "battery_power", "bat_power"],
         }
         for target_key, source_keys in power_mappings.items():
             for src in source_keys:
                 if src in telemetry:
                     power_data[target_key] = telemetry[src]
                     break
+
+        # Calculate pv_total_w if we have pv1 and pv2 but not total
+        if "pv_total_w" not in power_data:
+            pv1 = power_data.get("pv1_w", 0) or 0
+            pv2 = power_data.get("pv2_w", 0) or 0
+            if pv1 or pv2:
+                power_data["pv_total_w"] = pv1 + pv2
+
         if power_data:
             cache_data["power"] = power_data
 
         # Extract battery metrics
+        # Field names from Modbus use _pct, _v, _a suffixes
         battery_data = {}
         battery_mappings = {
-            "soc_pct": ["battery_soc", "soc", "state_of_charge"],
-            "voltage_v": ["battery_voltage", "bat_voltage"],
-            "current_a": ["battery_current", "bat_current"],
+            "soc_pct": ["battery_soc_pct", "battery_soc", "soc", "state_of_charge"],
+            "voltage_v": ["battery_voltage_v", "battery_voltage", "bat_voltage"],
+            "current_a": ["battery_current_a", "battery_current", "bat_current"],
         }
         for target_key, source_keys in battery_mappings.items():
             for src in source_keys:
                 if src in telemetry:
                     battery_data[target_key] = telemetry[src]
                     break
-        # Determine if charging
-        if "battery_power" in telemetry:
+        # Determine if charging (positive battery power = charging)
+        if "battery_power_w" in telemetry:
+            battery_data["charging"] = telemetry["battery_power_w"] > 0
+        elif "battery_power" in telemetry:
             battery_data["charging"] = telemetry["battery_power"] > 0
+        elif "battery_current_a" in telemetry:
+            battery_data["charging"] = telemetry["battery_current_a"] > 0
         elif "battery_current" in telemetry:
             battery_data["charging"] = telemetry["battery_current"] > 0
         if battery_data:
             cache_data["battery"] = battery_data
 
         # Extract energy today metrics
+        # Common Modbus field names for daily energy
         energy_data = {}
         energy_mappings = {
-            "pv_kwh": ["pv_energy_today", "solar_energy_today", "daily_pv_kwh"],
-            "load_kwh": ["load_energy_today", "consumption_today", "daily_load_kwh"],
-            "grid_import_kwh": ["grid_import_today", "import_kwh"],
-            "grid_export_kwh": ["grid_export_today", "export_kwh"],
-            "battery_charge_kwh": ["battery_charge_today", "charge_kwh"],
-            "battery_discharge_kwh": ["battery_discharge_today", "discharge_kwh"],
+            "pv_kwh": [
+                "pv_energy_today_kwh", "pv_energy_today", "solar_energy_today",
+                "daily_pv_kwh", "today_pv_kwh", "pv_generation_today_kwh",
+            ],
+            "load_kwh": [
+                "load_energy_today_kwh", "load_energy_today", "consumption_today",
+                "daily_load_kwh", "today_load_kwh", "consumption_today_kwh",
+            ],
+            "grid_import_kwh": [
+                "grid_import_today_kwh", "grid_import_today", "import_kwh",
+                "grid_buy_today_kwh", "today_import_kwh",
+            ],
+            "grid_export_kwh": [
+                "grid_export_today_kwh", "grid_export_today", "export_kwh",
+                "grid_sell_today_kwh", "today_export_kwh",
+            ],
+            "battery_charge_kwh": [
+                "battery_charge_today_kwh", "battery_charge_today", "charge_kwh",
+                "today_charge_kwh",
+            ],
+            "battery_discharge_kwh": [
+                "battery_discharge_today_kwh", "battery_discharge_today", "discharge_kwh",
+                "today_discharge_kwh",
+            ],
         }
         for target_key, source_keys in energy_mappings.items():
             for src in source_keys:
@@ -268,11 +301,19 @@ class TelemetryCacheWriter:
             cache_data["energy_today"] = energy_data
 
         # Extract temperature metrics
+        # Modbus field names use _c suffix for Celsius
         temp_data = {}
         temp_mappings = {
-            "inverter_c": ["inverter_temp", "temperature", "inv_temp"],
-            "battery_c": ["battery_temp", "bat_temp"],
-            "ambient_c": ["ambient_temp", "env_temp"],
+            "inverter_c": [
+                "inverter_temp_c", "inverter_temp", "temperature_c",
+                "temperature", "inv_temp", "heatsink_temp_c",
+            ],
+            "battery_c": [
+                "battery_temp_c", "battery_temp", "bat_temp_c", "bat_temp",
+            ],
+            "ambient_c": [
+                "ambient_temp_c", "ambient_temp", "env_temp_c", "env_temp",
+            ],
         }
         for target_key, source_keys in temp_mappings.items():
             for src in source_keys:
@@ -283,13 +324,28 @@ class TelemetryCacheWriter:
             cache_data["temperatures"] = temp_data
 
         # Extract grid metrics
+        # Modbus field names use _v and _hz suffixes
         grid_data = {}
         grid_mappings = {
-            "voltage_v": ["grid_voltage", "ac_voltage"],
-            "frequency_hz": ["grid_frequency", "ac_frequency", "frequency"],
-            "l1_voltage_v": ["l1_voltage", "phase1_voltage"],
-            "l2_voltage_v": ["l2_voltage", "phase2_voltage"],
-            "l3_voltage_v": ["l3_voltage", "phase3_voltage"],
+            "voltage_v": [
+                "grid_voltage_v", "grid_voltage", "ac_voltage_v", "ac_voltage",
+            ],
+            "frequency_hz": [
+                "grid_frequency_hz", "grid_frequency", "ac_frequency_hz",
+                "ac_frequency", "frequency_hz", "frequency",
+            ],
+            "l1_voltage_v": [
+                "l1_voltage_v", "l1_voltage", "phase1_voltage_v", "phase1_voltage",
+                "grid_l1_voltage_v",
+            ],
+            "l2_voltage_v": [
+                "l2_voltage_v", "l2_voltage", "phase2_voltage_v", "phase2_voltage",
+                "grid_l2_voltage_v",
+            ],
+            "l3_voltage_v": [
+                "l3_voltage_v", "l3_voltage", "phase3_voltage_v", "phase3_voltage",
+                "grid_l3_voltage_v",
+            ],
         }
         for target_key, source_keys in grid_mappings.items():
             for src in source_keys:
