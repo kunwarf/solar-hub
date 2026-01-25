@@ -103,13 +103,16 @@ def site_to_response(site: Site) -> SiteResponse:
     """Convert Site domain entity to response schema."""
     # Handle optional geo_location
     geo_location = site.geo_location
-    geo_location_schema = GeoLocationSchema(
-        latitude=geo_location.latitude if geo_location else 0.0,
-        longitude=geo_location.longitude if geo_location else 0.0,
-    )
+    geo_location_schema = None
+    if geo_location:
+        geo_location_schema = GeoLocationSchema(
+            latitude=geo_location.latitude,
+            longitude=geo_location.longitude,
+        )
 
     # Handle optional configuration
     config = site.configuration
+    config_schema = None
     if config:
         config_schema = SiteConfigurationSchema(
             system_capacity_kw=config.system_capacity_kw,
@@ -118,28 +121,12 @@ def site_to_response(site: Site) -> SiteResponse:
             inverter_capacity_kw=config.inverter_capacity_kw,
             inverter_count=config.inverter_count,
             battery_capacity_kwh=config.battery_capacity_kwh,
-            battery_count=config.battery_count,
+            battery_count=config.battery_count or 0,
             grid_connection_type=config.grid_connection_type.value,
             net_metering_enabled=config.net_metering_enabled,
             disco_provider=config.disco_provider.value if config.disco_provider else None,
             tariff_category=config.tariff_category,
             reference_number=config.reference_number,
-        )
-    else:
-        # Default configuration for sites without one
-        config_schema = SiteConfigurationSchema(
-            system_capacity_kw=0.0,
-            panel_count=0,
-            panel_wattage=0,
-            inverter_capacity_kw=0.0,
-            inverter_count=0,
-            battery_capacity_kwh=None,
-            battery_count=None,
-            grid_connection_type="grid_tied",
-            net_metering_enabled=False,
-            disco_provider=None,
-            tariff_category=None,
-            reference_number=None,
         )
 
     return SiteResponse(

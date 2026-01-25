@@ -95,16 +95,16 @@ class SiteResponse(BaseModel):
     id: UUID
     organization_id: UUID
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     address: AddressSchema
-    geo_location: GeoLocationSchema
+    geo_location: Optional[GeoLocationSchema] = None
     timezone: str
     status: str
     site_type: str
-    configuration: SiteConfigurationSchema
-    commissioned_at: Optional[datetime]
+    configuration: Optional[SiteConfigurationSchema] = None
+    commissioned_at: Optional[datetime] = None
     created_at: datetime
-    updated_at: Optional[datetime]
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
