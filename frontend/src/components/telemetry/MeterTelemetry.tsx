@@ -14,12 +14,24 @@ import {
   Cell,
 } from "recharts";
 
+interface DeviceTelemetry {
+  serial_number: string;
+  pv_power_w: number;
+  grid_power_w: number;
+  load_power_w: number;
+  battery_power_w: number;
+  battery_soc_pct: number;
+  is_charging: boolean;
+  online: boolean;
+}
+
 interface MeterTelemetryProps {
   device: {
     id: string;
     name: string;
     metrics: { label: string; value: string; unit: string }[];
   };
+  telemetry?: DeviceTelemetry | null;
 }
 
 // Phase data
@@ -161,10 +173,25 @@ const PhaseCard = ({ data, index }: { data: typeof phaseData[0]; index: number }
   </motion.div>
 );
 
-const MeterTelemetry = ({ device }: MeterTelemetryProps) => {
+const MeterTelemetry = ({ device, telemetry }: MeterTelemetryProps) => {
+  // Use real grid power when available
+  const gridPowerKw = telemetry?.grid_power_w !== undefined ? telemetry.grid_power_w / 1000 : 0;
+  const isExporting = gridPowerKw < 0;
+
+  // Update today stats with real data
+  const updatedTodayStats = {
+    ...todayStats,
+    // Current power flow from real telemetry
+    currentPower: Math.abs(gridPowerKw),
+    isExporting: isExporting,
+  };
+
   const totalPower = phaseData.reduce((sum, p) => sum + (p.direction === "import" ? p.power : -p.power), 0);
   const avgPowerFactor = phaseData.reduce((sum, p) => sum + p.powerFactor, 0) / phaseData.length;
   const avgVoltage = phaseData.reduce((sum, p) => sum + p.voltage, 0) / phaseData.length;
+
+  // Override total power with real telemetry if available
+  const displayTotalPower = telemetry?.grid_power_w !== undefined ? gridPowerKw : totalPower;
   
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -241,9 +268,9 @@ const MeterTelemetry = ({ device }: MeterTelemetryProps) => {
             <p className="text-[10px] sm:text-xs text-muted-foreground">Total Power</p>
             <p className={cn(
               "text-base sm:text-xl font-mono font-bold",
-              totalPower > 0 ? "text-warning" : "text-success"
+              displayTotalPower > 0 ? "text-warning" : "text-success"
             )}>
-              {totalPower > 0 ? "+" : ""}{totalPower.toFixed(2)} kW
+              {displayTotalPower > 0 ? "+" : ""}{displayTotalPower.toFixed(2)} kW
             </p>
           </div>
         </div>

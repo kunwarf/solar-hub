@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -22,29 +22,74 @@ import {
   Sun,
   Battery,
   Gauge,
+  Loader2,
 } from "lucide-react";
-import { devices } from "@/data/mockData";
+import { useDevicesForUI } from "@/hooks/useDevices";
+import { dashboardService, type PowerFlowData, type DevicePowerData } from "@/api";
 import { cn } from "@/lib/utils";
 
 const TelemetryPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const deviceParam = searchParams.get("device");
-  
-  const [selectedDevice, setSelectedDevice] = useState(() => {
-    // Check if device param exists and is valid
-    if (deviceParam && devices.find(d => d.id === deviceParam)) {
-      return deviceParam;
-    }
-    return devices[0].id;
+
+  // Fetch real devices from API
+  const { devices, isLoading: devicesLoading, refresh: refreshDevices } = useDevicesForUI({
+    autoRefresh: true,
+    refreshInterval: 30000,
   });
+
+  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  // Real-time telemetry from power-flow API
+  const [powerFlowData, setPowerFlowData] = useState<PowerFlowData | null>(null);
+  const [telemetryMap, setTelemetryMap] = useState<Map<string, DevicePowerData>>(new Map());
+
+  // Fetch real-time telemetry
+  const fetchTelemetry = useCallback(async () => {
+    try {
+      const data = await dashboardService.getPowerFlow();
+      setPowerFlowData(data);
+      setLastUpdated(new Date());
+
+      // Build map of serial -> telemetry for per-device lookup
+      if (data.devices && data.devices.length > 0) {
+        const newMap = new Map<string, DevicePowerData>();
+        for (const device of data.devices) {
+          newMap.set(device.serial_number, device);
+        }
+        setTelemetryMap(newMap);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch power flow telemetry:', err);
+    }
+  }, []);
+
+  // Initial fetch and polling for telemetry
+  useEffect(() => {
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 5000); // Poll every 5s for real-time feel
+    return () => clearInterval(interval);
+  }, [fetchTelemetry]);
+
+  // Set initial selected device when devices load
+  useEffect(() => {
+    if (devices.length > 0 && !selectedDevice) {
+      if (deviceParam && devices.find(d => d.id === deviceParam)) {
+        setSelectedDevice(deviceParam);
+      } else {
+        setSelectedDevice(devices[0].id);
+      }
+    }
+  }, [devices, deviceParam, selectedDevice]);
 
   // Update selected device when URL param changes
   useEffect(() => {
     if (deviceParam && devices.find(d => d.id === deviceParam)) {
       setSelectedDevice(deviceParam);
     }
-  }, [deviceParam]);
+  }, [deviceParam, devices]);
 
   // Update URL when device selection changes
   const handleDeviceChange = (deviceId: string) => {
@@ -52,12 +97,14 @@ const TelemetryPage = () => {
     setSearchParams({ device: deviceId });
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await Promise.all([refreshDevices(), fetchTelemetry()]);
+    setRefreshing(false);
   };
 
   const currentDevice = devices.find((d) => d.id === selectedDevice);
+  const currentDeviceTelemetry = currentDevice ? telemetryMap.get(currentDevice.serialNumber) : null;
 
   return (
     <AppLayout>
@@ -75,9 +122,16 @@ const TelemetryPage = () => {
         >
           <div className="flex flex-col gap-3 sm:gap-4">
             {/* Device selector - full width on mobile */}
-            <Select value={selectedDevice} onValueChange={handleDeviceChange}>
+            <Select value={selectedDevice || ""} onValueChange={handleDeviceChange}>
               <SelectTrigger className="w-full sm:w-[250px] bg-secondary/50">
-                <SelectValue placeholder="Select device" />
+                {devicesLoading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </span>
+                ) : (
+                  <SelectValue placeholder="Select device" />
+                )}
               </SelectTrigger>
               <SelectContent>
                 {devices.map((device) => (
@@ -93,7 +147,7 @@ const TelemetryPage = () => {
               <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground">
                 <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span className="hidden xs:inline">Updated:</span>
-                <span>Just now</span>
+                <span>{lastUpdated.toLocaleTimeString()}</span>
               </div>
 
               <div className="flex gap-2">
@@ -155,13 +209,13 @@ const TelemetryPage = () => {
         {currentDevice && (
           <>
             {currentDevice.type === "inverter" && (
-              <InverterTelemetry device={currentDevice} />
+              <InverterTelemetry device={currentDevice} telemetry={currentDeviceTelemetry} />
             )}
             {currentDevice.type === "battery" && (
-              <BatteryCellGrid device={currentDevice} />
+              <BatteryCellGrid device={currentDevice} telemetry={currentDeviceTelemetry} />
             )}
             {currentDevice.type === "meter" && (
-              <MeterTelemetry device={currentDevice} />
+              <MeterTelemetry device={currentDevice} telemetry={currentDeviceTelemetry} />
             )}
           </>
         )}

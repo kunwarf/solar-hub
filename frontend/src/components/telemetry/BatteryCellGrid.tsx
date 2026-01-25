@@ -52,11 +52,23 @@ const generateCellData = (packId: number, cellCount: number = 16): CellData[] =>
   });
 };
 
+interface DeviceTelemetry {
+  serial_number: string;
+  pv_power_w: number;
+  grid_power_w: number;
+  load_power_w: number;
+  battery_power_w: number;
+  battery_soc_pct: number;
+  is_charging: boolean;
+  online: boolean;
+}
+
 interface BatteryCellGridProps {
   device?: {
     id: string;
     name: string;
   };
+  telemetry?: DeviceTelemetry | null;
 }
 
 const batteryPacks = [
@@ -311,17 +323,22 @@ const PackStats = ({ cells }: { cells: CellData[] }) => {
   );
 };
 
-const BatteryCellGrid = ({ device }: BatteryCellGridProps) => {
-  // Battery pack summary stats
+const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
+  // Use real telemetry data when available
+  const batteryPowerKw = telemetry?.battery_power_w !== undefined ? telemetry.battery_power_w / 1000 : 2.1;
+  const soc = telemetry?.battery_soc_pct !== undefined ? telemetry.battery_soc_pct : 78;
+  const isCharging = telemetry?.is_charging ?? batteryPowerKw > 0;
+
+  // Battery pack summary stats using real data
   const packSummary = {
-    totalVoltage: 52.4,
-    totalCurrent: 18.6,
-    totalPower: 2.1,
-    soc: 78,
-    health: 94,
-    cycles: 342,
-    temperature: 28,
-    status: "charging" as const,
+    totalVoltage: 52.4, // Would need extended telemetry for voltage
+    totalCurrent: Math.abs(batteryPowerKw) * 1000 / 52.4, // Estimate from power
+    totalPower: Math.abs(batteryPowerKw),
+    soc: Math.round(soc),
+    health: 94, // Would need extended telemetry
+    cycles: 342, // Would need extended telemetry
+    temperature: 28, // Would need extended telemetry
+    status: isCharging ? "charging" as const : "discharging" as const,
   };
 
   return (

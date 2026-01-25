@@ -260,6 +260,29 @@ class ModbusCommandExecutor:
             logger.error(f"Failed to read register {register}: {e}")
             return None
 
+    async def execute(
+        self,
+        device_id: UUID,
+        command_type: str,
+        command_params: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Execute a command on a device (CommandExecutor protocol).
+
+        This method matches the CommandExecutor protocol expected by
+        CommandWorker for queue-based command processing.
+
+        Args:
+            device_id: Target device ID
+            command_type: Type of command to execute
+            command_params: Command parameters
+
+        Returns:
+            Dictionary with execution result
+        """
+        result = await self.execute_command(device_id, command_type, command_params)
+        return result.to_dict()
+
     async def execute_and_verify(
         self,
         device_id: UUID,

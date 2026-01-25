@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -21,6 +21,7 @@ import { FloatingActionButton } from "@/components/mobile/MobileActionButtons";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDevicesForUI } from "@/hooks/useDevices";
+import { dashboardService, type DevicePowerData } from "@/api";
 import type { DeviceType, DeviceStatus } from "@/api/types";
 
 const DevicesPage = () => {
@@ -47,14 +48,39 @@ const DevicesPage = () => {
     refreshInterval: 30000,
   });
 
+  // Fetch real-time telemetry from power-flow API
+  const [telemetryMap, setTelemetryMap] = useState<Map<string, DevicePowerData>>(new Map());
+
+  const fetchTelemetry = useCallback(async () => {
+    try {
+      const powerFlow = await dashboardService.getPowerFlow();
+      if (powerFlow.devices && powerFlow.devices.length > 0) {
+        const newMap = new Map<string, DevicePowerData>();
+        for (const device of powerFlow.devices) {
+          newMap.set(device.serial_number, device);
+        }
+        setTelemetryMap(newMap);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch power flow telemetry:', err);
+    }
+  }, []);
+
+  // Initial fetch and polling for telemetry
+  useEffect(() => {
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 10000); // Poll every 10s
+    return () => clearInterval(interval);
+  }, [fetchTelemetry]);
+
   const handleRefresh = useCallback(async () => {
     // Trigger haptic feedback
     if ('vibrate' in navigator) {
       navigator.vibrate(10);
     }
-    await refresh();
+    await Promise.all([refresh(), fetchTelemetry()]);
     toast.success("Devices refreshed");
-  }, [refresh]);
+  }, [refresh, fetchTelemetry]);
 
   // For backward compatibility, filteredDevices is now just devices from API
   const filteredDevices = devices;
@@ -165,10 +191,13 @@ const DevicesPage = () => {
         {/* Device Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredDevices.map((device, index) => {
+            // Get real-time telemetry for this device by serial number
+            const deviceTelemetry = telemetryMap.get(device.serialNumber);
             const cardContent = (
               <DeviceCard
                 key={device.id}
                 {...device}
+                telemetry={deviceTelemetry}
                 delay={index * 0.1}
                 onConfigure={() => handleConfigure(device.id)}
                 onViewTelemetry={() => handleViewTelemetry(device.id)}

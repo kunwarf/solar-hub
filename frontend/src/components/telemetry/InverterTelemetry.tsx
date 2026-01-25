@@ -13,12 +13,24 @@ import {
   Area,
 } from "recharts";
 
+interface DeviceTelemetry {
+  serial_number: string;
+  pv_power_w: number;
+  grid_power_w: number;
+  load_power_w: number;
+  battery_power_w: number;
+  battery_soc_pct: number;
+  is_charging: boolean;
+  online: boolean;
+}
+
 interface InverterTelemetryProps {
   device: {
     id: string;
     name: string;
     metrics: { label: string; value: string; unit: string }[];
   };
+  telemetry?: DeviceTelemetry | null;
 }
 
 // Generate historical data for inverter
@@ -123,15 +135,26 @@ const arrayStatusStyles = {
   low: { bg: "bg-muted/50", text: "text-muted-foreground", label: "Low Output" },
 };
 
-const InverterTelemetry = ({ device }: InverterTelemetryProps) => {
-  // Real-time power flow values
+const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
+  // Use real telemetry data when available, with fallback display values
+  const solarPower = telemetry?.pv_power_w !== undefined ? telemetry.pv_power_w / 1000 : 0;
+  const gridPower = telemetry?.grid_power_w !== undefined ? telemetry.grid_power_w / 1000 : 0;
+  const loadPower = telemetry?.load_power_w !== undefined ? telemetry.load_power_w / 1000 : 0;
+  const batteryPower = telemetry?.battery_power_w !== undefined ? telemetry.battery_power_w / 1000 : 0;
+  const batterySoc = telemetry?.battery_soc_pct !== undefined ? telemetry.battery_soc_pct : 0;
+  const isCharging = telemetry?.is_charging ?? batteryPower > 0;
+  const isGridExporting = gridPower < 0;
+
+  // Power flow data from real telemetry
   const powerFlowData = {
-    solarPower: 8.4,
-    batteryPower: 2.1,
-    batterySoc: 78,
-    loadPower: 5.2,
-    gridPower: 1.1,
-    isGridExporting: true,
+    solarPower: solarPower,
+    batteryPower: Math.abs(batteryPower),
+    batterySoc: batterySoc,
+    loadPower: loadPower,
+    gridPower: Math.abs(gridPower),
+    isGridExporting: isGridExporting,
+    isCharging: isCharging,
+    // These values would come from extended telemetry if available
     dcVoltage: 580,
     acVoltage: 238,
     frequency: 50.02,
@@ -165,7 +188,7 @@ const InverterTelemetry = ({ device }: InverterTelemetryProps) => {
             value={powerFlowData.batteryPower.toFixed(1)}
             unit="kW"
             color="bg-battery/20 text-battery"
-            direction={powerFlowData.batteryPower > 0 ? "in" : "out"}
+            direction={powerFlowData.isCharging ? "in" : "out"}
             delay={0.1}
           />
           <PowerFlowCard

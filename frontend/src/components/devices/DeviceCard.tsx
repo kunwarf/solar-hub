@@ -3,6 +3,15 @@ import { Cpu, Gauge, Settings, Activity, Sun, Home, Grid3X3, ArrowDown, ArrowUp 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
+interface DeviceTelemetry {
+  pv_power_w?: number;
+  grid_power_w?: number;
+  load_power_w?: number;
+  battery_power_w?: number;
+  battery_soc_pct?: number;
+  is_charging?: boolean;
+}
+
 interface DeviceCardProps {
   id: string;
   name: string;
@@ -15,6 +24,7 @@ interface DeviceCardProps {
     value: string;
     unit: string;
   }[];
+  telemetry?: DeviceTelemetry;  // Real-time telemetry from power-flow API
   onConfigure?: () => void;
   onViewTelemetry?: () => void;
   delay?: number;
@@ -94,34 +104,47 @@ function DeviceIcon({ type, className, soc = 78 }: { type: "inverter" | "battery
   return <Gauge className={className} />;
 }
 
-// Get telemetry metrics based on device type (matching dashboard)
-const getDeviceMetrics = (type: "inverter" | "battery" | "meter") => {
+// Get telemetry metrics based on device type and real telemetry data
+const getDeviceMetrics = (type: "inverter" | "battery" | "meter", telemetry?: DeviceTelemetry) => {
   if (type === "inverter") {
+    // Use real telemetry when available, convert W to kW
+    const solarKw = telemetry?.pv_power_w !== undefined ? (telemetry.pv_power_w / 1000).toFixed(1) : "--";
+    const gridKw = telemetry?.grid_power_w !== undefined ? (Math.abs(telemetry.grid_power_w) / 1000).toFixed(1) : "--";
+    const loadKw = telemetry?.load_power_w !== undefined ? (telemetry.load_power_w / 1000).toFixed(1) : "--";
+    const batteryKw = telemetry?.battery_power_w !== undefined ? (Math.abs(telemetry.battery_power_w) / 1000).toFixed(1) : "--";
+    const isExporting = telemetry?.grid_power_w !== undefined && telemetry.grid_power_w < 0;
+    const isCharging = telemetry?.is_charging ?? (telemetry?.battery_power_w !== undefined && telemetry.battery_power_w > 0);
+
     return [
-      { label: "Solar", value: "4.2", unit: "kW", icon: Sun, color: "text-warning" },
-      { label: "Grid", value: "0.8", unit: "kW", icon: Grid3X3, color: "text-primary" },
-      { label: "Load", value: "2.1", unit: "kW", icon: Home, color: "text-success" },
-      { label: "Battery", value: "1.3", unit: "kW", iconType: "battery-dynamic", color: "text-cyan-400" },
+      { label: "Solar", value: solarKw, unit: "kW", icon: Sun, color: "text-warning" },
+      { label: isExporting ? "Export" : "Grid", value: gridKw, unit: "kW", icon: Grid3X3, color: isExporting ? "text-success" : "text-primary" },
+      { label: "Load", value: loadKw, unit: "kW", icon: Home, color: "text-success" },
+      { label: isCharging ? "Charging" : "Discharging", value: batteryKw, unit: "kW", iconType: "battery-dynamic", color: isCharging ? "text-cyan-400" : "text-orange-400" },
     ];
   }
   if (type === "battery") {
-    const isCharging = true;
+    const soc = telemetry?.battery_soc_pct !== undefined ? telemetry.battery_soc_pct.toFixed(0) : "--";
+    const powerKw = telemetry?.battery_power_w !== undefined ? (Math.abs(telemetry.battery_power_w) / 1000).toFixed(1) : "--";
+    const isCharging = telemetry?.is_charging ?? (telemetry?.battery_power_w !== undefined && telemetry.battery_power_w > 0);
+    const socNum = telemetry?.battery_soc_pct ?? 50;
+
     return [
-      { label: "SOC", value: "78", unit: "%", iconType: "battery-dynamic", color: "text-success" },
-      { label: isCharging ? "Charging" : "Discharging", value: "1.3", unit: "kW", icon: isCharging ? ArrowDown : ArrowUp, color: isCharging ? "text-success" : "text-warning" },
-      { label: "Voltage", value: "52.4", unit: "V", icon: Gauge, color: "text-muted-foreground" },
-      { label: "Temp", value: "28", unit: "°C", icon: Gauge, color: "text-muted-foreground" },
+      { label: "SOC", value: soc, unit: "%", iconType: "battery-dynamic", color: socNum >= 60 ? "text-success" : socNum >= 30 ? "text-warning" : "text-destructive", soc: socNum },
+      { label: isCharging ? "Charging" : "Discharging", value: powerKw, unit: "kW", icon: isCharging ? ArrowDown : ArrowUp, color: isCharging ? "text-success" : "text-warning" },
+      { label: "Voltage", value: "--", unit: "V", icon: Gauge, color: "text-muted-foreground" },
+      { label: "Temp", value: "--", unit: "°C", icon: Gauge, color: "text-muted-foreground" },
     ];
   }
   if (type === "meter") {
-    const currentPower = 0.3;
-    const netExport = 5.7;
-    const isExport = netExport > 0;
+    const gridW = telemetry?.grid_power_w ?? 0;
+    const gridKw = Math.abs(gridW) / 1000;
+    const isExport = gridW < 0;
+
     return [
-      { label: "Power", value: Math.abs(currentPower).toFixed(1), unit: "kW", icon: currentPower >= 0 ? ArrowDown : ArrowUp, color: currentPower >= 0 ? "text-destructive" : "text-success" },
-      { label: "Import", value: "2.5", unit: "kWh", icon: ArrowDown, color: "text-destructive" },
-      { label: "Export", value: "8.2", unit: "kWh", icon: ArrowUp, color: "text-success" },
-      { label: isExport ? "Net Export" : "Net Import", value: Math.abs(netExport).toFixed(1), unit: "kWh", icon: isExport ? ArrowUp : ArrowDown, color: isExport ? "text-success" : "text-destructive" },
+      { label: "Power", value: gridKw.toFixed(1), unit: "kW", icon: isExport ? ArrowUp : ArrowDown, color: isExport ? "text-success" : "text-destructive" },
+      { label: "Import", value: "--", unit: "kWh", icon: ArrowDown, color: "text-destructive" },
+      { label: "Export", value: "--", unit: "kWh", icon: ArrowUp, color: "text-success" },
+      { label: isExport ? "Exporting" : "Importing", value: gridKw.toFixed(1), unit: "kW", icon: isExport ? ArrowUp : ArrowDown, color: isExport ? "text-success" : "text-destructive" },
     ];
   }
   return [];
@@ -134,13 +157,14 @@ export function DeviceCard({
   status,
   model,
   serialNumber,
+  telemetry,
   onConfigure,
   onViewTelemetry,
   delay = 0,
 }: DeviceCardProps) {
   const colors = typeColors[type];
   const statusConfig = statusLabels[status];
-  const telemetryMetrics = getDeviceMetrics(type);
+  const telemetryMetrics = getDeviceMetrics(type, telemetry);
 
   return (
     <motion.div
@@ -156,7 +180,7 @@ export function DeviceCard({
       {/* Header */}
       <div className="flex items-center gap-4 mb-4">
         <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", colors.bg)}>
-          <DeviceIcon type={type} className={cn("w-6 h-6", colors.icon)} soc={78} />
+          <DeviceIcon type={type} className={cn("w-6 h-6", colors.icon)} soc={telemetry?.battery_soc_pct ?? 78} />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -173,7 +197,8 @@ export function DeviceCard({
       {/* Telemetry Metrics Grid - matching dashboard style */}
       <div className="grid grid-cols-2 gap-2 mb-4">
         {telemetryMetrics.map((metric, idx) => {
-          const soc = metric.label === "SOC" ? parseFloat(metric.value) : 78;
+          // Use explicit soc from metric if available, otherwise parse from value or default
+          const soc = (metric as any).soc ?? (metric.label === "SOC" && metric.value !== "--" ? parseFloat(metric.value) : 78);
           return (
             <div
               key={idx}
