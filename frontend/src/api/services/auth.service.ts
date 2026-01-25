@@ -110,10 +110,10 @@ class AuthService {
         );
 
         tokenStorage.setTokens({
-          access_token: response.data.access_token,
-          refresh_token: response.data.refresh_token,
-          token_type: response.data.token_type,
-          expires_in: response.data.expires_in,
+          access_token: response.data.tokens.access_token,
+          refresh_token: response.data.tokens.refresh_token,
+          token_type: response.data.tokens.token_type,
+          expires_in: response.data.tokens.expires_in,
         });
 
         localStorage.setItem(
