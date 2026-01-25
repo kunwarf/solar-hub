@@ -375,8 +375,13 @@ async def get_power_flow(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
     """Get real-time power flow data aggregated for the site."""
+    logger.info(f"[power-flow] Request from user {current_user.email}, site_id={site_id}")
+
     site_info = await get_site_with_devices(current_user, uow, site_id)
+    logger.info(f"[power-flow] Site info: {site_info.site_name}, devices: {site_info.device_serials}")
+
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
+    logger.info(f"[power-flow] Telemetry batch from Redis: {telemetry_batch}")
 
     # Aggregate power data
     total_pv = 0.0
@@ -397,6 +402,8 @@ async def get_power_flow(
         status_val = await telemetry_cache.get_status(serial)
         is_online = status_val == "online"
 
+        logger.info(f"[power-flow] Device {serial}: status={status_val}, online={is_online}, has_telemetry={telemetry is not None}")
+
         if is_online:
             devices_online += 1
 
@@ -406,6 +413,7 @@ async def get_power_flow(
         )
 
         if telemetry:
+            logger.info(f"[power-flow] Device {serial} telemetry keys: {list(telemetry.keys())}")
             power = telemetry.get("power", {})
             battery = telemetry.get("battery", {})
             status_info = telemetry.get("status", {})
@@ -454,7 +462,7 @@ async def get_power_flow(
 
     avg_soc = total_soc / soc_count if soc_count > 0 else 0
 
-    return PowerFlowResponse(
+    response = PowerFlowResponse(
         organization_id=site_info.organization_id,
         site_id=site_info.site_id,
         site_name=site_info.site_name,
@@ -472,6 +480,12 @@ async def get_power_flow(
         devices_total=len(site_info.device_serials),
         devices=devices_data,
     )
+
+    logger.info(f"[power-flow] Response: online={response.online}, devices_online={response.devices_online}/{response.devices_total}, "
+                f"pv={response.pv_power_w}W, grid={response.grid_power_w}W, load={response.load_power_w}W, "
+                f"battery={response.battery_power_w}W, soc={response.battery_soc_pct}%")
+
+    return response
 
 
 @router.get(
