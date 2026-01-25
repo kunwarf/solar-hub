@@ -90,7 +90,7 @@ interface TelemetryProviderProps {
 export const TelemetryProvider = ({
   children,
   siteId,
-  pollingInterval = 5000,
+  pollingInterval = 10000,
 }: TelemetryProviderProps) => {
   const { isAuthenticated } = useAuth();
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
