@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useDevicesForUI, type DeviceForUI } from "@/hooks/useDevices";
-import { dashboardService, type DevicePowerData, type StatsData, type DeviceStatsData } from "@/api";
+import { dashboardService, type DevicePowerData, type PowerFlowData, type StatsData, type DeviceStatsData } from "@/api";
 
 const statusColors: Record<string, string> = {
   online: "status-online",
@@ -89,10 +89,12 @@ function InverterCard({
   telemetry?: DevicePowerData;
   stats?: DeviceStatsData;
 }) {
-  const solarPower = telemetry?.pv_power_w !== undefined ? telemetry.pv_power_w / 1000 : 0;
-  const gridPower = telemetry?.grid_power_w !== undefined ? telemetry.grid_power_w / 1000 : 0;
-  const loadPower = telemetry?.load_power_w !== undefined ? telemetry.load_power_w / 1000 : 0;
-  const batteryPower = telemetry?.battery_power_w !== undefined ? telemetry.battery_power_w / 1000 : 0;
+  const hasTelemetry = !!telemetry;
+  // Use telemetry data when available, otherwise fall back to device's own value
+  const solarPower = hasTelemetry ? telemetry.pv_power_w / 1000 : parseFloat(device.value) || 0;
+  const gridPower = hasTelemetry ? telemetry.grid_power_w / 1000 : 0;
+  const loadPower = hasTelemetry ? telemetry.load_power_w / 1000 : 0;
+  const batteryPower = hasTelemetry ? telemetry.battery_power_w / 1000 : 0;
 
   return (
     <Link to={`/telemetry?device=${device.id}`}>
@@ -112,9 +114,9 @@ function InverterCard({
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
           <MetricPill icon={Sun} label="Solar" value={solarPower.toFixed(1)} unit="kW" color="text-warning" />
-          <MetricPill icon={Grid3X3} label="Grid" value={Math.abs(gridPower).toFixed(1)} unit="kW" color="text-primary" />
-          <MetricPill icon={Home} label="Load" value={loadPower.toFixed(1)} unit="kW" color="text-success" />
-          <MetricPill icon={Battery} label="Bat" value={Math.abs(batteryPower).toFixed(1)} unit="kW" color="text-cyan-400" />
+          <MetricPill icon={Grid3X3} label="Grid" value={hasTelemetry ? Math.abs(gridPower).toFixed(1) : "--"} unit="kW" color="text-primary" />
+          <MetricPill icon={Home} label="Load" value={hasTelemetry ? loadPower.toFixed(1) : "--"} unit="kW" color="text-success" />
+          <MetricPill icon={Battery} label="Bat" value={hasTelemetry ? Math.abs(batteryPower).toFixed(1) : "--"} unit="kW" color="text-cyan-400" />
         </div>
         {stats && (
           <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-border/30">
@@ -141,9 +143,11 @@ function BatteryCard({
   device: DeviceForUI;
   telemetry?: DevicePowerData;
 }) {
-  const soc = telemetry?.battery_soc_pct !== undefined ? telemetry.battery_soc_pct : 0;
-  const power = telemetry?.battery_power_w !== undefined ? telemetry.battery_power_w / 1000 : 0;
-  const isCharging = telemetry?.is_charging ?? power > 0;
+  const hasTelemetry = !!telemetry;
+  // Fall back to device's own value (SOC % from latest_metrics)
+  const soc = hasTelemetry ? telemetry.battery_soc_pct : parseFloat(device.value) || 0;
+  const power = hasTelemetry ? telemetry.battery_power_w / 1000 : 0;
+  const isCharging = hasTelemetry ? (telemetry.is_charging ?? power > 0) : false;
 
   return (
     <Link to={`/telemetry?device=${device.id}`}>
@@ -187,12 +191,20 @@ function BatteryCard({
 // Meter Card
 function MeterCard({
   device,
-  telemetry
+  telemetry,
+  aggregatedGridPower
 }: {
   device: DeviceForUI;
   telemetry?: DevicePowerData;
+  aggregatedGridPower?: number;
 }) {
-  const gridPower = telemetry?.grid_power_w !== undefined ? telemetry.grid_power_w / 1000 : 0;
+  const hasTelemetry = !!telemetry;
+  // Fall back to aggregated grid power, then device's own value
+  const gridPower = hasTelemetry
+    ? telemetry.grid_power_w / 1000
+    : aggregatedGridPower !== undefined
+      ? aggregatedGridPower / 1000
+      : parseFloat(device.value) || 0;
   const isExporting = gridPower < 0;
 
   // Cumulative values would come from stats API
@@ -394,9 +406,11 @@ export function HierarchicalDeviceOverview() {
     refreshInterval: 30000,
   });
 
-  // Fetch real-time telemetry
+  // Fetch real-time telemetry - store full responses for aggregated data
   const [telemetryMap, setTelemetryMap] = useState<Map<string, DevicePowerData>>(new Map());
   const [statsMap, setStatsMap] = useState<Map<string, DeviceStatsData>>(new Map());
+  const [powerFlowData, setPowerFlowData] = useState<PowerFlowData | null>(null);
+  const [statsData, setStatsData] = useState<StatsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchTelemetry = useCallback(async () => {
@@ -406,9 +420,9 @@ export function HierarchicalDeviceOverview() {
         dashboardService.getStats(),
       ]);
 
-      // Debug: Log serial numbers for matching
-      console.log('[SystemOverview] Telemetry serials:', powerFlow.devices?.map(d => d.serial_number) || []);
-      console.log('[SystemOverview] Aggregated pv_power_w:', powerFlow.pv_power_w, 'W');
+      // Store full responses for aggregated data
+      setPowerFlowData(powerFlow);
+      setStatsData(stats);
 
       if (powerFlow.devices && powerFlow.devices.length > 0) {
         const newTelemetryMap = new Map<string, DevicePowerData>();
@@ -438,13 +452,6 @@ export function HierarchicalDeviceOverview() {
     return () => clearInterval(interval);
   }, [fetchTelemetry]);
 
-  // Debug: Log device serials for matching
-  useEffect(() => {
-    if (devices.length > 0) {
-      console.log('[SystemOverview] Device serials:', devices.map(d => d.serialNumber));
-    }
-  }, [devices]);
-
   // Group devices by type
   const { inverters, batteries, meters } = useMemo(() => {
     const inverters: DeviceForUI[] = [];
@@ -465,8 +472,12 @@ export function HierarchicalDeviceOverview() {
   }, [devices]);
 
   // Calculate aggregated metrics for inverters
+  // Primary: use site-level aggregated data from PowerFlowData
+  // Fallback: sum per-device matched telemetry
   const inverterMetrics = useMemo(() => {
-    let totalPower = 0;
+    // Try per-device matching first
+    let matchedPower = 0;
+    let matchedCount = 0;
     let todayEnergy = 0;
     let peakPower = 0;
 
@@ -475,7 +486,8 @@ export function HierarchicalDeviceOverview() {
       const stats = statsMap.get(device.serialNumber);
 
       if (telemetry) {
-        totalPower += telemetry.pv_power_w / 1000;
+        matchedPower += telemetry.pv_power_w / 1000;
+        matchedCount++;
       }
       if (stats) {
         todayEnergy += stats.energy_today_kwh;
@@ -483,39 +495,56 @@ export function HierarchicalDeviceOverview() {
       }
     }
 
-    // Debug: Show match result
-    if (inverters.length > 0) {
-      console.log('[SystemOverview] Inverter match result:', {
-        deviceSerials: inverters.map(d => d.serialNumber),
-        telemetrySerials: Array.from(telemetryMap.keys()),
-        totalPower: totalPower.toFixed(2) + ' kW'
-      });
+    // Use aggregated site-level data when per-device matching yields nothing
+    const totalPower = matchedCount > 0
+      ? matchedPower
+      : (powerFlowData ? powerFlowData.pv_power_w / 1000 : 0);
+
+    // Use aggregated stats when per-device matching yields nothing
+    if (todayEnergy === 0 && statsData) {
+      todayEnergy = statsData.energy_today_kwh;
+    }
+    if (peakPower === 0 && statsData) {
+      peakPower = statsData.peak_power_kw;
     }
 
     return { totalPower, todayEnergy, peakPower };
-  }, [inverters, telemetryMap, statsMap]);
+  }, [inverters, telemetryMap, statsMap, powerFlowData, statsData]);
 
   // Calculate aggregated metrics for batteries
+  // Primary: use site-level aggregated data from PowerFlowData
+  // Fallback: sum per-device matched telemetry
   const batteryMetrics = useMemo(() => {
-    let totalPower = 0;
-    let totalSoc = 0;
+    // Try per-device matching first
+    let matchedPower = 0;
+    let matchedSoc = 0;
+    let matchedCount = 0;
     let chargingCount = 0;
 
     for (const device of batteries) {
       const telemetry = telemetryMap.get(device.serialNumber);
 
       if (telemetry) {
-        totalPower += telemetry.battery_power_w / 1000;
-        totalSoc += telemetry.battery_soc_pct;
+        matchedPower += telemetry.battery_power_w / 1000;
+        matchedSoc += telemetry.battery_soc_pct;
+        matchedCount++;
         if (telemetry.is_charging) chargingCount++;
       }
     }
 
-    const avgSoc = batteries.length > 0 ? totalSoc / batteries.length : 0;
-    const isCharging = chargingCount > batteries.length / 2;
+    // Use aggregated site-level data when per-device matching yields nothing
+    const totalPower = matchedCount > 0
+      ? matchedPower
+      : (powerFlowData ? powerFlowData.battery_power_w / 1000 : 0);
+    const avgSoc = matchedCount > 0
+      ? matchedSoc / matchedCount
+      : (powerFlowData ? powerFlowData.battery_soc_pct : 0);
+    const isCharging = matchedCount > 0
+      ? chargingCount > batteries.length / 2
+      : (powerFlowData ? powerFlowData.is_charging : false);
 
     return { totalPower, avgSoc, isCharging };
-  }, [batteries, telemetryMap]);
+  }, [batteries, telemetryMap, powerFlowData]);
 
   if (devicesLoading || isLoading) {
     return (
@@ -559,7 +588,25 @@ export function HierarchicalDeviceOverview() {
       <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
           <h3 className="text-base sm:text-lg font-semibold text-foreground">System Overview</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground">Home Solar System</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {powerFlowData?.site_name || "Home Solar System"}
+            {powerFlowData && (
+              <span className={cn(
+                "ml-2 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full",
+                powerFlowData.stale
+                  ? "bg-warning/20 text-warning"
+                  : powerFlowData.online
+                    ? "bg-success/20 text-success"
+                    : "bg-muted text-muted-foreground"
+              )}>
+                <span className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  powerFlowData.stale ? "bg-warning" : powerFlowData.online ? "bg-success animate-pulse" : "bg-muted-foreground"
+                )} />
+                {powerFlowData.stale ? "Stale" : powerFlowData.online ? "Live" : "Offline"}
+              </span>
+            )}
+          </p>
         </div>
         <Link
           to="/devices"
@@ -580,6 +627,7 @@ export function HierarchicalDeviceOverview() {
                 key={meter.id}
                 device={meter}
                 telemetry={telemetryMap.get(meter.serialNumber)}
+                aggregatedGridPower={powerFlowData?.grid_power_w}
               />
             ))}
           </div>

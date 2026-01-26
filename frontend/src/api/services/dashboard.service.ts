@@ -537,12 +537,15 @@ class DashboardService {
     } catch (error) {
       console.warn('Failed to fetch power flow, using mock:', error);
       const mock = generateMockPowerSnapshot();
+      const pvTotal = mock.solar_power_kw * 1000;
+      const pvMain = pvTotal * 0.7;
+      const pvSecondary = pvTotal * 0.3;
       return {
         organization_id: 'mock-org',
         site_id: siteId || 'mock-site',
         site_name: 'My Home',
         timestamp: new Date().toISOString(),
-        pv_power_w: mock.solar_power_kw * 1000,
+        pv_power_w: pvTotal,
         grid_power_w: mock.grid_power_kw * 1000,
         load_power_w: mock.consumption_kw * 1000,
         battery_power_w: mock.battery_power_kw * 1000,
@@ -551,18 +554,50 @@ class DashboardService {
         grid_connected: true,
         online: true,
         stale: false,
-        devices_online: 1,
-        devices_total: 1,
-        devices: [{
-          serial_number: 'mock-device',
-          pv_power_w: mock.solar_power_kw * 1000,
-          grid_power_w: mock.grid_power_kw * 1000,
-          load_power_w: mock.consumption_kw * 1000,
-          battery_power_w: mock.battery_power_kw * 1000,
-          battery_soc_pct: mock.battery_soc,
-          is_charging: mock.battery_power_kw < 0,
-          online: true,
-        }],
+        devices_online: 4,
+        devices_total: 4,
+        devices: [
+          {
+            serial_number: 'SE10K-2024-001234',
+            pv_power_w: pvMain,
+            grid_power_w: mock.grid_power_kw * 1000,
+            load_power_w: mock.consumption_kw * 700,
+            battery_power_w: mock.battery_power_kw * 1000,
+            battery_soc_pct: mock.battery_soc,
+            is_charging: mock.battery_power_kw < 0,
+            online: true,
+          },
+          {
+            serial_number: 'HW5K-2024-003456',
+            pv_power_w: pvSecondary,
+            grid_power_w: 0,
+            load_power_w: mock.consumption_kw * 300,
+            battery_power_w: 0,
+            battery_soc_pct: 0,
+            is_charging: false,
+            online: true,
+          },
+          {
+            serial_number: 'PW2-2024-005678',
+            pv_power_w: 0,
+            grid_power_w: 0,
+            load_power_w: 0,
+            battery_power_w: mock.battery_power_kw * 1000,
+            battery_soc_pct: mock.battery_soc,
+            is_charging: mock.battery_power_kw < 0,
+            online: true,
+          },
+          {
+            serial_number: 'PM5560-2024-009012',
+            pv_power_w: 0,
+            grid_power_w: mock.grid_power_kw * 1000,
+            load_power_w: mock.consumption_kw * 1000,
+            battery_power_w: 0,
+            battery_soc_pct: 0,
+            is_charging: false,
+            online: true,
+          },
+        ],
       };
     }
   }
@@ -592,14 +627,22 @@ class DashboardService {
         peak_power_kw: 5.2,
         co2_saved_kg: 13.5,
         online: true,
-        devices_online: 1,
-        devices_total: 1,
-        devices: [{
-          serial_number: 'mock-device',
-          energy_today_kwh: 28.5,
-          peak_power_kw: 5.2,
-          online: true,
-        }],
+        devices_online: 4,
+        devices_total: 4,
+        devices: [
+          {
+            serial_number: 'SE10K-2024-001234',
+            energy_today_kwh: 20.0,
+            peak_power_kw: 5.2,
+            online: true,
+          },
+          {
+            serial_number: 'HW5K-2024-003456',
+            energy_today_kwh: 8.5,
+            peak_power_kw: 3.1,
+            online: true,
+          },
+        ],
       };
     }
   }
@@ -631,7 +674,7 @@ class DashboardService {
         devices_online: 1,
         devices_total: 1,
         devices: [{
-          serial_number: 'mock-device',
+          serial_number: 'PW2-2024-005678',
           soc_pct: 75,
           power_w: 800,
           is_charging: true,
@@ -661,21 +704,18 @@ class DashboardService {
         organization_id: 'mock-org',
         site_id: siteId || 'mock-site',
         site_name: 'My Home',
-        devices_online: 1,
+        devices_online: 4,
         devices_offline: 0,
-        devices_total: 1,
+        devices_total: 4,
         total_faults: 0,
-        total_warnings: 0,
+        total_warnings: 1,
         grid_connected: true,
-        devices: [{
-          serial_number: 'mock-device',
-          status: 'online',
-          last_seen: Math.floor(Date.now() / 1000),
-          working_mode: 'auto',
-          faults: [],
-          warnings: [],
-          online: true,
-        }],
+        devices: [
+          { serial_number: 'SE10K-2024-001234', status: 'online', last_seen: Math.floor(Date.now() / 1000), working_mode: 'auto', faults: [], warnings: [], online: true },
+          { serial_number: 'HW5K-2024-003456', status: 'online', last_seen: Math.floor(Date.now() / 1000), working_mode: 'auto', faults: [], warnings: ['High temperature'], online: true },
+          { serial_number: 'PW2-2024-005678', status: 'online', last_seen: Math.floor(Date.now() / 1000), working_mode: 'auto', faults: [], warnings: [], online: true },
+          { serial_number: 'PM5560-2024-009012', status: 'online', last_seen: Math.floor(Date.now() / 1000), working_mode: 'auto', faults: [], warnings: [], online: true },
+        ],
       };
     }
   }
