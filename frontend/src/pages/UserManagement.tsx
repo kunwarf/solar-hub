@@ -114,6 +114,16 @@ const UserManagementPage = () => {
 
   const canManageUsers = hasPermission("manage_users");
 
+  if (!currentUser) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
   const handleInviteUser = () => {
     if (!inviteEmail.trim()) {
       toast.error("Please enter an email address");

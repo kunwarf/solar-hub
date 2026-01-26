@@ -90,7 +90,7 @@ interface DiagnosticResult {
 const CommissioningPage = () => {
   const navigate = useNavigate();
   const { currentUser, isInstaller, hasPermission } = useUserRole();
-  
+
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     { id: "physical", title: "Device physically installed", description: "Confirm the device is mounted and secured properly", status: "completed" },
     { id: "powered", title: "Device powered on", description: "Verify power indicator lights are active", status: "completed" },
@@ -106,7 +106,7 @@ const CommissioningPage = () => {
   const [diagnosticResult, setDiagnosticResult] = useState<DiagnosticResult | null>(null);
   const [isRawDataOpen, setIsRawDataOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  
+
   // Configuration state
   const [deviceConfig, setDeviceConfig] = useState({
     name: "Senergy 5kW Inverter",
@@ -126,6 +126,16 @@ const CommissioningPage = () => {
   const [ownerEmail, setOwnerEmail] = useState("ahmad.khan@example.com");
   const [handoffMessage, setHandoffMessage] = useState("");
   const [isHandoffSent, setIsHandoffSent] = useState(false);
+
+  if (!currentUser) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </AppLayout>
+    );
+  }
 
   // Mock raw telemetry data
   const rawTelemetry = {

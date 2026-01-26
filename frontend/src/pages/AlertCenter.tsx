@@ -1,13 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,9 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  Bell, 
-  AlertTriangle, 
+import {
+  Bell,
+  AlertTriangle,
   AlertCircle,
   Info,
   CheckCircle2,
@@ -30,80 +28,10 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { NotificationSettingsPanel } from "@/components/settings/NotificationSettingsPanel";
+import { alertsService, type UIAlert } from "@/api/services/alerts.service";
 
 type AlertSeverity = "critical" | "warning" | "info" | "resolved";
 type AlertCategory = "load-shedding" | "device" | "performance" | "billing" | "system";
-
-interface Alert {
-  id: string;
-  timestamp: string;
-  title: string;
-  message: string;
-  severity: AlertSeverity;
-  category: AlertCategory;
-  device?: string;
-  acknowledged: boolean;
-}
-
-const mockAlerts: Alert[] = [
-  {
-    id: "1",
-    timestamp: "2024-01-15 14:32:15",
-    title: "Load Shedding Stage 4 Announced",
-    message: "Eskom has implemented Stage 4 load shedding. Your next slot is 16:00-18:30.",
-    severity: "warning",
-    category: "load-shedding",
-    acknowledged: false,
-  },
-  {
-    id: "2",
-    timestamp: "2024-01-15 14:28:42",
-    title: "Battery Temperature High",
-    message: "Battery Pack A temperature is 38°C, above the recommended 35°C threshold.",
-    severity: "warning",
-    category: "device",
-    device: "Battery Pack A",
-    acknowledged: false,
-  },
-  {
-    id: "3",
-    timestamp: "2024-01-15 13:45:00",
-    title: "Inverter Communication Lost",
-    message: "Unable to communicate with Inverter 2 for the past 5 minutes.",
-    severity: "critical",
-    category: "device",
-    device: "Inverter 2",
-    acknowledged: false,
-  },
-  {
-    id: "4",
-    timestamp: "2024-01-15 12:00:00",
-    title: "Grid Export Limit Reached",
-    message: "Daily grid export limit of 50 kWh reached. Excess production being stored.",
-    severity: "info",
-    category: "performance",
-    acknowledged: true,
-  },
-  {
-    id: "5",
-    timestamp: "2024-01-15 10:30:00",
-    title: "Solar Production Below Expected",
-    message: "Solar production is 25% below forecast. Possible cloud cover or panel issue.",
-    severity: "warning",
-    category: "performance",
-    acknowledged: true,
-  },
-  {
-    id: "6",
-    timestamp: "2024-01-14 18:00:00",
-    title: "Load Shedding Ended",
-    message: "Load shedding window has ended. Grid power restored.",
-    severity: "resolved",
-    category: "load-shedding",
-    acknowledged: true,
-  },
-];
-
 
 const severityConfig = {
   critical: {
@@ -145,11 +73,26 @@ const categoryIcons = {
 };
 
 const AlertCenterPage = () => {
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
+  const [alerts, setAlerts] = useState<UIAlert[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState<AlertSeverity | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<AlertCategory | "all">("all");
-  
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const result = await alertsService.getAlertsForUI();
+        setAlerts(result.alerts);
+      } catch (error) {
+        console.error('Failed to fetch alerts:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAlerts();
+  }, []);
 
   const filteredAlerts = alerts.filter(alert => {
     const matchesSearch = alert.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -162,12 +105,20 @@ const AlertCenterPage = () => {
   const unacknowledgedCount = alerts.filter(a => !a.acknowledged && a.severity !== "resolved").length;
   const criticalCount = alerts.filter(a => a.severity === "critical" && !a.acknowledged).length;
 
-  const acknowledgeAlert = (id: string) => {
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, acknowledged: true } : a));
-    toast.success("Alert acknowledged");
+  const acknowledgeAlert = async (id: string) => {
+    try {
+      await alertsService.acknowledgeAlert(id);
+      setAlerts(prev => prev.map(a => a.id === id ? { ...a, acknowledged: true } : a));
+      toast.success("Alert acknowledged");
+    } catch (error) {
+      console.error('Failed to acknowledge alert:', error);
+      toast.error("Failed to acknowledge alert");
+    }
   };
 
   const acknowledgeAll = () => {
+    const unacknowledged = alerts.filter(a => !a.acknowledged);
+    Promise.all(unacknowledged.map(a => alertsService.acknowledgeAlert(a.id).catch(() => null)));
     setAlerts(prev => prev.map(a => ({ ...a, acknowledged: true })));
     toast.success("All alerts acknowledged");
   };
@@ -179,11 +130,11 @@ const AlertCenterPage = () => {
 
   return (
     <AppLayout>
-      <AppHeader 
-        title="Alert Center" 
+      <AppHeader
+        title="Alert Center"
         subtitle="Monitor and manage system alerts"
       />
-      
+
       <div className="p-6 space-y-6">
         {/* Alert Summary Bar */}
         <motion.div
@@ -200,7 +151,7 @@ const AlertCenterPage = () => {
               <p className="text-xs text-muted-foreground">Critical</p>
             </div>
           </div>
-          
+
           <div className="glass-card p-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center">
               <AlertTriangle className="w-5 h-5 text-warning" />
@@ -212,7 +163,7 @@ const AlertCenterPage = () => {
               <p className="text-xs text-muted-foreground">Warnings</p>
             </div>
           </div>
-          
+
           <div className="glass-card p-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
               <Bell className="w-5 h-5 text-primary" />
@@ -222,7 +173,7 @@ const AlertCenterPage = () => {
               <p className="text-xs text-muted-foreground">Unread</p>
             </div>
           </div>
-          
+
           <div className="glass-card p-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
               <CheckCircle2 className="w-5 h-5 text-success" />
@@ -266,7 +217,7 @@ const AlertCenterPage = () => {
                   className="pl-10"
                 />
               </div>
-              
+
               <Select value={severityFilter} onValueChange={(v) => setSeverityFilter(v as AlertSeverity | "all")}>
                 <SelectTrigger className="w-[130px]">
                   <SelectValue placeholder="Severity" />
@@ -279,7 +230,7 @@ const AlertCenterPage = () => {
                   <SelectItem value="resolved">Resolved</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v as AlertCategory | "all")}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="Category" />
@@ -307,7 +258,11 @@ const AlertCenterPage = () => {
             {/* Alert List */}
             <div className="space-y-3">
               <AnimatePresence>
-                {filteredAlerts.length === 0 ? (
+                {isLoading ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">Loading alerts...</p>
+                  </div>
+                ) : filteredAlerts.length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

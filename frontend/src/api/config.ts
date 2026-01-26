@@ -12,10 +12,6 @@ export const API_CONFIG = {
   // WebSocket URL for real-time telemetry
   wsUrl: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws',
 
-  // Enable mock mode when API is unavailable
-  // Default to true in development if env var is not set
-  useMockFallback: import.meta.env.VITE_USE_MOCK_FALLBACK !== 'false',
-
   // Request timeout in milliseconds
   timeout: 30000,
 

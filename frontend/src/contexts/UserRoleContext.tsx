@@ -1,4 +1,7 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { usersService } from "@/api/services/users.service";
+import type { User as ApiUser, UserRole as ApiUserRole } from "@/api/types";
 
 export type UserRole = "owner" | "admin" | "viewer" | "installer";
 
@@ -32,7 +35,7 @@ export interface ActivityLogEntry {
 }
 
 interface UserRoleContextType {
-  currentUser: User;
+  currentUser: User | null;
   users: User[];
   invitations: Invitation[];
   activityLog: ActivityLogEntry[];
@@ -45,7 +48,7 @@ interface UserRoleContextType {
   resendInvitation: (invitationId: string) => void;
 }
 
-type Permission = 
+type Permission =
   | "view_dashboard"
   | "manage_devices"
   | "edit_settings"
@@ -89,149 +92,119 @@ const roleDescriptions: Record<UserRole, string> = {
   installer: "Temporary access for system commissioning with device and settings control",
 };
 
-// Mock data
-const mockCurrentUser: User = {
-  id: "user_1",
-  name: "Ahmad Khan",
-  email: "ahmad.khan@example.com",
-  role: "owner",
-  status: "active",
-  lastActive: new Date().toISOString(),
-};
+function mapApiRoleToLocal(apiRole: ApiUserRole | string): UserRole {
+  const roleMap: Record<string, UserRole> = {
+    owner: "owner",
+    admin: "admin",
+    viewer: "viewer",
+    installer: "installer",
+    super_admin: "owner",
+    manager: "admin",
+  };
+  return roleMap[apiRole] || "viewer";
+}
 
-const mockUsers: User[] = [
-  mockCurrentUser,
-  {
-    id: "user_2",
-    name: "Fatima Ahmed",
-    email: "fatima.ahmed@example.com",
-    role: "admin",
-    status: "active",
-    lastActive: "2024-01-15T10:30:00Z",
-  },
-  {
-    id: "user_3",
-    name: "Hassan Ali",
-    email: "hassan.ali@example.com",
-    role: "viewer",
-    status: "active",
-    lastActive: "2024-01-14T15:45:00Z",
-  },
-  {
-    id: "user_4",
-    name: "SolarTech Installer",
-    email: "tech@solartech.pk",
-    role: "installer",
-    status: "active",
-    lastActive: "2024-01-15T09:00:00Z",
-    installerExpiresAt: "2024-01-22T09:00:00Z",
-  },
-];
-
-const mockInvitations: Invitation[] = [
-  {
-    id: "inv_1",
-    email: "newuser@example.com",
-    role: "viewer",
-    sentAt: "2024-01-14T12:00:00Z",
-    expiresAt: "2024-01-21T12:00:00Z",
-  },
-  {
-    id: "inv_2",
-    email: "installer@pvexpert.pk",
-    role: "installer",
-    sentAt: "2024-01-15T08:00:00Z",
-    expiresAt: "2024-01-18T08:00:00Z",
-    message: "Access for system commissioning",
-  },
-];
-
-const mockActivityLog: ActivityLogEntry[] = [
-  {
-    id: "log_1",
-    userId: "user_1",
-    userName: "Ahmad Khan",
-    action: "Updated tariff settings",
-    details: "Changed DISCO from LESCO to FESCO",
-    timestamp: "2024-01-15T14:30:00Z",
-  },
-  {
-    id: "log_2",
-    userId: "user_4",
-    userName: "SolarTech Installer",
-    action: "Added new device",
-    details: "Registered Inverter: Senergy 5kW",
-    timestamp: "2024-01-15T09:15:00Z",
-  },
-  {
-    id: "log_3",
-    userId: "user_2",
-    userName: "Fatima Ahmed",
-    action: "Invited user",
-    details: "Sent invitation to newuser@example.com",
-    timestamp: "2024-01-14T12:00:00Z",
-  },
-  {
-    id: "log_4",
-    userId: "user_1",
-    userName: "Ahmad Khan",
-    action: "Changed user role",
-    details: "Updated Hassan Ali from Admin to Viewer",
-    timestamp: "2024-01-13T16:45:00Z",
-  },
-  {
-    id: "log_5",
-    userId: "user_3",
-    userName: "Hassan Ali",
-    action: "Viewed billing report",
-    details: "Accessed January 2024 billing summary",
-    timestamp: "2024-01-13T11:20:00Z",
-  },
-];
+function mapApiUserToLocal(apiUser: ApiUser): User {
+  return {
+    id: apiUser.id,
+    name: `${apiUser.first_name} ${apiUser.last_name}`.trim(),
+    email: apiUser.email,
+    role: mapApiRoleToLocal(apiUser.role),
+    status: apiUser.status === "active" ? "active" : "pending",
+    lastActive: apiUser.updated_at,
+  };
+}
 
 const UserRoleContext = createContext<UserRoleContextType | undefined>(undefined);
 
 export function UserRoleProvider({ children }: { children: ReactNode }) {
-  const [currentUser] = useState<User>(mockCurrentUser);
-  const [users, setUsers] = useState<User[]>(mockUsers);
-  const [invitations, setInvitations] = useState<Invitation[]>(mockInvitations);
-  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(mockActivityLog);
+  const { user: authUser } = useAuth();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
 
-  const hasPermission = (permission: Permission): boolean => {
+  // Derive currentUser from auth context
+  useEffect(() => {
+    if (authUser) {
+      setCurrentUser(mapApiUserToLocal(authUser));
+    } else {
+      setCurrentUser(null);
+    }
+  }, [authUser]);
+
+  // Fetch users list from API
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await usersService.listUsers();
+        setUsers(response.items.map(mapApiUserToLocal));
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+      }
+    };
+
+    if (currentUser) {
+      fetchUsers();
+    }
+  }, [currentUser]);
+
+  const hasPermission = useCallback((permission: Permission): boolean => {
+    if (!currentUser) return false;
     return rolePermissions[currentUser.role].includes(permission);
-  };
+  }, [currentUser]);
 
-  const isInstaller = currentUser.role === "installer";
+  const isInstaller = currentUser?.role === "installer";
 
-  const updateUserRole = (userId: string, role: UserRole) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
-    setActivityLog(prev => [{
-      id: `log_${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      action: "Changed user role",
-      details: `Updated ${users.find(u => u.id === userId)?.name} to ${role}`,
-      timestamp: new Date().toISOString(),
-    }, ...prev]);
-  };
+  const updateUserRole = useCallback(async (userId: string, role: UserRole) => {
+    try {
+      const apiRoleMap: Record<UserRole, string> = {
+        owner: "owner",
+        admin: "admin",
+        viewer: "viewer",
+        installer: "installer",
+      };
+      await usersService.updateUserRole(userId, apiRoleMap[role] as ApiUserRole);
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+      if (currentUser) {
+        setActivityLog(prev => [{
+          id: `log_${Date.now()}`,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          action: "Changed user role",
+          details: `Updated ${users.find(u => u.id === userId)?.name} to ${role}`,
+          timestamp: new Date().toISOString(),
+        }, ...prev]);
+      }
+    } catch (error) {
+      console.error('Failed to update user role:', error);
+    }
+  }, [currentUser, users]);
 
-  const removeUser = (userId: string) => {
-    const removedUser = users.find(u => u.id === userId);
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    setActivityLog(prev => [{
-      id: `log_${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      action: "Removed user",
-      details: `Removed ${removedUser?.name} (${removedUser?.email})`,
-      timestamp: new Date().toISOString(),
-    }, ...prev]);
-  };
+  const removeUser = useCallback(async (userId: string) => {
+    try {
+      await usersService.updateUserStatus(userId, 'deactivated' as ApiUserRole);
+      const removedUser = users.find(u => u.id === userId);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      if (currentUser) {
+        setActivityLog(prev => [{
+          id: `log_${Date.now()}`,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          action: "Removed user",
+          details: `Removed ${removedUser?.name} (${removedUser?.email})`,
+          timestamp: new Date().toISOString(),
+        }, ...prev]);
+      }
+    } catch (error) {
+      console.error('Failed to remove user:', error);
+    }
+  }, [currentUser, users]);
 
-  const inviteUser = (email: string, role: UserRole, message?: string, duration?: number) => {
+  const inviteUser = useCallback((email: string, role: UserRole, message?: string, duration?: number) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + (duration || 7));
-    
+
     const newInvitation: Invitation = {
       id: `inv_${Date.now()}`,
       email,
@@ -240,38 +213,42 @@ export function UserRoleProvider({ children }: { children: ReactNode }) {
       expiresAt: expiresAt.toISOString(),
       message,
     };
-    
-    setInvitations(prev => [...prev, newInvitation]);
-    setActivityLog(prev => [{
-      id: `log_${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      action: "Invited user",
-      details: `Sent ${role} invitation to ${email}`,
-      timestamp: new Date().toISOString(),
-    }, ...prev]);
-  };
 
-  const cancelInvitation = (invitationId: string) => {
+    setInvitations(prev => [...prev, newInvitation]);
+    if (currentUser) {
+      setActivityLog(prev => [{
+        id: `log_${Date.now()}`,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        action: "Invited user",
+        details: `Sent ${role} invitation to ${email}`,
+        timestamp: new Date().toISOString(),
+      }, ...prev]);
+    }
+  }, [currentUser]);
+
+  const cancelInvitation = useCallback((invitationId: string) => {
     const invitation = invitations.find(i => i.id === invitationId);
     setInvitations(prev => prev.filter(i => i.id !== invitationId));
-    setActivityLog(prev => [{
-      id: `log_${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      action: "Cancelled invitation",
-      details: `Cancelled invitation to ${invitation?.email}`,
-      timestamp: new Date().toISOString(),
-    }, ...prev]);
-  };
+    if (currentUser) {
+      setActivityLog(prev => [{
+        id: `log_${Date.now()}`,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        action: "Cancelled invitation",
+        details: `Cancelled invitation to ${invitation?.email}`,
+        timestamp: new Date().toISOString(),
+      }, ...prev]);
+    }
+  }, [currentUser, invitations]);
 
-  const resendInvitation = (invitationId: string) => {
-    setInvitations(prev => prev.map(i => 
-      i.id === invitationId 
+  const resendInvitation = useCallback((invitationId: string) => {
+    setInvitations(prev => prev.map(i =>
+      i.id === invitationId
         ? { ...i, sentAt: new Date().toISOString() }
         : i
     ));
-  };
+  }, []);
 
   return (
     <UserRoleContext.Provider value={{

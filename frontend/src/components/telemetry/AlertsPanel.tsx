@@ -1,7 +1,9 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, AlertCircle, Info, CheckCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { alertsService, type UIAlert } from "@/api/services/alerts.service";
 
 interface Alert {
   id: string;
@@ -11,33 +13,6 @@ interface Alert {
   severity: "critical" | "warning" | "info" | "resolved";
   device?: string;
 }
-
-const mockAlerts: Alert[] = [
-  {
-    id: "1",
-    timestamp: "14:32:15",
-    title: "Battery Temperature Warning",
-    message: "Battery temperature is above normal threshold (32.5°C)",
-    severity: "warning",
-    device: "Battery Pack A",
-  },
-  {
-    id: "2",
-    timestamp: "14:28:42",
-    title: "Grid Voltage Fluctuation",
-    message: "Minor voltage fluctuation detected on grid connection",
-    severity: "info",
-    device: "Smart Meter",
-  },
-  {
-    id: "3",
-    timestamp: "13:45:00",
-    title: "Inverter Efficiency Restored",
-    message: "Inverter efficiency returned to normal operating range",
-    severity: "resolved",
-    device: "Solar Inverter 1",
-  },
-];
 
 const severityConfig = {
   critical: {
@@ -70,8 +45,38 @@ const severityConfig = {
   },
 };
 
+function mapUIAlertToLocal(uiAlert: UIAlert): Alert {
+  return {
+    id: uiAlert.id,
+    timestamp: uiAlert.timestamp,
+    title: uiAlert.title,
+    message: uiAlert.message,
+    severity: uiAlert.severity,
+    device: uiAlert.device,
+  };
+}
+
 export function AlertsPanel() {
-  const alerts = mockAlerts;
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const result = await alertsService.getAlertsForUI(
+          undefined,
+          { page: 1, page_size: 5 }
+        );
+        setAlerts(result.alerts.map(mapUIAlertToLocal));
+      } catch (error) {
+        console.error('Failed to fetch alerts:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAlerts();
+  }, []);
 
   return (
     <motion.div
@@ -90,7 +95,11 @@ export function AlertsPanel() {
       </div>
 
       <div className="p-4 space-y-3">
-        {alerts.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">Loading alerts...</p>
+          </div>
+        ) : alerts.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p>No active alerts</p>
@@ -117,7 +126,7 @@ export function AlertsPanel() {
                   <div className={cn("p-2 rounded-lg", config.bgColor)}>
                     <Icon className={cn("w-5 h-5", config.iconColor)} />
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h4 className="font-medium text-foreground">{alert.title}</h4>
@@ -125,9 +134,9 @@ export function AlertsPanel() {
                         {alert.severity}
                       </span>
                     </div>
-                    
+
                     <p className="text-sm text-muted-foreground mb-2">{alert.message}</p>
-                    
+
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span className="font-mono">{alert.timestamp}</span>
                       {alert.device && (
