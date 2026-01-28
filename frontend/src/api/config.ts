@@ -110,6 +110,8 @@ export const API_ENDPOINTS = {
     energyChart: '/dashboard/energy-chart',
     comparison: '/dashboard/comparison',
     peakDemand: '/dashboard/peak-demand',
+    weather: '/dashboard/weather',
+    loadShedding: '/dashboard/load-shedding',
     billing: '/dashboard/billing',
     all: '/dashboard/all',
   },

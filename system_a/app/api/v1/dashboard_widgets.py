@@ -209,6 +209,41 @@ class EnergyChartResponse(BaseModel):
     data: List[EnergyChartPoint] = Field(default_factory=list)
 
 
+class WeatherResponse(BaseModel):
+    """Weather data derived from site telemetry."""
+    organization_id: UUID
+    site_id: UUID
+    site_name: str
+    temperature: float = 0  # °C from ambient sensor
+    condition: str = "sunny"  # sunny, cloudy, rainy, windy
+    humidity: int = 50
+    wind_speed: int = 10  # km/h
+    solar_forecast: int = 0  # % of expected production
+    sunrise: str = "06:00"
+    sunset: str = "18:00"
+
+
+class LoadSheddingWindow(BaseModel):
+    """Time window for load shedding."""
+    start: str
+    end: str
+    duration: Optional[int] = None  # minutes remaining
+    date: Optional[str] = None
+
+
+class LoadSheddingResponse(BaseModel):
+    """Load shedding / grid status data."""
+    organization_id: UUID
+    site_id: UUID
+    site_name: str
+    stage: int = 0  # 0 = no load shedding
+    active: bool = False  # grid currently down
+    current_window: Optional[LoadSheddingWindow] = None
+    next_window: Optional[LoadSheddingWindow] = None
+    battery_reserve: int = 0  # SOC %
+    estimated_coverage: float = 0  # hours of backup
+
+
 class PeakDemandHourly(BaseModel):
     """Single hourly demand data point."""
     hour: str
@@ -1100,6 +1135,132 @@ async def get_peak_demand(
         average_demand_kw=round(avg_kw, 2),
         current_demand_kw=round(current_load / 1000, 2),
         hourly_profile=hourly_profile,
+    )
+
+
+@router.get(
+    "/weather",
+    response_model=WeatherResponse,
+    summary="Get weather data derived from telemetry",
+    description="Returns weather conditions inferred from site telemetry sensors. Refresh: 30 minutes.",
+)
+async def get_weather(
+    site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """Get weather data derived from site telemetry."""
+    site_info = await get_site_with_devices(current_user, uow, site_id)
+    telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
+
+    # Aggregate temperature and PV production from device telemetry
+    temps = []
+    total_pv_w = 0.0
+    for serial in site_info.device_serials:
+        telemetry = telemetry_batch.get(serial)
+        if telemetry:
+            t = telemetry.get("temperatures", {})
+            ambient = t.get("ambient_c")
+            if ambient and ambient > 0:
+                temps.append(ambient)
+            power = telemetry.get("power", {})
+            total_pv_w += power.get("pv_total_w", 0)
+
+    temperature = round(sum(temps) / len(temps), 1) if temps else 25.0
+
+    # Derive solar forecast from current PV production vs expected peak
+    # Assume 5kW per device as nominal capacity for solar forecast calc
+    installed_kw = max(len(site_info.device_serials) * 5, 1)
+    now = datetime.now(timezone.utc)
+    hour = now.hour
+    # Simple solar availability factor based on time of day
+    if 6 <= hour <= 18:
+        solar_factor = max(0, 1 - abs(hour - 12) / 6)
+    else:
+        solar_factor = 0
+    expected_w = installed_kw * 1000 * solar_factor
+    solar_forecast = min(100, round(total_pv_w / max(expected_w, 1) * 100)) if solar_factor > 0 else 0
+
+    # Derive condition from solar forecast
+    if solar_factor == 0:
+        condition = "sunny"  # Nighttime - not relevant
+    elif solar_forecast >= 70:
+        condition = "sunny"
+    elif solar_forecast >= 40:
+        condition = "cloudy"
+    else:
+        condition = "rainy"
+
+    # Static sunrise/sunset for Pakistan (~31.5°N latitude)
+    return WeatherResponse(
+        organization_id=site_info.organization_id,
+        site_id=site_info.site_id,
+        site_name=site_info.site_name,
+        temperature=temperature,
+        condition=condition,
+        humidity=55,
+        wind_speed=10,
+        solar_forecast=solar_forecast,
+        sunrise="06:15",
+        sunset="18:00",
+    )
+
+
+@router.get(
+    "/load-shedding",
+    response_model=LoadSheddingResponse,
+    summary="Get load shedding / grid status",
+    description="Returns grid status and battery backup info from telemetry. Refresh: 10 seconds.",
+)
+async def get_load_shedding(
+    site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """Get load shedding status derived from grid telemetry."""
+    site_info = await get_site_with_devices(current_user, uow, site_id)
+    telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
+
+    grid_connected = True
+    total_soc = 0.0
+    soc_count = 0
+    total_load_w = 0.0
+    battery_capacity_kwh = 13.5  # Default per device
+
+    for serial in site_info.device_serials:
+        telemetry = telemetry_batch.get(serial)
+        if telemetry:
+            status_info = telemetry.get("status", {})
+            if not status_info.get("grid_connected", True):
+                grid_connected = False
+
+            battery = telemetry.get("battery", {})
+            soc = battery.get("soc_pct", 0)
+            if soc > 0:
+                total_soc += soc
+                soc_count += 1
+
+            power = telemetry.get("power", {})
+            total_load_w += power.get("load_w", 0)
+
+    avg_soc = total_soc / soc_count if soc_count > 0 else 0
+    total_battery_kwh = battery_capacity_kwh * len(site_info.device_serials)
+    usable_kwh = (avg_soc / 100) * total_battery_kwh
+    load_kw = total_load_w / 1000 if total_load_w > 0 else 1
+    coverage_hours = round(usable_kwh / load_kw, 1) if load_kw > 0 else 0
+
+    is_outage = not grid_connected
+
+    return LoadSheddingResponse(
+        organization_id=site_info.organization_id,
+        site_id=site_info.site_id,
+        site_name=site_info.site_name,
+        stage=1 if is_outage else 0,
+        active=is_outage,
+        current_window=None,  # No scheduled window tracking yet
+        next_window=None,
+        battery_reserve=round(avg_soc),
+        estimated_coverage=coverage_hours,
     )
 
 

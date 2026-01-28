@@ -1,9 +1,10 @@
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { 
-  Zap, 
-  ZapOff, 
-  Clock, 
+import {
+  Zap,
+  ZapOff,
+  Clock,
   AlertTriangle,
   Battery,
   Calendar,
@@ -12,6 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import dashboardService from "@/api/services/dashboard.service";
+import type { LoadSheddingData } from "@/api/services/dashboard.service";
 
 interface LoadSheddingSchedule {
   stage: number;
@@ -19,28 +22,43 @@ interface LoadSheddingSchedule {
   currentWindow: {
     start: string;
     end: string;
-    duration: number; // minutes remaining
+    duration: number;
   } | null;
   nextWindow: {
     start: string;
     end: string;
     date: string;
   } | null;
-  batteryReserve: number; // percentage reserved for outages
-  estimatedCoverage: number; // hours of backup available
+  batteryReserve: number;
+  estimatedCoverage: number;
 }
 
-const mockSchedule: LoadSheddingSchedule = {
-  stage: 0, // 0 means no load shedding
+function mapApiToSchedule(data: LoadSheddingData): LoadSheddingSchedule {
+  return {
+    stage: data.stage,
+    active: data.active,
+    currentWindow: data.current_window ? {
+      start: data.current_window.start,
+      end: data.current_window.end,
+      duration: data.current_window.duration ?? 0,
+    } : null,
+    nextWindow: data.next_window ? {
+      start: data.next_window.start,
+      end: data.next_window.end,
+      date: data.next_window.date ?? "",
+    } : null,
+    batteryReserve: data.battery_reserve,
+    estimatedCoverage: data.estimated_coverage,
+  };
+}
+
+const defaultSchedule: LoadSheddingSchedule = {
+  stage: 0,
   active: false,
   currentWindow: null,
-  nextWindow: {
-    start: "14:00",
-    end: "16:30",
-    date: "Tomorrow",
-  },
-  batteryReserve: 30,
-  estimatedCoverage: 4.5,
+  nextWindow: null,
+  batteryReserve: 0,
+  estimatedCoverage: 0,
 };
 
 interface LoadSheddingTrackerProps {
@@ -48,8 +66,23 @@ interface LoadSheddingTrackerProps {
 }
 
 export function LoadSheddingTracker({ className }: LoadSheddingTrackerProps) {
-  const schedule = mockSchedule;
+  const [schedule, setSchedule] = useState<LoadSheddingSchedule>(defaultSchedule);
   const navigate = useNavigate();
+
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await dashboardService.getLoadShedding();
+      setSchedule(mapApiToSchedule(data));
+    } catch {
+      // Keep existing data on error
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 10000); // 10 seconds
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   return (
     <motion.div

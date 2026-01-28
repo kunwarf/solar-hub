@@ -226,6 +226,38 @@ export interface PeakDemandData {
   hourly_profile: PeakDemandHourly[];
 }
 
+export interface WeatherData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+  temperature: number;
+  condition: string;
+  humidity: number;
+  wind_speed: number;
+  solar_forecast: number;
+  sunrise: string;
+  sunset: string;
+}
+
+export interface LoadSheddingWindow {
+  start: string;
+  end: string;
+  duration?: number;
+  date?: string;
+}
+
+export interface LoadSheddingData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+  stage: number;
+  active: boolean;
+  current_window: LoadSheddingWindow | null;
+  next_window: LoadSheddingWindow | null;
+  battery_reserve: number;
+  estimated_coverage: number;
+}
+
 export interface AllWidgetsData {
   power_flow: PowerFlowData;
   stats: StatsData;
@@ -449,6 +481,34 @@ class DashboardService {
 
     const response = await apiClient.get<PeakDemandData>(
       API_ENDPOINTS.dashboard.peakDemand,
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get weather data derived from site telemetry
+   */
+  async getWeather(siteId?: string): Promise<WeatherData> {
+    const params: Record<string, string> = {};
+    if (siteId) params.site_id = siteId;
+
+    const response = await apiClient.get<WeatherData>(
+      API_ENDPOINTS.dashboard.weather,
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get load shedding / grid status
+   */
+  async getLoadShedding(siteId?: string): Promise<LoadSheddingData> {
+    const params: Record<string, string> = {};
+    if (siteId) params.site_id = siteId;
+
+    const response = await apiClient.get<LoadSheddingData>(
+      API_ENDPOINTS.dashboard.loadShedding,
       { params }
     );
     return response.data;

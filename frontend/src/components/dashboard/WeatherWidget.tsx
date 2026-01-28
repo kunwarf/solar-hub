@@ -1,26 +1,18 @@
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Cloud, Sun, CloudRain, CloudSnow, Wind, Droplets, Thermometer } from "lucide-react";
 import { cn } from "@/lib/utils";
+import dashboardService from "@/api/services/dashboard.service";
 
-interface WeatherData {
+interface WeatherDisplayData {
   temperature: number;
   condition: "sunny" | "cloudy" | "rainy" | "snowy" | "windy";
   humidity: number;
   windSpeed: number;
-  solarForecast: number; // percentage of expected solar production
+  solarForecast: number;
   sunrise: string;
   sunset: string;
 }
-
-const mockWeather: WeatherData = {
-  temperature: 24,
-  condition: "sunny",
-  humidity: 45,
-  windSpeed: 12,
-  solarForecast: 92,
-  sunrise: "06:15",
-  sunset: "18:42",
-};
 
 const conditionIcons = {
   sunny: Sun,
@@ -38,12 +30,46 @@ const conditionColors = {
   windy: "text-accent",
 };
 
+const validConditions = ["sunny", "cloudy", "rainy", "snowy", "windy"] as const;
+type Condition = typeof validConditions[number];
+
+function toCondition(s: string): Condition {
+  return validConditions.includes(s as Condition) ? (s as Condition) : "sunny";
+}
+
 interface WeatherWidgetProps {
   className?: string;
 }
 
 export function WeatherWidget({ className }: WeatherWidgetProps) {
-  const weather = mockWeather;
+  const [weather, setWeather] = useState<WeatherDisplayData>({
+    temperature: 0, condition: "sunny", humidity: 0, windSpeed: 0,
+    solarForecast: 0, sunrise: "06:00", sunset: "18:00",
+  });
+
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await dashboardService.getWeather();
+      setWeather({
+        temperature: data.temperature,
+        condition: toCondition(data.condition),
+        humidity: data.humidity,
+        windSpeed: data.wind_speed,
+        solarForecast: data.solar_forecast,
+        sunrise: data.sunrise,
+        sunset: data.sunset,
+      });
+    } catch {
+      // Keep existing data on error
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 1800000); // 30 minutes
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
   const ConditionIcon = conditionIcons[weather.condition];
 
   return (
