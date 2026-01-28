@@ -216,3 +216,188 @@ class TestSyncEndpoint:
         assert result.records_upserted == 5
         assert len(result.errors) == 1
         assert "connection timeout" in result.errors[0]
+
+
+class TestWeatherEndpoint:
+    """Tests for get_weather() endpoint."""
+
+    def test_weather_response_schema_has_required_fields(self):
+        """WeatherResponse should have all required fields."""
+        from system_a.app.api.v1.dashboard_widgets import WeatherResponse
+
+        response = WeatherResponse(
+            organization_id=ORG_ID,
+            site_id=SITE_ID,
+            site_name="Test Site",
+            temperature=32.5,
+            condition="sunny",
+            humidity=55,
+            wind_speed=10,
+            solar_forecast=85,
+            sunrise="06:15",
+            sunset="18:30",
+        )
+
+        assert response.temperature == 32.5
+        assert response.condition == "sunny"
+        assert response.humidity == 55
+        assert response.solar_forecast == 85
+
+    def test_weather_default_values(self):
+        """WeatherResponse should have sensible defaults."""
+        from system_a.app.api.v1.dashboard_widgets import WeatherResponse
+
+        response = WeatherResponse(
+            organization_id=ORG_ID,
+            site_id=SITE_ID,
+            site_name="Test Site",
+        )
+
+        assert response.temperature == 0
+        assert response.condition == "sunny"
+        assert response.humidity == 50
+        assert response.wind_speed == 10
+
+
+class TestLoadSheddingEndpoint:
+    """Tests for get_load_shedding() endpoint."""
+
+    def test_load_shedding_response_schema(self):
+        """LoadSheddingResponse should have all required fields."""
+        from system_a.app.api.v1.dashboard_widgets import LoadSheddingResponse, LoadSheddingWindow
+
+        response = LoadSheddingResponse(
+            organization_id=ORG_ID,
+            site_id=SITE_ID,
+            site_name="Test Site",
+            stage=2,
+            active=True,
+            current_window=LoadSheddingWindow(start="14:00", end="16:00", duration=90),
+            next_window=LoadSheddingWindow(start="20:00", end="22:00", date="2026-01-29"),
+            battery_reserve=65,
+            estimated_coverage=3.5,
+        )
+
+        assert response.stage == 2
+        assert response.active is True
+        assert response.current_window.duration == 90
+        assert response.battery_reserve == 65
+
+    def test_load_shedding_defaults_to_no_outage(self):
+        """LoadSheddingResponse should default to no active outage."""
+        from system_a.app.api.v1.dashboard_widgets import LoadSheddingResponse
+
+        response = LoadSheddingResponse(
+            organization_id=ORG_ID,
+            site_id=SITE_ID,
+            site_name="Test Site",
+        )
+
+        assert response.stage == 0
+        assert response.active is False
+        assert response.current_window is None
+
+
+class TestOutagesEndpoint:
+    """Tests for get_outages() endpoint."""
+
+    def test_outage_record_schema(self):
+        """OutageRecord should have all required fields."""
+        from system_a.app.api.v1.dashboard_widgets import OutageRecord
+
+        record = OutageRecord(
+            id="outage-2026-01-28-0",
+            date="2026-01-28",
+            start_time="2026-01-28T14:00:00+00:00",
+            end_time="2026-01-28T16:30:00+00:00",
+            duration=150,
+            type="scheduled",
+            battery_used=2.5,
+            backup_status="full",
+        )
+
+        assert record.duration == 150
+        assert record.type == "scheduled"
+        assert record.backup_status == "full"
+
+    def test_monthly_outage_stats_schema(self):
+        """MonthlyOutageStats should correctly calculate derived values."""
+        from system_a.app.api.v1.dashboard_widgets import MonthlyOutageStats
+
+        stats = MonthlyOutageStats(
+            total_outages=25,
+            total_duration=3000,
+            avg_duration=120,
+            longest_outage=240,
+            total_backup_time=2800,
+            total_battery_used=35.5,
+            hours_avoided=46.7,
+        )
+
+        assert stats.total_outages == 25
+        assert stats.avg_duration == 120
+        assert stats.hours_avoided == 46.7
+
+    def test_grid_status_data_schema(self):
+        """GridStatusData should represent current grid state."""
+        from system_a.app.api.v1.dashboard_widgets import GridStatusData
+
+        status = GridStatusData(
+            online=False,
+            last_change="2026-01-28T14:00:00+00:00",
+            current_outage=None,
+            battery_level=72,
+            estimated_backup_hours=4.2,
+            current_load=2.1,
+        )
+
+        assert status.online is False
+        assert status.battery_level == 72
+        assert status.estimated_backup_hours == 4.2
+
+    def test_outages_response_schema(self):
+        """OutagesResponse should contain all page data."""
+        from system_a.app.api.v1.dashboard_widgets import (
+            OutagesResponse,
+            GridStatusData,
+            MonthlyOutageStats,
+        )
+
+        response = OutagesResponse(
+            organization_id=ORG_ID,
+            site_id=SITE_ID,
+            site_name="Test Site",
+            grid_status=GridStatusData(
+                online=True,
+                last_change="2026-01-28T12:00:00+00:00",
+                battery_level=85,
+                estimated_backup_hours=5.0,
+                current_load=1.8,
+            ),
+            today_outages=[],
+            week_summaries=[],
+            monthly_stats=MonthlyOutageStats(),
+            outage_history=[],
+            alerts=[],
+        )
+
+        assert response.grid_status.online is True
+        assert len(response.today_outages) == 0
+        assert response.monthly_stats.total_outages == 0
+
+    def test_outage_alert_schema(self):
+        """OutageAlert should have all required fields."""
+        from system_a.app.api.v1.dashboard_widgets import OutageAlert
+
+        alert = OutageAlert(
+            id="alert-1",
+            type="grid_down",
+            message="Grid power lost - switching to battery backup",
+            timestamp="2026-01-28T14:00:00+00:00",
+            read=False,
+            priority="high",
+        )
+
+        assert alert.type == "grid_down"
+        assert alert.priority == "high"
+        assert alert.read is False
