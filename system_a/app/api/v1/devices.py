@@ -11,6 +11,7 @@ from ..dependencies import (
     get_current_user,
     get_unit_of_work,
     get_telemetry_cache,
+    get_system_b_client_instance,
 )
 from ...infrastructure.cache.telemetry_cache import TelemetryCacheReader
 from ..schemas.device_schemas import (
@@ -38,6 +39,7 @@ from ...domain.entities.device import (
     ConnectionConfig,
     DeviceMetrics,
 )
+from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -633,8 +635,9 @@ async def send_device_command(
     request: DeviceCommandRequest,
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
-    """Send a command to a device."""
+    """Send a command to a device via System B."""
     device = await uow.devices.get_by_id(device_id)
 
     if not device:
@@ -653,19 +656,76 @@ async def send_device_command(
             detail=f"Cannot send command to device in {device.status.value} state",
         )
 
-    # TODO: Actually send command to device via System B
-    # For now, return a pending command response
-    command_id = uuid4()
+    try:
+        result = await system_b_client.send_command(
+            device_id=device_id,
+            site_id=device.site_id,
+            command_type=request.command,
+            command_params=request.parameters,
+        )
 
-    return DeviceCommandResponse(
-        command_id=command_id,
-        device_id=device_id,
-        command=request.command,
-        status="pending",
-        sent_at=datetime.now(timezone.utc),
-        response=None,
-        error=None,
-    )
+        return DeviceCommandResponse(
+            command_id=UUID(result["id"]) if "id" in result else uuid4(),
+            device_id=device_id,
+            command=request.command,
+            status=result.get("status", "pending"),
+            sent_at=datetime.now(timezone.utc),
+            response=result,
+            error=None,
+        )
+    except SystemBClientError as e:
+        raise HTTPException(
+            status_code=e.status_code or status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to send command to device: {str(e)}",
+        )
+
+
+@router.get(
+    "/{device_id}/commands/{command_id}",
+    response_model=DeviceCommandResponse,
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_command_status(
+    device_id: UUID,
+    command_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
+):
+    """Get the status of a command sent to a device."""
+    device = await uow.devices.get_by_id(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Check access
+    await check_site_access(device.site_id, current_user, uow)
+
+    try:
+        result = await system_b_client.get_command_status(command_id)
+
+        return DeviceCommandResponse(
+            command_id=command_id,
+            device_id=device_id,
+            command=result.get("command_type", "unknown"),
+            status=result.get("status", "unknown"),
+            sent_at=datetime.fromisoformat(result["created_at"]) if "created_at" in result else datetime.now(timezone.utc),
+            response=result,
+            error=result.get("error"),
+        )
+    except SystemBClientError as e:
+        if e.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Command not found",
+            )
+        raise HTTPException(
+            status_code=e.status_code or status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to get command status: {str(e)}",
+        )
 
 
 @router.get(

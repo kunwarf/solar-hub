@@ -509,6 +509,104 @@ class SystemBClient:
             raise SystemBClientError(f"Connection error: {str(e)}")
 
     # =========================================================================
+    # Command Methods
+    # =========================================================================
+
+    async def send_command(
+        self,
+        device_id: UUID,
+        site_id: UUID,
+        command_type: str,
+        command_params: Optional[Dict[str, Any]] = None,
+        priority: int = 5,
+        expires_in_minutes: int = 60,
+    ) -> Dict[str, Any]:
+        """
+        Send a command to a device via System B.
+
+        Posts to System B's /api/v1/commands/ endpoint.
+
+        Args:
+            device_id: Device UUID in System B
+            site_id: Site UUID
+            command_type: Command type string
+            command_params: Optional command parameters
+            priority: Command priority (1-10, default 5)
+            expires_in_minutes: Expiry time in minutes
+
+        Returns:
+            Command response dict from System B
+
+        Raises:
+            SystemBClientError: On API errors
+        """
+        try:
+            client = await self._get_client()
+            url = "/api/v1/commands/"
+            payload: Dict[str, Any] = {
+                "device_id": str(device_id),
+                "site_id": str(site_id),
+                "command_type": command_type,
+                "priority": priority,
+                "expires_in_minutes": expires_in_minutes,
+            }
+            if command_params:
+                payload["command_params"] = command_params
+
+            logger.info("System B request: POST %s%s, payload=%s", self._base_url, url, payload)
+            response = await client.post(url, json=payload)
+            logger.info("System B response: status=%d, body=%s", response.status_code, response.text[:500] if response.text else "empty")
+
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B command error: %s", e)
+            raise SystemBClientError(
+                f"Failed to send command: {e.response.text}",
+                status_code=e.response.status_code,
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    async def get_command_status(self, command_id: UUID) -> Dict[str, Any]:
+        """
+        Get the status of a command from System B.
+
+        Args:
+            command_id: Command UUID
+
+        Returns:
+            Command status dict from System B
+
+        Raises:
+            SystemBClientError: On API errors
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/commands/{command_id}"
+            logger.info("System B request: GET %s%s", self._base_url, url)
+            response = await client.get(url)
+            logger.info("System B response: status=%d", response.status_code)
+
+            if response.status_code == 404:
+                raise SystemBClientError("Command not found", status_code=404)
+
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B command status error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get command status: {e.response.text}",
+                status_code=e.response.status_code,
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    # =========================================================================
     # Device Management Methods
     # =========================================================================
 

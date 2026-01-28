@@ -122,19 +122,21 @@ function mapChartResponse(response: EnergyChartResponse): ChartDataPoint[] {
 export function useEnergyData() {
   const [stats, setStats] = useState<EnergyAggregates>(defaultStats);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [widgetsData, setWidgetsData] = useState<AllWidgetsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [widgetsData, chartResponse] = await Promise.all([
+      const [widgets, chartResponse] = await Promise.all([
         dashboardService.getAllWidgets(),
         dashboardService.getEnergyChart("day"),
       ]);
 
-      setStats(mapWidgetsToStats(widgetsData));
+      setStats(mapWidgetsToStats(widgets));
       setChartData(mapChartResponse(chartResponse));
+      setWidgetsData(widgets);
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch dashboard data";
@@ -160,6 +162,7 @@ export function useEnergyData() {
   return {
     stats,
     chartData,
+    widgetsData,
     loading,
     error,
   };

@@ -1,15 +1,18 @@
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { 
-  CheckCircle2, 
-  AlertTriangle, 
-  AlertCircle, 
-  Wifi, 
+import {
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  Wifi,
   WifiOff,
   Activity,
-  Zap
+  Zap,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { dashboardService, type DeviceStatusData } from "@/api/services/dashboard.service";
 
 type SystemHealth = "healthy" | "warning" | "critical" | "offline";
 
@@ -26,18 +29,113 @@ interface SystemStatus {
   }[];
 }
 
-const mockStatus: SystemStatus = {
-  overall: "healthy",
-  connection: "online",
-  activeAlerts: 2,
-  lastSync: "Just now",
-  uptime: "99.8%",
-  components: [
-    { name: "Inverters", status: "healthy" },
-    { name: "Batteries", status: "warning", message: "1 battery at low charge" },
-    { name: "Meters", status: "healthy" },
-    { name: "Network", status: "healthy" },
-  ],
+function mapDeviceStatusToSystemStatus(data: DeviceStatusData): SystemStatus {
+  const { devices_online, devices_total, total_faults, total_warnings, devices } = data;
+
+  // Determine overall health
+  let overall: SystemHealth;
+  if (devices_total === 0 || devices_online === 0) {
+    overall = "offline";
+  } else if (total_faults > 0) {
+    overall = "critical";
+  } else if (total_warnings > 0) {
+    overall = "warning";
+  } else {
+    overall = "healthy";
+  }
+
+  // Determine connection status
+  const connection = devices_online > 0 ? "online" as const : "offline" as const;
+
+  // Calculate uptime percentage
+  const uptimePct = devices_total > 0
+    ? ((devices_online / devices_total) * 100).toFixed(1)
+    : "0.0";
+
+  // Format last sync from latest device last_seen
+  const lastSeenTimestamps = devices
+    .map(d => d.last_seen)
+    .filter((ts): ts is number => ts !== null);
+  let lastSync = "Unknown";
+  if (lastSeenTimestamps.length > 0) {
+    const latest = Math.max(...lastSeenTimestamps);
+    const secondsAgo = Math.floor((Date.now() / 1000) - latest);
+    if (secondsAgo < 60) lastSync = "Just now";
+    else if (secondsAgo < 3600) lastSync = `${Math.floor(secondsAgo / 60)}m ago`;
+    else if (secondsAgo < 86400) lastSync = `${Math.floor(secondsAgo / 3600)}h ago`;
+    else lastSync = `${Math.floor(secondsAgo / 86400)}d ago`;
+  }
+
+  // Build component status from device types
+  const devicesByType: Record<string, { total: number; faults: number; warnings: number; online: number }> = {};
+  for (const device of devices) {
+    // Categorize by working_mode or status
+    const category = device.working_mode || "device";
+    if (!devicesByType[category]) {
+      devicesByType[category] = { total: 0, faults: 0, warnings: 0, online: 0 };
+    }
+    devicesByType[category].total++;
+    if (device.online) devicesByType[category].online++;
+    devicesByType[category].faults += device.faults.length;
+    devicesByType[category].warnings += device.warnings.length;
+  }
+
+  // Build components list - always show standard groups
+  const components: SystemStatus["components"] = [];
+
+  // If we have specific device type info, use it; otherwise derive from aggregate
+  if (Object.keys(devicesByType).length > 0) {
+    for (const [typeName, info] of Object.entries(devicesByType)) {
+      let status: SystemHealth;
+      let message: string | undefined;
+      if (info.online === 0 && info.total > 0) {
+        status = "offline";
+        message = `${info.total} offline`;
+      } else if (info.faults > 0) {
+        status = "critical";
+        message = `${info.faults} fault(s)`;
+      } else if (info.warnings > 0) {
+        status = "warning";
+        message = `${info.warnings} warning(s)`;
+      } else {
+        status = "healthy";
+      }
+      const label = typeName.charAt(0).toUpperCase() + typeName.slice(1);
+      components.push({ name: label, status, message });
+    }
+  } else {
+    // Fallback: show a single "Devices" component
+    components.push({
+      name: "Devices",
+      status: overall,
+      message: `${devices_online}/${devices_total} online`,
+    });
+  }
+
+  // Add network component based on grid_connected
+  components.push({
+    name: "Network",
+    status: data.grid_connected ? "healthy" : "warning",
+    message: data.grid_connected ? undefined : "Grid disconnected",
+  });
+
+  return {
+    overall,
+    connection,
+    activeAlerts: total_faults + total_warnings,
+    lastSync,
+    uptime: `${uptimePct}%`,
+    components,
+  };
+}
+
+const fallbackStatus: SystemStatus = {
+  overall: "offline",
+  connection: "offline",
+  activeAlerts: 0,
+  lastSync: "Unknown",
+  uptime: "0%",
+  components: [],
 };
 
 const healthConfig = {
@@ -81,11 +179,39 @@ interface SystemStatusIndicatorProps {
 }
 
 export function SystemStatusIndicator({ className, compact = false }: SystemStatusIndicatorProps) {
-  const status = mockStatus;
+  const [status, setStatus] = useState<SystemStatus>(fallbackStatus);
+  const [loading, setLoading] = useState(true);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const data = await dashboardService.getDeviceStatus();
+      setStatus(mapDeviceStatusToSystemStatus(data));
+    } catch {
+      // Keep current status on error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchStatus]);
+
   const config = healthConfig[status.overall];
   const StatusIcon = config.icon;
 
   if (compact) {
+    if (loading) {
+      return (
+        <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-full border bg-muted border-border", className)}>
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Loading</span>
+        </div>
+      );
+    }
+
     return (
       <HoverCard openDelay={200}>
         <HoverCardTrigger asChild>
@@ -116,6 +242,14 @@ export function SystemStatusIndicator({ className, compact = false }: SystemStat
           <SystemStatusCard status={status} />
         </HoverCardContent>
       </HoverCard>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className={cn("glass-card p-4 flex items-center justify-center", className)}>
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 

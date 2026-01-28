@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -30,6 +30,7 @@ import ConnectionStatusIndicator from "@/components/dashboard/ConnectionStatusIn
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { devicesService } from "@/api/services/devices.service";
 
 // Mock billing data for dashboard summary
 const billingSummaryData = {
@@ -52,13 +53,30 @@ const calculateBackupTime = (batteryLevel: number, avgConsumption: number) => {
 };
 
 const Index = () => {
-  const { stats, chartData } = useEnergyData();
+  const { stats, chartData, widgetsData } = useEnergyData();
   const { isAdvanced } = useUserMode();
   const { shouldShowWizard, openWizard } = useSetupWizard();
   const { telemetry, isLive } = useTelemetry();
   const { visibleWidgets, isEditMode, reorderWidgets, getWidgetConfig, gridLayout } = useDashboardLayout();
   const [showAllStats, setShowAllStats] = useState(false);
   const [activeId, setActiveId] = useState<WidgetId | null>(null);
+  const [firstDeviceId, setFirstDeviceId] = useState<string | undefined>();
+
+  // Fetch first online device ID for QuickActions
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await devicesService.listDevices({ status: "online" as any }, { page: 1, page_size: 1 });
+        if (!cancelled && result.items?.length > 0) {
+          setFirstDeviceId(result.items[0].id);
+        }
+      } catch {
+        // QuickActions will fall back to local-only mode without a device ID
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Drag sensors with better touch support
   const sensors = useSensors(
@@ -266,7 +284,7 @@ const Index = () => {
       case "weather":
         return <WeatherWidget />;
       case "quick-actions":
-        return <QuickActions data-tour="quick-actions" />;
+        return <QuickActions data-tour="quick-actions" deviceId={firstDeviceId} />;
       case "load-shedding":
         return <LoadSheddingTracker />;
       case "energy-flow":

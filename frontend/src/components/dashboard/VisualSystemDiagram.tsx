@@ -1,16 +1,16 @@
 import { motion } from "framer-motion";
-import { Sun, Home, Grid3X3, Cpu, Gauge, ArrowRight, Thermometer, Zap, Activity, ArrowDown, ArrowUp } from "lucide-react";
+import { Sun, Home, Grid3X3, Cpu, Gauge, ArrowRight, Thermometer, Zap, Activity, ArrowDown, ArrowUp, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import {
-  homeHierarchy,
   getSystemAggregates,
-  System,
-  Inverter,
-  BatteryBank,
-  Meter,
+  type System,
+  type Inverter,
+  type BatteryBank,
+  type Meter,
 } from "@/data/mockData";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { useSystemHierarchy } from "@/hooks/useSystemHierarchy";
 
 const statusColors = {
   online: "bg-success",
@@ -534,6 +534,37 @@ function SystemVisualBlock({ system, index }: { system: System; index: number })
 }
 
 export function VisualSystemDiagram() {
+  const { hierarchy, loading, error } = useSystemHierarchy();
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-border/50 bg-card p-4 flex items-center justify-center min-h-[200px]">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Loading system data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !hierarchy) {
+    return (
+      <div className="rounded-xl border border-border/50 bg-card p-4 text-center min-h-[200px] flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Unable to load system data. Retrying...</p>
+      </div>
+    );
+  }
+
+  const data = hierarchy;
+
+  if (!data || (data.systems.length === 0 && data.meters.length === 0)) {
+    return (
+      <div className="rounded-xl border border-border/50 bg-card p-4 text-center min-h-[200px] flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">No devices registered yet. Add devices to see your system overview.</p>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -543,7 +574,7 @@ export function VisualSystemDiagram() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">System Overview</h2>
-          <p className="text-xs text-muted-foreground">{homeHierarchy.name}</p>
+          <p className="text-xs text-muted-foreground">{data.name}</p>
         </div>
         <Link
           to="/devices"
@@ -554,14 +585,14 @@ export function VisualSystemDiagram() {
       </div>
 
       {/* Home-level meters - compact inline view */}
-      {homeHierarchy.meters.length > 0 && (
+      {data.meters.length > 0 && (
         <div className="mb-3 p-3 rounded-xl border border-border/30 bg-secondary/20">
           <div className="flex items-center gap-2 mb-2">
             <Gauge className="w-4 h-4 text-primary" />
             <span className="text-sm font-medium text-foreground">Home Meters</span>
           </div>
           <div className="grid gap-2">
-            {homeHierarchy.meters.map((meter, i) => {
+            {data.meters.map((meter, i) => {
               const isExporting = meter.metrics.power < 0;
               const netImportExport = meter.metrics.exportKwh - meter.metrics.importKwh;
               return (
@@ -641,7 +672,7 @@ export function VisualSystemDiagram() {
 
       {/* Systems */}
       <div className="space-y-3">
-        {homeHierarchy.systems.map((system, index) => (
+        {data.systems.map((system, index) => (
           <SystemVisualBlock key={system.id} system={system} index={index} />
         ))}
       </div>
