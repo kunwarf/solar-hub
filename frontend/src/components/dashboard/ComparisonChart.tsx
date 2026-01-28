@@ -1,41 +1,20 @@
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   Legend
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import { Calendar, TrendingUp, TrendingDown } from "lucide-react";
-
-interface ComparisonData {
-  label: string;
-  current: number;
-  previous: number;
-}
-
-const weeklyData: ComparisonData[] = [
-  { label: "Mon", current: 28, previous: 24 },
-  { label: "Tue", current: 32, previous: 29 },
-  { label: "Wed", current: 25, previous: 31 },
-  { label: "Thu", current: 35, previous: 27 },
-  { label: "Fri", current: 30, previous: 28 },
-  { label: "Sat", current: 38, previous: 33 },
-  { label: "Sun", current: 42, previous: 35 },
-];
-
-const monthlyData: ComparisonData[] = [
-  { label: "Week 1", current: 180, previous: 165 },
-  { label: "Week 2", current: 195, previous: 178 },
-  { label: "Week 3", current: 210, previous: 190 },
-  { label: "Week 4", current: 225, previous: 205 },
-];
+import dashboardService from "@/api/services/dashboard.service";
+import type { ComparisonData as ApiComparisonData, ComparisonPoint } from "@/api/services/dashboard.service";
 
 interface ComparisonChartProps {
   className?: string;
@@ -44,11 +23,27 @@ interface ComparisonChartProps {
 
 export function ComparisonChart({ className, title = "Production Comparison" }: ComparisonChartProps) {
   const [period, setPeriod] = useState<"week" | "month">("week");
-  
-  const data = period === "week" ? weeklyData : monthlyData;
-  const currentTotal = data.reduce((sum, d) => sum + d.current, 0);
-  const previousTotal = data.reduce((sum, d) => sum + d.previous, 0);
-  const percentChange = ((currentTotal - previousTotal) / previousTotal) * 100;
+  const [apiData, setApiData] = useState<ApiComparisonData | null>(null);
+
+  const fetchComparison = useCallback(async () => {
+    try {
+      const result = await dashboardService.getComparison(period);
+      setApiData(result);
+    } catch {
+      // Keep existing data on error
+    }
+  }, [period]);
+
+  useEffect(() => {
+    fetchComparison();
+    const interval = setInterval(fetchComparison, 300000); // 5 minutes
+    return () => clearInterval(interval);
+  }, [fetchComparison]);
+
+  const data: ComparisonPoint[] = apiData?.data || [];
+  const currentTotal = apiData?.current_total ?? data.reduce((sum, d) => sum + d.current, 0);
+  const previousTotal = apiData?.previous_total ?? data.reduce((sum, d) => sum + d.previous, 0);
+  const percentChange = apiData?.percent_change ?? (previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : 0);
   const isPositive = percentChange >= 0;
 
   return (

@@ -13,7 +13,8 @@ export type WidgetId =
   | "billing-summary"
   | "device-overview"
   | "alerts-summary"
-  | "ai-insights";
+  | "ai-insights"
+  | "peak-demand";
 
 export type WidgetCategory = "statistics" | "charts" | "status" | "actions";
 
@@ -156,6 +157,14 @@ export const widgetConfigs: WidgetConfig[] = [
     description: "Smart insights and recommendations",
     category: "statistics",
     icon: "Sparkles",
+    defaultVisible: true,
+  },
+  {
+    id: "peak-demand",
+    name: "Peak Demand",
+    description: "Peak demand analysis with hourly profile",
+    category: "statistics",
+    icon: "Gauge",
     defaultVisible: true,
   },
 ];

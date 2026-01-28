@@ -193,6 +193,39 @@ export interface EnergyChartResponse {
   data: EnergyChartPoint[];
 }
 
+export interface ComparisonPoint {
+  label: string;
+  current: number;
+  previous: number;
+}
+
+export interface ComparisonData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+  period: string;
+  data: ComparisonPoint[];
+  current_total: number;
+  previous_total: number;
+  percent_change: number;
+}
+
+export interface PeakDemandHourly {
+  hour: string;
+  demand_kw: number;
+}
+
+export interface PeakDemandData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+  peak_hour: string;
+  peak_demand_kw: number;
+  average_demand_kw: number;
+  current_demand_kw: number;
+  hourly_profile: PeakDemandHourly[];
+}
+
 export interface AllWidgetsData {
   power_flow: PowerFlowData;
   stats: StatsData;
@@ -386,6 +419,36 @@ class DashboardService {
 
     const response = await apiClient.get<EnergyChartResponse>(
       API_ENDPOINTS.dashboard.energyChart,
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get period-over-period comparison data
+   * Returns current vs previous period energy generation
+   */
+  async getComparison(period: string = 'week', siteId?: string): Promise<ComparisonData> {
+    const params: Record<string, string> = { period };
+    if (siteId) params.site_id = siteId;
+
+    const response = await apiClient.get<ComparisonData>(
+      API_ENDPOINTS.dashboard.comparison,
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get peak demand analysis
+   * Returns today's peak demand with hourly profile
+   */
+  async getPeakDemand(siteId?: string): Promise<PeakDemandData> {
+    const params: Record<string, string> = {};
+    if (siteId) params.site_id = siteId;
+
+    const response = await apiClient.get<PeakDemandData>(
+      API_ENDPOINTS.dashboard.peakDemand,
       { params }
     );
     return response.data;

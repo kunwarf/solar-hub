@@ -108,6 +108,8 @@ export const API_ENDPOINTS = {
     alerts: '/dashboard/alerts',
     environmental: '/dashboard/environmental',
     energyChart: '/dashboard/energy-chart',
+    comparison: '/dashboard/comparison',
+    peakDemand: '/dashboard/peak-demand',
     billing: '/dashboard/billing',
     all: '/dashboard/all',
   },

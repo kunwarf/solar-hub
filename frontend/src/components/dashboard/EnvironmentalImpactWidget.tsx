@@ -1,34 +1,74 @@
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Leaf, Trees, Car, Home, Share2, Award } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import dashboardService from "@/api/services/dashboard.service";
+import type { EnvironmentalData as ApiEnvironmentalData, StatsData } from "@/api/services/dashboard.service";
 
-interface EnvironmentalData {
+interface EnvironmentalMetrics {
   co2Avoided: number; // kg
   treesEquivalent: number;
   carMilesSaved: number;
   homesEquivalent: number;
-  cleanEnergyGenerated: number; // kWh lifetime
+  cleanEnergyGenerated: number; // kWh
   currentMonthCO2: number;
 }
 
-const mockData: EnvironmentalData = {
-  co2Avoided: 2450,
-  treesEquivalent: 112,
-  carMilesSaved: 5890,
-  homesEquivalent: 0.8,
-  cleanEnergyGenerated: 4892,
-  currentMonthCO2: 185,
-};
+function mapApiToMetrics(env: ApiEnvironmentalData, stats?: StatsData | null): EnvironmentalMetrics {
+  const co2 = env.co2_avoided_kg || 0;
+  const energyKwh = stats?.energy_today_kwh || 0;
+  const energyMonthKwh = stats?.energy_month_kwh || 0;
+  return {
+    co2Avoided: Math.round(co2),
+    treesEquivalent: Math.round(env.trees_equivalent || 0),
+    // 1 kg CO2 ≈ 2.4 miles of driving avoided
+    carMilesSaved: Math.round(co2 * 2.4),
+    // Average US household uses ~900 kWh/month
+    homesEquivalent: energyMonthKwh > 0 ? parseFloat((energyMonthKwh / 900).toFixed(1)) : 0,
+    cleanEnergyGenerated: Math.round(energyMonthKwh || energyKwh),
+    currentMonthCO2: Math.round(co2),
+  };
+}
 
 interface EnvironmentalImpactWidgetProps {
   className?: string;
   compact?: boolean;
+  environmentalData?: ApiEnvironmentalData | null;
+  statsData?: StatsData | null;
 }
 
-export function EnvironmentalImpactWidget({ className, compact = false }: EnvironmentalImpactWidgetProps) {
-  const data = mockData;
+export function EnvironmentalImpactWidget({ className, compact = false, environmentalData, statsData }: EnvironmentalImpactWidgetProps) {
+  const [fetchedEnv, setFetchedEnv] = useState<ApiEnvironmentalData | null>(null);
+  const [fetchedStats, setFetchedStats] = useState<StatsData | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (environmentalData) return; // Skip if data provided via props
+    try {
+      const [env, st] = await Promise.all([
+        dashboardService.getEnvironmental(),
+        dashboardService.getStats(),
+      ]);
+      setFetchedEnv(env);
+      setFetchedStats(st);
+    } catch {
+      // Keep existing data on error
+    }
+  }, [environmentalData]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 60000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const envSource = environmentalData || fetchedEnv;
+  const statsSource = statsData || fetchedStats;
+
+  const data: EnvironmentalMetrics = envSource
+    ? mapApiToMetrics(envSource, statsSource)
+    : { co2Avoided: 0, treesEquivalent: 0, carMilesSaved: 0, homesEquivalent: 0, cleanEnergyGenerated: 0, currentMonthCO2: 0 };
 
   const handleShare = () => {
     toast.success("Environmental impact certificate generated!");

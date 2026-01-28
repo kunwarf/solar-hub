@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Target, TrendingUp, Zap, Leaf, DollarSign, Edit2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import type { AllWidgetsData } from "@/api/services/dashboard.service";
 
 interface Goal {
   id: string;
@@ -13,36 +15,6 @@ interface Goal {
   unit: string;
   period: string;
 }
-
-const mockGoals: Goal[] = [
-  {
-    id: "1",
-    type: "savings",
-    title: "Monthly Savings Goal",
-    target: 5000,
-    current: 3250,
-    unit: "Rs.",
-    period: "this month",
-  },
-  {
-    id: "2",
-    type: "generation",
-    title: "Generation Target",
-    target: 500,
-    current: 380,
-    unit: "kWh",
-    period: "this month",
-  },
-  {
-    id: "3",
-    type: "self-sufficiency",
-    title: "Self-Sufficiency",
-    target: 80,
-    current: 72,
-    unit: "%",
-    period: "daily avg",
-  },
-];
 
 const goalIcons = {
   savings: DollarSign,
@@ -58,12 +30,62 @@ const goalColors = {
   environmental: "text-success",
 };
 
-interface GoalTrackingWidgetProps {
-  className?: string;
+function buildGoals(data?: AllWidgetsData | null): Goal[] {
+  const savings = data?.billing?.estimated_savings_month || 0;
+  const energyMonth = data?.stats?.energy_month_kwh || 0;
+  const energyToday = data?.stats?.energy_today_kwh || 0;
+  const loadW = data?.power_flow?.load_power_w || 0;
+  const pvW = data?.power_flow?.pv_power_w || 0;
+  const selfConsumption = loadW > 0 ? Math.round(Math.min((pvW / loadW) * 100, 100)) : 0;
+  const co2 = data?.environmental?.co2_avoided_kg || 0;
+
+  return [
+    {
+      id: "1",
+      type: "savings",
+      title: "Monthly Savings Goal",
+      target: 5000,
+      current: Math.round(savings),
+      unit: "Rs.",
+      period: "this month",
+    },
+    {
+      id: "2",
+      type: "generation",
+      title: "Generation Target",
+      target: 500,
+      current: Math.round(energyMonth || energyToday),
+      unit: "kWh",
+      period: "this month",
+    },
+    {
+      id: "3",
+      type: "self-sufficiency",
+      title: "Self-Sufficiency",
+      target: 80,
+      current: selfConsumption,
+      unit: "%",
+      period: "current",
+    },
+    {
+      id: "4",
+      type: "environmental",
+      title: "CO2 Reduction",
+      target: 50,
+      current: Math.round(co2),
+      unit: "kg",
+      period: "today",
+    },
+  ];
 }
 
-export function GoalTrackingWidget({ className }: GoalTrackingWidgetProps) {
-  const goals = mockGoals;
+interface GoalTrackingWidgetProps {
+  className?: string;
+  widgetsData?: AllWidgetsData | null;
+}
+
+export function GoalTrackingWidget({ className, widgetsData }: GoalTrackingWidgetProps) {
+  const goals = useMemo(() => buildGoals(widgetsData), [widgetsData]);
 
   return (
     <motion.div

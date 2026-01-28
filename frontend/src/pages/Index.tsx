@@ -14,6 +14,7 @@ import { ComparisonChart } from "@/components/dashboard/ComparisonChart";
 import { GoalTrackingWidget } from "@/components/dashboard/GoalTrackingWidget";
 import { EnvironmentalImpactWidget } from "@/components/dashboard/EnvironmentalImpactWidget";
 import { AIInsightsWidget } from "@/components/dashboard/AIInsightsWidget";
+import { PeakDemandWidget } from "@/components/dashboard/PeakDemandWidget";
 import { DashboardEditControls } from "@/components/dashboard/DashboardEditControls";
 import { DraggableWidget } from "@/components/dashboard/DraggableWidget";
 import SetupWizard from "@/components/wizard/SetupWizard";
@@ -340,13 +341,15 @@ const Index = () => {
       case "energy-chart":
         return <EnergyChart data={chartData} title="Energy Overview - Today" />;
       case "goal-tracking":
-        return <GoalTrackingWidget />;
+        return <GoalTrackingWidget widgetsData={widgetsData} />;
       case "environmental-impact":
-        return <EnvironmentalImpactWidget />;
+        return <EnvironmentalImpactWidget environmentalData={widgetsData?.environmental} statsData={widgetsData?.stats} />;
       case "system-diagram":
         return <VisualSystemDiagram />;
       case "ai-insights":
-        return <AIInsightsWidget />;
+        return <AIInsightsWidget widgetsData={widgetsData} />;
+      case "peak-demand":
+        return <PeakDemandWidget />;
       default:
         return null;
     }

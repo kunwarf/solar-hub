@@ -209,6 +209,43 @@ class EnergyChartResponse(BaseModel):
     data: List[EnergyChartPoint] = Field(default_factory=list)
 
 
+class PeakDemandHourly(BaseModel):
+    """Single hourly demand data point."""
+    hour: str
+    demand_kw: float = 0
+
+
+class PeakDemandResponse(BaseModel):
+    """Peak demand widget data."""
+    organization_id: UUID
+    site_id: UUID
+    site_name: str
+    peak_hour: str = ""
+    peak_demand_kw: float = 0
+    average_demand_kw: float = 0
+    current_demand_kw: float = 0
+    hourly_profile: List[PeakDemandHourly] = Field(default_factory=list)
+
+
+class ComparisonPoint(BaseModel):
+    """Single data point for period comparison."""
+    label: str
+    current: float = 0
+    previous: float = 0
+
+
+class ComparisonResponse(BaseModel):
+    """Period-over-period comparison data."""
+    organization_id: UUID
+    site_id: UUID
+    site_name: str
+    period: str  # "week" or "month"
+    data: List[ComparisonPoint] = Field(default_factory=list)
+    current_total: float = 0
+    previous_total: float = 0
+    percent_change: float = 0
+
+
 class BillingResponse(BaseModel):
     """Billing summary widget data."""
     organization_id: UUID
@@ -925,6 +962,144 @@ async def get_energy_chart(
         site_name=site_info.site_name,
         period=period,
         data=data_points,
+    )
+
+
+@router.get(
+    "/comparison",
+    response_model=ComparisonResponse,
+    summary="Get period-over-period comparison",
+    description="Compares current period PV generation with previous period. Refresh: 5 minutes.",
+)
+async def get_comparison(
+    period: str = Query("week", description="Period: week or month"),
+    site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """Get current vs previous period energy comparison."""
+    site_info = await get_site_with_devices(current_user, uow, site_id)
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    now = datetime.now(timezone.utc)
+    data_points: List[ComparisonPoint] = []
+
+    day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    if period == "week":
+        # Current week (last 7 days) vs previous week (7-14 days ago)
+        current_start = (now - timedelta(days=7)).date()
+        current_end = now.date()
+        previous_start = (now - timedelta(days=14)).date()
+        previous_end = current_start
+
+        current_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, current_start, current_end)
+        previous_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, previous_start, previous_end)
+
+        # Build lookup by weekday index
+        current_by_day: Dict[int, float] = {}
+        for d in current_daily:
+            current_by_day[d.date.weekday()] = d.energy_generated_kwh
+
+        previous_by_day: Dict[int, float] = {}
+        for d in previous_daily:
+            previous_by_day[d.date.weekday()] = d.energy_generated_kwh
+
+        for i in range(7):
+            data_points.append(ComparisonPoint(
+                label=day_labels[i],
+                current=round(current_by_day.get(i, 0), 1),
+                previous=round(previous_by_day.get(i, 0), 1),
+            ))
+    else:
+        # Current month (last 4 weeks) vs previous month (4-8 weeks ago)
+        for week_num in range(4):
+            curr_week_start = (now - timedelta(days=(4 - week_num) * 7)).date()
+            curr_week_end = (now - timedelta(days=(3 - week_num) * 7)).date()
+            prev_week_start = (now - timedelta(days=(8 - week_num) * 7)).date()
+            prev_week_end = (now - timedelta(days=(7 - week_num) * 7)).date()
+
+            curr_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, curr_week_start, curr_week_end)
+            prev_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, prev_week_start, prev_week_end)
+
+            curr_kwh = sum(d.energy_generated_kwh for d in curr_daily)
+            prev_kwh = sum(d.energy_generated_kwh for d in prev_daily)
+
+            data_points.append(ComparisonPoint(
+                label=f"Week {week_num + 1}",
+                current=round(curr_kwh, 1),
+                previous=round(prev_kwh, 1),
+            ))
+
+    current_total = sum(p.current for p in data_points)
+    previous_total = sum(p.previous for p in data_points)
+    pct_change = ((current_total - previous_total) / previous_total * 100) if previous_total > 0 else 0
+
+    return ComparisonResponse(
+        organization_id=site_info.organization_id,
+        site_id=site_info.site_id,
+        site_name=site_info.site_name,
+        period=period,
+        data=data_points,
+        current_total=round(current_total, 1),
+        previous_total=round(previous_total, 1),
+        percent_change=round(pct_change, 1),
+    )
+
+
+@router.get(
+    "/peak-demand",
+    response_model=PeakDemandResponse,
+    summary="Get peak demand analysis",
+    description="Returns today's peak demand data with hourly profile. Refresh: 5 minutes.",
+)
+async def get_peak_demand(
+    site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """Get peak demand analysis for the site."""
+    site_info = await get_site_with_devices(current_user, uow, site_id)
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Get hourly summaries for today to build demand profile
+    hourly = await telemetry_repo.get_hourly_summaries(site_info.site_id, today_start, now)
+
+    hourly_profile: List[PeakDemandHourly] = []
+    peak_kw = 0.0
+    peak_hour_str = ""
+    total_kw = 0.0
+
+    for h in hourly:
+        demand = h.energy_consumed_kwh  # Each hourly bucket represents kWh consumed
+        hour_label = h.timestamp_hour.strftime("%H:00")
+        hourly_profile.append(PeakDemandHourly(hour=hour_label, demand_kw=round(demand, 2)))
+        total_kw += demand
+        if demand > peak_kw:
+            peak_kw = demand
+            peak_hour_str = hour_label
+
+    avg_kw = total_kw / len(hourly) if hourly else 0
+
+    # Get current demand from Redis telemetry
+    telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
+    current_load = 0.0
+    for serial in site_info.device_serials:
+        telemetry = telemetry_batch.get(serial)
+        if telemetry:
+            power = telemetry.get("power", {})
+            current_load += power.get("load_w", 0)
+
+    return PeakDemandResponse(
+        organization_id=site_info.organization_id,
+        site_id=site_info.site_id,
+        site_name=site_info.site_name,
+        peak_hour=peak_hour_str,
+        peak_demand_kw=round(peak_kw, 2),
+        average_demand_kw=round(avg_kw, 2),
+        current_demand_kw=round(current_load / 1000, 2),
+        hourly_profile=hourly_profile,
     )
 
 

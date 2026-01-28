@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Sparkles, 
-  ChevronDown, 
-  ChevronUp, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  Lightbulb, 
-  ThumbsUp, 
+import {
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Lightbulb,
+  ThumbsUp,
   ThumbsDown,
   Zap,
   Clock,
@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { energyStats } from '@/data/mockData';
+import type { AllWidgetsData } from '@/api/services/dashboard.service';
 
 // Types for AI insights - structured for easy AI integration later
 export interface Insight {
@@ -46,16 +46,44 @@ export interface WeeklyDigest {
   tipOfTheWeek: string;
 }
 
+interface EnergyStatsInput {
+  dailyProduction: number;
+  batteryLevel: number;
+  selfConsumption: number;
+  moneySaved: number;
+  co2Saved: number;
+  peakPowerKw: number;
+  importRatePkr: number;
+}
+
+function deriveEnergyStats(widgetsData?: AllWidgetsData | null): EnergyStatsInput {
+  if (!widgetsData) {
+    return { dailyProduction: 0, batteryLevel: 0, selfConsumption: 0, moneySaved: 0, co2Saved: 0, peakPowerKw: 0, importRatePkr: 30 };
+  }
+  const pf = widgetsData.power_flow;
+  const st = widgetsData.stats;
+  const bi = widgetsData.billing;
+  return {
+    dailyProduction: st?.energy_today_kwh || 0,
+    batteryLevel: pf?.battery_soc_pct || 0,
+    selfConsumption: st?.energy_today_kwh && pf?.load_power_w ? Math.round((1 - (pf.grid_power_w > 0 ? pf.grid_power_w : 0) / Math.max(pf.load_power_w, 1)) * 100) : 0,
+    moneySaved: bi?.estimated_savings_today || 0,
+    co2Saved: st?.co2_saved_kg || 0,
+    peakPowerKw: st?.peak_power_kw || 0,
+    importRatePkr: bi?.import_rate_pkr || 30,
+  };
+}
+
 // Rule-based insight generator - can be replaced with AI later
-function generateDailyInsights(): Insight[] {
+function generateDailyInsights(stats: EnergyStatsInput): Insight[] {
   const now = new Date();
   const hour = now.getHours();
   const insights: Insight[] = [];
-  
+
   // Production insight
-  const dailyProduction = energyStats.dailyProduction;
-  const monthlyAverage = 38.5; // Mock average
-  const productionDiff = ((dailyProduction - monthlyAverage) / monthlyAverage) * 100;
+  const dailyProduction = stats.dailyProduction;
+  const monthlyAverage = dailyProduction * 0.9; // Estimate: today's production as reference baseline
+  const productionDiff = monthlyAverage > 0 ? ((dailyProduction - monthlyAverage) / monthlyAverage) * 100 : 0;
   
   if (productionDiff > 0) {
     insights.push({
@@ -82,31 +110,34 @@ function generateDailyInsights(): Insight[] {
   }
   
   // Peak production insight
-  const peakTime = '1:30 PM';
-  const peakPower = 4.2;
-  insights.push({
-    id: 'peak-1',
-    type: 'neutral',
-    category: 'production',
-    title: 'Peak Production',
-    message: `Your solar production peaked at ${peakTime} with ${peakPower} kW`,
-    icon: <Zap className="h-4 w-4" />,
-    timestamp: now,
-    metadata: { peakTime, peakPower }
-  });
-  
+  const peakPower = stats.peakPowerKw;
+  if (peakPower > 0) {
+    insights.push({
+      id: 'peak-1',
+      type: 'neutral',
+      category: 'production',
+      title: 'Peak Production',
+      message: `Your solar production peaked at ${peakPower.toFixed(1)} kW today`,
+      icon: <Zap className="h-4 w-4" />,
+      timestamp: now,
+      metadata: { peakPower }
+    });
+  }
+
   // Savings insight
-  const dailySavings = Math.round(dailyProduction * 12.2); // Rs per kWh
-  insights.push({
-    id: 'save-1',
-    type: 'positive',
-    category: 'savings',
-    title: 'Daily Savings',
-    message: `You saved Rs. ${dailySavings.toLocaleString()} today by using solar instead of grid`,
-    icon: <TrendingUp className="h-4 w-4" />,
-    timestamp: now,
-    metadata: { savings: dailySavings }
-  });
+  const dailySavings = Math.round(stats.moneySaved || dailyProduction * stats.importRatePkr);
+  if (dailySavings > 0) {
+    insights.push({
+      id: 'save-1',
+      type: 'positive',
+      category: 'savings',
+      title: 'Daily Savings',
+      message: `You saved Rs. ${dailySavings.toLocaleString()} today by using solar instead of grid`,
+      icon: <TrendingUp className="h-4 w-4" />,
+      timestamp: now,
+      metadata: { savings: dailySavings }
+    });
+  }
   
   // Time-based recommendation
   if (hour >= 9 && hour <= 15) {
@@ -134,62 +165,52 @@ function generateDailyInsights(): Insight[] {
   return insights;
 }
 
-function generateAnomalyAlerts(): Insight[] {
+function generateAnomalyAlerts(stats: EnergyStatsInput): Insight[] {
   const alerts: Insight[] = [];
   const now = new Date();
-  
-  // Mock: 20% chance of showing anomaly alerts
-  if (Math.random() < 0.7) {
-    // Production anomaly
+
+  // Low production alert (if daytime but production is very low)
+  const hour = now.getHours();
+  if (hour >= 9 && hour <= 16 && stats.dailyProduction < 1 && stats.peakPowerKw < 0.5) {
     alerts.push({
       id: 'anomaly-1',
       type: 'warning',
       category: 'anomaly',
-      title: 'Lower Generation Detected',
-      message: 'Generation was 20% lower than expected yesterday. Possible causes: cloudy weather, panel shading.',
+      title: 'Very Low Generation',
+      message: 'Generation is unusually low for this time of day. Check panels or weather conditions.',
       icon: <AlertTriangle className="h-4 w-4" />,
-      timestamp: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      timestamp: now,
     });
   }
-  
-  // Battery anomaly (based on mock data)
-  if (energyStats.batteryLevel < 50) {
+
+  // Battery anomaly (based on real data)
+  if (stats.batteryLevel < 20 && stats.batteryLevel > 0) {
     alerts.push({
       id: 'anomaly-2',
       type: 'warning',
       category: 'anomaly',
-      title: 'Battery Charging Slower',
-      message: 'Battery is charging slower than usual. Consider checking connections.',
+      title: 'Battery Level Critical',
+      message: `Battery is at ${stats.batteryLevel}%. Consider reducing load or switching to grid.`,
       icon: <Battery className="h-4 w-4" />,
       timestamp: now,
     });
   }
-  
-  // Consumption pattern change
-  if (Math.random() < 0.5) {
-    alerts.push({
-      id: 'anomaly-3',
-      type: 'neutral',
-      category: 'consumption',
-      title: 'Consumption Pattern Changed',
-      message: 'Your consumption pattern changed this week. New appliance?',
-      icon: <Zap className="h-4 w-4" />,
-      timestamp: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
-    });
-  }
-  
+
   return alerts;
 }
 
-function generateWeeklyDigest(): WeeklyDigest {
+function generateWeeklyDigest(stats: EnergyStatsInput): WeeklyDigest {
+  // Estimate weekly values from today's data (7x daily average)
+  const weeklyGenerated = Math.round(stats.dailyProduction * 7);
+  const weeklySaved = Math.round(stats.moneySaved * 7);
   return {
-    totalGenerated: 156,
-    totalSaved: 3200,
-    selfSufficiency: 78,
+    totalGenerated: weeklyGenerated,
+    totalSaved: weeklySaved,
+    selfSufficiency: stats.selfConsumption || 0,
     comparedToLastWeek: {
-      generated: 12, // +12%
-      saved: 8, // +8%
-      selfSufficiency: -2, // -2%
+      generated: 0, // No historical comparison data yet
+      saved: 0,
+      selfSufficiency: 0,
     },
     tipOfTheWeek: 'Pre-cool your home before peak hours to reduce AC load during expensive evening rates.',
   };
@@ -262,15 +283,21 @@ const InsightCard = ({ insight, onFeedback, feedbackGiven }: InsightCardProps) =
   );
 };
 
-export const AIInsightsWidget = () => {
+interface AIInsightsWidgetProps {
+  widgetsData?: AllWidgetsData | null;
+}
+
+export const AIInsightsWidget = ({ widgetsData }: AIInsightsWidgetProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const [showAnomalies, setShowAnomalies] = useState(true);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
 
-  // Generate insights (memoized to prevent regeneration on every render)
-  const dailyInsights = useMemo(() => generateDailyInsights(), []);
-  const anomalyAlerts = useMemo(() => generateAnomalyAlerts(), []);
-  const weeklyDigest = useMemo(() => generateWeeklyDigest(), []);
+  const energyInput = useMemo(() => deriveEnergyStats(widgetsData), [widgetsData]);
+
+  // Generate insights (memoized, regenerated when widgetsData changes)
+  const dailyInsights = useMemo(() => generateDailyInsights(energyInput), [energyInput]);
+  const anomalyAlerts = useMemo(() => generateAnomalyAlerts(energyInput), [energyInput]);
+  const weeklyDigest = useMemo(() => generateWeeklyDigest(energyInput), [energyInput]);
 
   const handleFeedback = (id: string, positive: boolean) => {
     setFeedback(prev => ({
