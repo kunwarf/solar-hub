@@ -258,6 +258,64 @@ export interface LoadSheddingData {
   estimated_coverage: number;
 }
 
+// Outages page types
+export interface OutageRecord {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  duration: number;
+  type: 'scheduled' | 'unscheduled' | 'unknown';
+  battery_used: number;
+  backup_status: 'full' | 'partial' | 'none';
+}
+
+export interface OutageAlert {
+  id: string;
+  type: 'grid_down' | 'grid_restored' | 'low_battery' | 'battery_critical' | 'prediction';
+  message: string;
+  timestamp: string;
+  read: boolean;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface DailyOutageSummary {
+  date: string;
+  outage_count: number;
+  total_duration: number;
+}
+
+export interface MonthlyOutageStats {
+  total_outages: number;
+  total_duration: number;
+  avg_duration: number;
+  longest_outage: number;
+  total_backup_time: number;
+  total_battery_used: number;
+  hours_avoided: number;
+}
+
+export interface GridStatusData {
+  online: boolean;
+  last_change: string;
+  current_outage: OutageRecord | null;
+  battery_level: number;
+  estimated_backup_hours: number;
+  current_load: number;
+}
+
+export interface OutagesData {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+  grid_status: GridStatusData;
+  today_outages: OutageRecord[];
+  week_summaries: DailyOutageSummary[];
+  monthly_stats: MonthlyOutageStats;
+  outage_history: OutageRecord[];
+  alerts: OutageAlert[];
+}
+
 export interface AllWidgetsData {
   power_flow: PowerFlowData;
   stats: StatsData;
@@ -509,6 +567,20 @@ class DashboardService {
 
     const response = await apiClient.get<LoadSheddingData>(
       API_ENDPOINTS.dashboard.loadShedding,
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get outages page data with history and statistics
+   */
+  async getOutages(days: number = 30, siteId?: string): Promise<OutagesData> {
+    const params: Record<string, string | number> = { days };
+    if (siteId) params.site_id = siteId;
+
+    const response = await apiClient.get<OutagesData>(
+      API_ENDPOINTS.dashboard.outages,
       { params }
     );
     return response.data;

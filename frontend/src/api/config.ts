@@ -113,6 +113,7 @@ export const API_ENDPOINTS = {
     weather: '/dashboard/weather',
     loadShedding: '/dashboard/load-shedding',
     billing: '/dashboard/billing',
+    outages: '/dashboard/outages',
     all: '/dashboard/all',
   },
 

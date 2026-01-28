@@ -1,17 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { format } from 'date-fns';
-import { 
-  Zap, 
-  ZapOff, 
-  Download, 
-  Battery, 
+import { format, parseISO } from 'date-fns';
+import {
+  Zap,
+  ZapOff,
+  Download,
+  Battery,
   Clock,
   AlertTriangle,
   Calendar,
   BarChart3,
   Bell,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -28,27 +29,133 @@ import { OutageHistoryTable } from '@/components/outages/OutageHistoryTable';
 import { OutageStatsCards } from '@/components/outages/OutageStatsCards';
 import { OutageAlertsPanel } from '@/components/outages/OutageAlertsPanel';
 
-import {
-  generateOutageHistory,
-  getTodayOutages,
-  getWeekSummaries,
-  getMonthlyStats,
-  generateOutageAlerts,
-  getCurrentGridStatus,
-  formatDuration,
-  exportToCSV,
-} from '@/data/outageData';
+import dashboardService from '@/api/services/dashboard.service';
+import type {
+  OutagesData,
+  OutageRecord as ApiOutageRecord,
+  OutageAlert as ApiOutageAlert,
+  DailyOutageSummary as ApiDailySummary,
+} from '@/api/services/dashboard.service';
+import { formatDuration, exportToCSV } from '@/data/outageData';
+import type { OutageRecord, OutageAlert, DailyOutageSummary } from '@/data/outageData';
+
+// Map API data to frontend types
+function mapOutageRecord(api: ApiOutageRecord): OutageRecord {
+  return {
+    id: api.id,
+    date: parseISO(api.date),
+    startTime: parseISO(api.start_time),
+    endTime: parseISO(api.end_time),
+    duration: api.duration,
+    type: api.type as OutageRecord['type'],
+    batteryUsed: api.battery_used,
+    backupStatus: api.backup_status as OutageRecord['backupStatus'],
+  };
+}
+
+function mapOutageAlert(api: ApiOutageAlert): OutageAlert {
+  return {
+    id: api.id,
+    type: api.type as OutageAlert['type'],
+    message: api.message,
+    timestamp: parseISO(api.timestamp),
+    read: api.read,
+    priority: api.priority as OutageAlert['priority'],
+  };
+}
+
+function mapDailySummary(api: ApiDailySummary, outages: OutageRecord[]): DailyOutageSummary {
+  const date = parseISO(api.date);
+  return {
+    date,
+    outageCount: api.outage_count,
+    totalDuration: api.total_duration,
+    outages: outages.filter(o => format(o.date, 'yyyy-MM-dd') === api.date),
+  };
+}
 
 const OutagesPage = () => {
   const { toast } = useToast();
-  
-  // Generate mock data
-  const outageHistory = useMemo(() => generateOutageHistory(30), []);
-  const todayOutages = useMemo(() => getTodayOutages(outageHistory), [outageHistory]);
-  const weekSummaries = useMemo(() => getWeekSummaries(outageHistory), [outageHistory]);
-  const monthlyStats = useMemo(() => getMonthlyStats(outageHistory), [outageHistory]);
-  const alerts = useMemo(() => generateOutageAlerts(), []);
-  const gridStatus = useMemo(() => getCurrentGridStatus(), []);
+  const [isLoading, setIsLoading] = useState(true);
+  const [outageHistory, setOutageHistory] = useState<OutageRecord[]>([]);
+  const [todayOutages, setTodayOutages] = useState<OutageRecord[]>([]);
+  const [weekSummaries, setWeekSummaries] = useState<DailyOutageSummary[]>([]);
+  const [monthlyStats, setMonthlyStats] = useState({
+    totalOutages: 0,
+    totalDuration: 0,
+    avgDuration: 0,
+    longestOutage: 0,
+    totalBackupTime: 0,
+    totalBatteryUsed: 0,
+    hoursAvoided: 0,
+  });
+  const [alerts, setAlerts] = useState<OutageAlert[]>([]);
+  const [gridStatus, setGridStatus] = useState({
+    online: true,
+    lastChange: new Date(),
+    currentOutage: null as OutageRecord | null,
+    batteryLevel: 0,
+    estimatedBackupHours: 0,
+    currentLoad: 0,
+  });
+
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await dashboardService.getOutages(30);
+
+      // Map outage history
+      const mappedHistory = data.outage_history.map(mapOutageRecord);
+      setOutageHistory(mappedHistory);
+
+      // Map today's outages
+      const mappedToday = data.today_outages.map(mapOutageRecord);
+      setTodayOutages(mappedToday);
+
+      // Map week summaries
+      const mappedWeek = data.week_summaries.map(s => mapDailySummary(s, mappedHistory));
+      setWeekSummaries(mappedWeek);
+
+      // Map monthly stats
+      setMonthlyStats({
+        totalOutages: data.monthly_stats.total_outages,
+        totalDuration: data.monthly_stats.total_duration,
+        avgDuration: data.monthly_stats.avg_duration,
+        longestOutage: data.monthly_stats.longest_outage,
+        totalBackupTime: data.monthly_stats.total_backup_time,
+        totalBatteryUsed: data.monthly_stats.total_battery_used,
+        hoursAvoided: data.monthly_stats.hours_avoided,
+      });
+
+      // Map alerts
+      setAlerts(data.alerts.map(mapOutageAlert));
+
+      // Map grid status
+      setGridStatus({
+        online: data.grid_status.online,
+        lastChange: parseISO(data.grid_status.last_change),
+        currentOutage: data.grid_status.current_outage
+          ? mapOutageRecord(data.grid_status.current_outage)
+          : null,
+        batteryLevel: data.grid_status.battery_level,
+        estimatedBackupHours: data.grid_status.estimated_backup_hours,
+        currentLoad: data.grid_status.current_load,
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to load outage data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 60000); // Refresh every minute
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   const todayDuration = todayOutages.reduce((sum, o) => sum + o.duration, 0);
 
@@ -75,10 +182,24 @@ const OutagesPage = () => {
     });
   };
 
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <AppHeader
+          title="Outage Management"
+          subtitle="Track and analyze power outages"
+        />
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
-      <AppHeader 
-        title="Outage Management" 
+      <AppHeader
+        title="Outage Management"
         subtitle="Track and analyze power outages"
       />
 
