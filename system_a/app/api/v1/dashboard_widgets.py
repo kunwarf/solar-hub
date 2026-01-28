@@ -220,6 +220,8 @@ class BillingResponse(BaseModel):
     estimated_savings_month: float = 0
     grid_import_cost: float = 0
     grid_export_credit: float = 0
+    import_rate_pkr: float = 30.0
+    export_rate_pkr: float = 15.0
 
 
 class AllWidgetsResponse(BaseModel):
@@ -322,12 +324,41 @@ async def get_site_with_devices(
     devices = await uow.devices.get_by_site_id(site.id)
     device_serials = [d.serial_number for d in devices]
 
+    # Extract tariff rates from site configuration if available
+    import_rate = 30.0  # Default PKR/kWh
+    export_rate = 15.0  # Default PKR/kWh
+    if site.configuration:
+        # Site configuration may have custom rates via tariff category
+        # Use billing repository to look up actual slab rates if configured
+        try:
+            from ...infrastructure.database.repositories.billing_repository import SQLAlchemyBillingRepository
+            billing_repo = SQLAlchemyBillingRepository(uow._session)
+            if site.configuration.disco_provider and site.configuration.tariff_category:
+                tariff = await billing_repo.get_active_tariff(
+                    disco_provider=site.configuration.disco_provider.value,
+                    category=site.configuration.tariff_category,
+                )
+                if tariff and tariff.rates:
+                    # Use average slab rate as import rate
+                    if tariff.rates.energy_charge_per_kwh:
+                        import_rate = float(tariff.rates.energy_charge_per_kwh)
+                    elif tariff.rates.slabs:
+                        # Weighted average of first few slabs
+                        total_rate = sum(s.rate_per_kwh for s in tariff.rates.slabs)
+                        import_rate = float(total_rate / len(tariff.rates.slabs))
+                    if tariff.rates.export_rate_per_kwh:
+                        export_rate = float(tariff.rates.export_rate_per_kwh)
+        except Exception as e:
+            logger.warning("Failed to look up tariff rates for site %s: %s", site.id, e)
+
     # Build and cache the site info
     site_info = CachedSiteInfo(
         site_id=site.id,
         organization_id=org.id,
         site_name=site.name,
         device_serials=device_serials,
+        import_rate_pkr=import_rate,
+        export_rate_pkr=export_rate,
     )
 
     await site_info_cache.set_site_info(site_info)
@@ -928,9 +959,9 @@ async def get_billing_summary(
             total_import_kwh += energy.get("grid_import_kwh", 0)
             total_export_kwh += energy.get("grid_export_kwh", 0)
 
-    # Calculate costs (using PKR rates)
-    import_rate = 30  # PKR/kWh
-    export_rate = 15  # PKR/kWh
+    # Calculate costs using site-configured rates (with defaults)
+    import_rate = site_info.import_rate_pkr
+    export_rate = site_info.export_rate_pkr
 
     import_cost = total_import_kwh * import_rate
     export_credit = total_export_kwh * export_rate
@@ -945,6 +976,8 @@ async def get_billing_summary(
         estimated_savings_month=round(savings_month, 2),
         grid_import_cost=round(import_cost, 2),
         grid_export_credit=round(export_credit, 2),
+        import_rate_pkr=import_rate,
+        export_rate_pkr=export_rate,
     )
 
 
@@ -1196,10 +1229,12 @@ async def get_all_widgets(
             organization_id=site_info.organization_id,
             site_id=site_info.site_id,
             site_name=site_info.site_name,
-            estimated_savings_today=round(total_energy_today * 30, 2),
-            estimated_savings_month=round(month_energy_kwh * 30, 2),
-            grid_import_cost=round(total_import * 30, 2),
-            grid_export_credit=round(total_export * 15, 2),
+            estimated_savings_today=round(total_energy_today * site_info.import_rate_pkr, 2),
+            estimated_savings_month=round(month_energy_kwh * site_info.import_rate_pkr, 2),
+            grid_import_cost=round(total_import * site_info.import_rate_pkr, 2),
+            grid_export_credit=round(total_export * site_info.export_rate_pkr, 2),
+            import_rate_pkr=site_info.import_rate_pkr,
+            export_rate_pkr=site_info.export_rate_pkr,
         ),
     )
 

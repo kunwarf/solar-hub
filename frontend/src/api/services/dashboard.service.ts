@@ -173,6 +173,8 @@ export interface BillingData {
   estimated_savings_month: number;
   grid_import_cost: number;
   grid_export_credit: number;
+  import_rate_pkr: number;
+  export_rate_pkr: number;
 }
 
 export interface EnergyChartPoint {

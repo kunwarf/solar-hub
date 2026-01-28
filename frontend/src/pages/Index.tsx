@@ -32,17 +32,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { devicesService } from "@/api/services/devices.service";
 
-// Mock billing data for dashboard summary
-const billingSummaryData = {
-  currentMonthEstimate: 47.20,
-  lastMonthBill: 81.38,
-  exportCredits: 124.80,
-  exportedKwh: 520,
-  totalSavings: 4892.50,
-  importRate: 0.28,
-  exportRate: 0.24,
-  peakHoursStart: "2PM",
-  peakHoursEnd: "7PM",
+// Default billing data (used when API data is not yet loaded)
+const defaultBillingSummaryData = {
+  currentMonthEstimate: 0,
+  lastMonthBill: 0,
+  exportCredits: 0,
+  exportedKwh: 0,
+  totalSavings: 0,
+  importRate: 30,
+  exportRate: 15,
+  peakHoursStart: "5PM",
+  peakHoursEnd: "10PM",
 };
 
 // Mock backup time calculation (based on battery level and average consumption)
@@ -61,6 +61,25 @@ const Index = () => {
   const [showAllStats, setShowAllStats] = useState(false);
   const [activeId, setActiveId] = useState<WidgetId | null>(null);
   const [firstDeviceId, setFirstDeviceId] = useState<string | undefined>();
+
+  // Derive billing summary from API data
+  const billingSummaryData = useMemo(() => {
+    if (!widgetsData?.billing) return defaultBillingSummaryData;
+    const b = widgetsData.billing;
+    const exportRate = b.export_rate_pkr || 15;
+    const exportedKwh = exportRate > 0 ? b.grid_export_credit / exportRate : 0;
+    return {
+      currentMonthEstimate: b.grid_import_cost,
+      lastMonthBill: 0, // Historical data not available in real-time widget
+      exportCredits: b.grid_export_credit,
+      exportedKwh: Math.round(exportedKwh),
+      totalSavings: b.estimated_savings_month,
+      importRate: b.import_rate_pkr,
+      exportRate: exportRate,
+      peakHoursStart: "5PM",
+      peakHoursEnd: "10PM",
+    };
+  }, [widgetsData]);
 
   // Fetch first online device ID for QuickActions
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -13,8 +14,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  ComposedChart,
-  Area,
 } from "recharts";
 import {
   TrendingUp,
@@ -26,40 +25,183 @@ import {
   FileText,
   RefreshCw,
   Settings2,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { billingData } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useBillingConfig } from "@/hooks/use-billing-config";
 import { WhatIfCalculator } from "@/components/billing/WhatIfCalculator";
+import { dashboardService } from "@/api/services/dashboard.service";
+import type { AllWidgetsData, EnergyChartResponse } from "@/api/services/dashboard.service";
+
+interface BillingPageData {
+  currentPeriod: {
+    startDate: string;
+    endDate: string;
+    daysRemaining: number;
+  };
+  energyProduced: number;
+  energyConsumed: number;
+  energyExported: number;
+  energyImported: number;
+  feedInRate: number;
+  importRate: number;
+  earnings: number;
+  costs: number;
+  netBalance: number;
+  monthlyHistory: Array<{
+    month: string;
+    produced: number;
+    consumed: number;
+    exported: number;
+    imported: number;
+    earnings: number;
+    costs: number;
+    netBalance: number;
+    lastYearBill: number;
+    thisYearBill: number;
+  }>;
+}
+
+function buildBillingData(
+  widgets: AllWidgetsData,
+  chartData: EnergyChartResponse
+): BillingPageData {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const daysRemaining = Math.max(0, endOfMonth.getDate() - now.getDate());
+
+  const { billing, stats } = widgets;
+  const importRate = billing.import_rate_pkr || 30;
+  const exportRate = billing.export_rate_pkr || 15;
+
+  // Energy data from today's stats
+  const energyProduced = stats.energy_today_kwh || 0;
+  const energyConsumed = energyProduced; // approximate (no separate consumption metric)
+  const energyExported = exportRate > 0 ? billing.grid_export_credit / exportRate : 0;
+  const energyImported = importRate > 0 ? billing.grid_import_cost / importRate : 0;
+
+  const earnings = billing.grid_export_credit;
+  const costs = billing.grid_import_cost;
+  const netBalance = earnings - costs;
+
+  // Build monthly history from chart data points
+  const monthlyHistory = chartData.data.map((point) => {
+    const dt = new Date(point.timestamp);
+    const monthName = dt.toLocaleString("en", { month: "short" });
+    const produced = point.pv_kwh;
+    const imported = point.grid_import_kwh;
+    const exported = point.grid_export_kwh;
+    const consumed = point.load_kwh;
+    const dayEarnings = exported * exportRate;
+    const dayCosts = imported * importRate;
+
+    return {
+      month: monthName,
+      produced: parseFloat(produced.toFixed(1)),
+      consumed: parseFloat(consumed.toFixed(1)),
+      exported: parseFloat(exported.toFixed(1)),
+      imported: parseFloat(imported.toFixed(1)),
+      earnings: parseFloat(dayEarnings.toFixed(2)),
+      costs: parseFloat(dayCosts.toFixed(2)),
+      netBalance: parseFloat((dayEarnings - dayCosts).toFixed(2)),
+      lastYearBill: 0, // No historical comparison data yet
+      thisYearBill: parseFloat(dayCosts.toFixed(2)),
+    };
+  });
+
+  return {
+    currentPeriod: {
+      startDate: startOfMonth.toISOString().split("T")[0],
+      endDate: endOfMonth.toISOString().split("T")[0],
+      daysRemaining,
+    },
+    energyProduced,
+    energyConsumed,
+    energyExported,
+    energyImported,
+    feedInRate: exportRate,
+    importRate,
+    earnings,
+    costs,
+    netBalance,
+    monthlyHistory,
+  };
+}
 
 const BillingPage = () => {
   const navigate = useNavigate();
   const { formatCurrency, getCurrencySymbol } = useBillingConfig();
-  const netPositive = billingData.netBalance >= 0;
+  const [billingData, setBillingData] = useState<BillingPageData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleRunScheduler = () => {
+  const fetchData = useCallback(async () => {
+    try {
+      const [widgets, chartResponse] = await Promise.all([
+        dashboardService.getAllWidgets(),
+        dashboardService.getEnergyChart("month"),
+      ]);
+      setBillingData(buildBillingData(widgets, chartResponse));
+    } catch {
+      // Keep previous data on error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleRunScheduler = async () => {
     toast({
-      title: "Running Billing Scheduler",
-      description: "Calculating billing data on-demand...",
+      title: "Syncing billing data",
+      description: "Refreshing data from telemetry...",
     });
-    // Simulate scheduler running
-    setTimeout(() => {
+    try {
+      await dashboardService.getAllWidgets();
+      await fetchData();
       toast({
-        title: "Scheduler Complete",
-        description: "Billing data has been updated.",
+        title: "Billing data refreshed",
+        description: "Latest telemetry data has been loaded.",
       });
-    }, 2000);
+    } catch {
+      toast({
+        title: "Refresh failed",
+        description: "Could not refresh billing data. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  if (loading || !billingData) {
+    return (
+      <AppLayout>
+        <AppHeader
+          title="Billing & Capacity Dashboard"
+          subtitle="Monitor your electricity bills, capacity, and forecasts"
+        />
+        <div className="p-6 flex items-center justify-center min-h-[400px]">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>Loading billing data...</span>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const netPositive = billingData.netBalance >= 0;
 
   return (
     <AppLayout>
-      <AppHeader 
-        title="Billing & Capacity Dashboard" 
+      <AppHeader
+        title="Billing & Capacity Dashboard"
         subtitle="Monitor your electricity bills, capacity, and forecasts"
       />
-      
+
       <div className="p-6 space-y-6">
         {/* Top Action Buttons */}
         <motion.div
@@ -69,7 +211,7 @@ const BillingPage = () => {
         >
           <Button onClick={handleRunScheduler} className="gap-2 bg-green-600 hover:bg-green-700">
             <RefreshCw className="w-4 h-4" />
-            Run Scheduler
+            Refresh Data
           </Button>
           <Button onClick={() => navigate("/billing/settings")} className="gap-2">
             <Settings2 className="w-4 h-4" />
@@ -227,277 +369,186 @@ const BillingPage = () => {
         </motion.div>
 
         {/* Monthly History Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="glass-card p-6"
-        >
-          <h3 className="text-lg font-semibold text-foreground mb-6">Monthly Energy History</h3>
-          
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={billingData.monthlyHistory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 20%)" vertical={false} />
-                <XAxis
-                  dataKey="month"
-                  stroke="hsl(215 14% 55%)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="hsl(215 14% 55%)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `${value}`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(220 18% 10%)",
-                    border: "1px solid hsl(220 13% 20%)",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                  labelStyle={{ color: "hsl(210 20% 92%)" }}
-                />
-                <Legend
-                  verticalAlign="top"
-                  height={36}
-                  wrapperStyle={{ fontSize: "12px" }}
-                />
-                <Bar
-                  dataKey="produced"
-                  name="Produced (kWh)"
-                  fill="hsl(45 93% 47%)"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="consumed"
-                  name="Consumed (kWh)"
-                  fill="hsl(280 65% 60%)"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="exported"
-                  name="Exported (kWh)"
-                  fill="hsl(160 84% 39%)"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
+        {billingData.monthlyHistory.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="glass-card p-6"
+          >
+            <h3 className="text-lg font-semibold text-foreground mb-6">Energy History</h3>
 
-        {/* Month over Month Charts Grid */}
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={billingData.monthlyHistory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 20%)" vertical={false} />
+                  <XAxis
+                    dataKey="month"
+                    stroke="hsl(215 14% 55%)"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="hsl(215 14% 55%)"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${value}`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(220 18% 10%)",
+                      border: "1px solid hsl(220 13% 20%)",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                    labelStyle={{ color: "hsl(210 20% 92%)" }}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    height={36}
+                    wrapperStyle={{ fontSize: "12px" }}
+                  />
+                  <Bar
+                    dataKey="produced"
+                    name="Produced (kWh)"
+                    fill="hsl(45 93% 47%)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="consumed"
+                    name="Consumed (kWh)"
+                    fill="hsl(280 65% 60%)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="exported"
+                    name="Exported (kWh)"
+                    fill="hsl(160 84% 39%)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Year over Year Bill Comparison */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-foreground mb-2">Bill Amount: This Year vs Last Year</h3>
-            <p className="text-sm text-muted-foreground mb-4">Compare monthly bills year over year</p>
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={billingData.monthlyHistory} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `${getCurrencySymbol()}${value}`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    formatter={(value: number) => [formatCurrency(value), undefined]}
-                  />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
-                  <Bar dataKey="lastYearBill" name="2023" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="thisYearBill" name="2024" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
-
-          {/* Savings Comparison */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-foreground mb-2">Monthly Savings vs Last Year</h3>
-            <p className="text-sm text-muted-foreground mb-4">How much you saved compared to last year</p>
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={billingData.monthlyHistory.map(m => ({
-                    ...m,
-                    savings: m.lastYearBill - m.thisYearBill,
-                    savingsPercent: Math.round(((m.lastYearBill - m.thisYearBill) / m.lastYearBill) * 100)
-                  }))} 
-                  margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `${getCurrencySymbol()}${value}`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    formatter={(value: number, name: string) => {
-                      if (name === "Savings") return [formatCurrency(value), name];
-                      return [`${value}%`, name];
-                    }}
-                  />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
-                  <Bar dataKey="savings" name="Savings" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
-
-          {/* Import vs Export Chart */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.9 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-foreground mb-6">Grid Import vs Export</h3>
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={billingData.monthlyHistory} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `${value} kWh`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    formatter={(value: number) => [`${value} kWh`, undefined]}
-                  />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
-                  <Bar dataKey="exported" name="Exported" fill="hsl(160 84% 39%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="imported" name="Imported" fill="hsl(var(--consumption))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
+          {/* Grid Import vs Export */}
+          {billingData.monthlyHistory.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="glass-card p-6"
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-6">Grid Import vs Export</h3>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={billingData.monthlyHistory} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `${value} kWh`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                      }}
+                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      formatter={(value: number) => [`${value} kWh`, undefined]}
+                    />
+                    <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
+                    <Bar dataKey="exported" name="Exported" fill="hsl(160 84% 39%)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="imported" name="Imported" fill="hsl(var(--consumption))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </motion.div>
+          )}
 
           {/* Self Sufficiency Trend */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.0 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-foreground mb-6">Self-Sufficiency Rate</h3>
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart 
-                  data={billingData.monthlyHistory.map(m => ({
-                    ...m,
-                    selfSufficiency: Math.round(((m.consumed - m.imported) / m.consumed) * 100)
-                  }))} 
-                  margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    domain={[0, 100]}
-                    tickFormatter={(value) => `${value}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    formatter={(value: number) => [`${value}%`, "Self-Sufficiency"]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="selfSufficiency"
-                    name="Self-Sufficiency"
-                    stroke="hsl(var(--solar))"
-                    strokeWidth={3}
-                    dot={{ fill: "hsl(var(--solar))", strokeWidth: 2, r: 5 }}
-                    activeDot={{ r: 7, fill: "hsl(var(--solar))" }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
+          {billingData.monthlyHistory.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+              className="glass-card p-6"
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-6">Self-Sufficiency Rate</h3>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={billingData.monthlyHistory.map(m => ({
+                      ...m,
+                      selfSufficiency: m.consumed > 0
+                        ? Math.round(((m.consumed - m.imported) / m.consumed) * 100)
+                        : 0
+                    }))}
+                    margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      domain={[0, 100]}
+                      tickFormatter={(value) => `${value}%`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                      }}
+                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      formatter={(value: number) => [`${value}%`, "Self-Sufficiency"]}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="selfSufficiency"
+                      name="Self-Sufficiency"
+                      stroke="hsl(var(--solar))"
+                      strokeWidth={3}
+                      dot={{ fill: "hsl(var(--solar))", strokeWidth: 2, r: 5 }}
+                      activeDot={{ r: 7, fill: "hsl(var(--solar))" }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </motion.div>
+          )}
         </div>
 
         {/* What-If Scenario Calculator */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.1 }}
+          transition={{ delay: 0.9 }}
         >
           <WhatIfCalculator />
         </motion.div>
@@ -506,7 +557,7 @@ const BillingPage = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.2 }}
+          transition={{ delay: 1.0 }}
           className="glass-card p-6"
         >
           <h3 className="text-lg font-semibold text-foreground mb-4">Current Rates</h3>

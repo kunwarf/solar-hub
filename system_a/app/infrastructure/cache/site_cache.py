@@ -22,6 +22,8 @@ class CachedSiteInfo:
     organization_id: UUID
     site_name: str
     device_serials: List[str]
+    import_rate_pkr: float = 30.0  # Default PKR/kWh grid import rate
+    export_rate_pkr: float = 15.0  # Default PKR/kWh grid export rate
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -29,6 +31,8 @@ class CachedSiteInfo:
             "organization_id": str(self.organization_id),
             "site_name": self.site_name,
             "device_serials": self.device_serials,
+            "import_rate_pkr": self.import_rate_pkr,
+            "export_rate_pkr": self.export_rate_pkr,
         }
 
     @classmethod
@@ -38,6 +42,8 @@ class CachedSiteInfo:
             organization_id=UUID(data["organization_id"]),
             site_name=data["site_name"],
             device_serials=data.get("device_serials", []),
+            import_rate_pkr=data.get("import_rate_pkr", 30.0),
+            export_rate_pkr=data.get("export_rate_pkr", 15.0),
         )
 
 
