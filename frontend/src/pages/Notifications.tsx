@@ -1,25 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Bell, 
-  BellOff, 
-  Check, 
-  Trash2, 
-  AlertTriangle, 
-  Info, 
+import {
+  Bell,
+  BellOff,
+  Check,
+  Trash2,
+  AlertTriangle,
+  Info,
   CheckCircle2,
   Battery,
   Zap,
   Sun,
   Settings,
   Mail,
-  Smartphone
+  Smartphone,
+  Loader2
 } from "lucide-react";
+import usersService from "@/api/services/users.service";
+import type { UserPreferences } from "@/api/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -69,7 +72,8 @@ const categoryIcons = {
 const NotificationsPage = () => {
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
   const [filter, setFilter] = useState<"all" | "unread">("all");
-  
+  const [isSaving, setIsSaving] = useState(false);
+
   // Notification preferences
   const [preferences, setPreferences] = useState({
     emailAlerts: true,
@@ -81,6 +85,26 @@ const NotificationsPage = () => {
     dailyDigest: false,
     weeklyReport: true,
   });
+
+  // Load user preferences on mount
+  const loadPreferences = useCallback(async () => {
+    try {
+      const user = await usersService.getProfile();
+      if (user.preferences) {
+        setPreferences((prev) => ({
+          ...prev,
+          emailAlerts: user.preferences.email_notifications ?? prev.emailAlerts,
+          pushNotifications: user.preferences.notifications_enabled ?? prev.pushNotifications,
+        }));
+      }
+    } catch {
+      // Keep default preferences on error
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
 
   const filteredNotifications = notifications.filter(n => 
     filter === "all" ? true : !n.read
@@ -109,9 +133,33 @@ const NotificationsPage = () => {
     toast.success("All notifications cleared");
   };
 
-  const updatePreference = (key: keyof typeof preferences) => {
-    setPreferences(prev => ({ ...prev, [key]: !prev[key] }));
-    toast.success("Preference updated");
+  const updatePreference = async (key: keyof typeof preferences) => {
+    const newValue = !preferences[key];
+    setPreferences((prev) => ({ ...prev, [key]: newValue }));
+
+    // Map to API preferences for email/push settings
+    const apiPrefsMap: Record<string, keyof UserPreferences> = {
+      emailAlerts: "email_notifications",
+      pushNotifications: "notifications_enabled",
+    };
+
+    const apiKey = apiPrefsMap[key];
+    if (apiKey) {
+      setIsSaving(true);
+      try {
+        await usersService.updatePreferences({ [apiKey]: newValue });
+        toast.success("Preference updated");
+      } catch {
+        // Revert on error
+        setPreferences((prev) => ({ ...prev, [key]: !newValue }));
+        toast.error("Failed to save preference");
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      // Local-only preference (category toggles, reports)
+      toast.success("Preference updated");
+    }
   };
 
   return (

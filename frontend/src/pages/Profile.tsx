@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -7,40 +7,67 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building, 
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Building,
   Camera,
   Save,
   Key,
   Shield,
   Eye,
   EyeOff,
-  Check
+  Check,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
+import usersService from "@/api/services/users.service";
 
 const ProfilePage = () => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  // Profile data
+
+  // Profile data (mix of API fields and local-only fields)
   const [profile, setProfile] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    email: "john@example.com",
-    phone: "+1 234 567 8900",
-    address: "123 Solar Street",
-    city: "San Francisco",
-    country: "United States",
-    company: "Solar Home Inc.",
-    timezone: "America/Los_Angeles",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    address: "",
+    city: "",
+    country: "",
+    company: "",
+    timezone: "Asia/Karachi",
   });
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const user = await usersService.getProfile();
+      setProfile(prev => ({
+        ...prev,
+        firstName: user.first_name || "",
+        lastName: user.last_name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        timezone: user.preferences?.timezone || "Asia/Karachi",
+      }));
+    } catch {
+      toast.error("Failed to load profile");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   // Password data
   const [passwords, setPasswords] = useState({
@@ -57,9 +84,21 @@ const ProfilePage = () => {
     setPasswords(prev => ({ ...prev, [field]: value }));
   };
 
-  const saveProfile = () => {
-    setIsEditing(false);
-    toast.success("Profile updated successfully");
+  const saveProfile = async () => {
+    try {
+      setIsSaving(true);
+      await usersService.updateProfile({
+        first_name: profile.firstName,
+        last_name: profile.lastName,
+        phone: profile.phone,
+      });
+      setIsEditing(false);
+      toast.success("Profile updated successfully");
+    } catch {
+      toast.error("Failed to update profile");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const changePassword = () => {
@@ -97,6 +136,12 @@ const ProfilePage = () => {
 
           {/* Profile Tab */}
           <TabsContent value="profile" className="mt-6 space-y-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+            <>
             {/* Avatar Section */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -129,12 +174,12 @@ const ProfilePage = () => {
                 <div className="sm:ml-auto">
                   {isEditing ? (
                     <div className="flex gap-2">
-                      <Button variant="outline" onClick={() => setIsEditing(false)}>
+                      <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>
                         Cancel
                       </Button>
-                      <Button onClick={saveProfile}>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save
+                      <Button onClick={saveProfile} disabled={isSaving}>
+                        {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                        {isSaving ? "Saving..." : "Save"}
                       </Button>
                     </div>
                   ) : (
@@ -280,6 +325,8 @@ const ProfilePage = () => {
                 </div>
               </div>
             </motion.div>
+            </>
+            )}
           </TabsContent>
 
           {/* Security Tab */}

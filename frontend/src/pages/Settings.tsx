@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import usersService from "@/api/services/users.service";
+import type { UserPreferences } from "@/api/types";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ import {
   Zap,
   ChevronRight,
   Users,
+  Loader2,
 } from "lucide-react";
 import { settingsData } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
@@ -81,6 +84,34 @@ const SettingsPage = () => {
   const navigate = useNavigate();
   const { mode, toggleMode, isAdvanced } = useUserMode();
   const [settings, setSettings] = useState(settingsData);
+  const [isSaving, setIsSaving] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+
+  // Load user preferences on mount
+  const loadPreferences = useCallback(async () => {
+    try {
+      const user = await usersService.getProfile();
+      if (user.preferences) {
+        setSettings((prev) => ({
+          ...prev,
+          notifications: {
+            ...prev.notifications,
+            email: user.preferences.email_notifications ?? prev.notifications.email,
+            sms: user.preferences.sms_notifications ?? prev.notifications.sms,
+            push: user.preferences.notifications_enabled ?? prev.notifications.push,
+          },
+        }));
+      }
+      setPreferencesLoaded(true);
+    } catch {
+      // Keep default settings on error
+      setPreferencesLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({
     location: {
       latitude: "31.5497",
@@ -119,11 +150,29 @@ const SettingsPage = () => {
     { id: "battery_array2", name: "First Floor Battery Array", batteries: ["Pylontech Battery Bank"], attachedTo: "array2" },
   ]);
 
-  const handleSave = () => {
-    toast({
-      title: "Settings Saved",
-      description: "Your configuration has been updated successfully.",
-    });
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // Save notification preferences to API
+      const prefsToSave: Partial<UserPreferences> = {
+        email_notifications: settings.notifications.email,
+        sms_notifications: settings.notifications.sms,
+        notifications_enabled: settings.notifications.push,
+      };
+      await usersService.updatePreferences(prefsToSave);
+      toast({
+        title: "Settings Saved",
+        description: "Your configuration has been updated successfully.",
+      });
+    } catch {
+      toast({
+        title: "Save Failed",
+        description: "Failed to save settings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleReset = () => {
@@ -1074,9 +1123,13 @@ const SettingsPage = () => {
           transition={{ delay: 0.2 }}
           className="flex flex-wrap gap-4 mt-6"
         >
-          <Button onClick={handleSave} className="gap-2">
-            <Save className="w-4 h-4" />
-            Save Changes
+          <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            {isSaving ? "Saving..." : "Save Changes"}
           </Button>
           <Button variant="outline" onClick={handleReset} className="gap-2">
             <RotateCcw className="w-4 h-4" />
