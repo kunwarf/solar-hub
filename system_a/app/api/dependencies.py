@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ..application.services.auth_service import AuthService
 from ..application.services.telemetry_service import TelemetryService
+from ..application.services.telemetry_sync_service import TelemetrySyncService
 from ..application.services.registration_service import RegistrationService
 from ..application.interfaces.unit_of_work import UnitOfWork
 from ..domain.entities.user import User, UserRole, UserStatus
@@ -313,3 +314,17 @@ def get_telemetry_cache() -> TelemetryCacheReader:
     System B writes telemetry to Redis, System A reads from it here.
     """
     return telemetry_cache
+
+
+def get_telemetry_sync_service(
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
+) -> TelemetrySyncService:
+    """Get telemetry sync service for on-demand sync operations."""
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    return TelemetrySyncService(
+        system_b_client=system_b_client,
+        telemetry_repository=telemetry_repo,
+        site_repository=uow.sites,
+        device_repository=uow.devices,
+    )

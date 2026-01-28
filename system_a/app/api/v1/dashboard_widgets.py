@@ -12,18 +12,20 @@ These endpoints:
 - Use Redis cache for site/device relationships (cache-first, DB fallback)
 """
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from ..dependencies import get_current_user, get_unit_of_work
+from ..dependencies import get_current_user, get_unit_of_work, get_telemetry_sync_service, require_admin
 from ...application.interfaces.unit_of_work import UnitOfWork
 from ...domain.entities.user import User, UserRole
 from ...infrastructure.cache.telemetry_cache import telemetry_cache
 from ...infrastructure.cache.site_cache import site_cache as site_info_cache, CachedSiteInfo
+from ...infrastructure.database.repositories.telemetry_repository import SQLAlchemyTelemetryRepository
+from ...application.services.telemetry_sync_service import TelemetrySyncService
 
 logger = logging.getLogger(__name__)
 
@@ -503,8 +505,12 @@ async def get_stats(
     site_info = await get_site_with_devices(current_user, uow, site_id)
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
 
+    # Query summary tables for historical aggregates
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    today_energy = await telemetry_repo.get_today_energy(site_info.site_id)
+    month_energy_kwh = await telemetry_repo.get_this_month_energy(site_info.site_id)
+
     total_energy_today = 0.0
-    total_peak_power = 0.0
     devices_online = 0
     devices_data = []
 
@@ -530,7 +536,7 @@ async def get_stats(
             device_data = DeviceStatsData(
                 serial_number=serial,
                 energy_today_kwh=pv_kwh,
-                peak_power_kw=0,  # TODO: Get from historical data
+                peak_power_kw=0,
                 online=is_online,
             )
 
@@ -543,8 +549,8 @@ async def get_stats(
         site_id=site_info.site_id,
         site_name=site_info.site_name,
         energy_today_kwh=total_energy_today,
-        energy_month_kwh=0,  # TODO: Get from historical data
-        peak_power_kw=total_peak_power,
+        energy_month_kwh=month_energy_kwh,
+        peak_power_kw=today_energy["peak_power_kw"],
         co2_saved_kg=co2_saved,
         online=devices_online > 0,
         devices_online=devices_online,
@@ -810,43 +816,84 @@ async def get_energy_chart(
 ):
     """Get energy chart data aggregated for the site."""
     site_info = await get_site_with_devices(current_user, uow, site_id)
-    telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
 
-    # TODO: Get historical data from TimescaleDB
-    # For now, aggregate current day snapshot from all devices
-    total_pv = 0.0
-    total_load = 0.0
-    total_import = 0.0
-    total_export = 0.0
-    latest_timestamp = datetime.now(timezone.utc).isoformat()
+    # Query summary tables for historical chart data
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    now = datetime.now(timezone.utc)
+    data_points: List[EnergyChartPoint] = []
 
-    for serial in site_info.device_serials:
-        telemetry = telemetry_batch.get(serial)
-        if telemetry:
-            energy = telemetry.get("energy_today", {})
-            total_pv += energy.get("pv_kwh", 0)
-            total_load += energy.get("load_kwh", 0)
-            total_import += energy.get("grid_import_kwh", 0)
-            total_export += energy.get("grid_export_kwh", 0)
+    if period == "day":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        hourly = await telemetry_repo.get_hourly_summaries(site_info.site_id, start, now)
+        for h in hourly:
+            data_points.append(EnergyChartPoint(
+                timestamp=h.timestamp_hour.isoformat(),
+                pv_kwh=h.energy_generated_kwh,
+                load_kwh=h.energy_consumed_kwh,
+                grid_import_kwh=h.energy_imported_kwh,
+                grid_export_kwh=h.energy_exported_kwh,
+            ))
+    elif period == "week":
+        start_date = (now - timedelta(days=7)).date()
+        end_date = now.date()
+        daily = await telemetry_repo.get_daily_summaries(site_info.site_id, start_date, end_date)
+        for d in daily:
+            data_points.append(EnergyChartPoint(
+                timestamp=d.date.isoformat(),
+                pv_kwh=d.energy_generated_kwh,
+                load_kwh=d.energy_consumed_kwh,
+                grid_import_kwh=d.energy_imported_kwh,
+                grid_export_kwh=d.energy_exported_kwh,
+            ))
+    elif period == "month":
+        start_date = (now - timedelta(days=30)).date()
+        end_date = now.date()
+        daily = await telemetry_repo.get_daily_summaries(site_info.site_id, start_date, end_date)
+        for d in daily:
+            data_points.append(EnergyChartPoint(
+                timestamp=d.date.isoformat(),
+                pv_kwh=d.energy_generated_kwh,
+                load_kwh=d.energy_consumed_kwh,
+                grid_import_kwh=d.energy_imported_kwh,
+                grid_export_kwh=d.energy_exported_kwh,
+            ))
 
-            ts = telemetry.get("timestamp")
-            if ts:
-                latest_timestamp = ts
+    # Fallback to current Redis data if summary tables are empty
+    if not data_points:
+        telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
+        total_pv = 0.0
+        total_load = 0.0
+        total_import = 0.0
+        total_export = 0.0
+        latest_timestamp = now.isoformat()
 
-    data = [EnergyChartPoint(
-        timestamp=latest_timestamp,
-        pv_kwh=total_pv,
-        load_kwh=total_load,
-        grid_import_kwh=total_import,
-        grid_export_kwh=total_export,
-    )] if total_pv > 0 or total_load > 0 else []
+        for serial in site_info.device_serials:
+            telemetry = telemetry_batch.get(serial)
+            if telemetry:
+                energy = telemetry.get("energy_today", {})
+                total_pv += energy.get("pv_kwh", 0)
+                total_load += energy.get("load_kwh", 0)
+                total_import += energy.get("grid_import_kwh", 0)
+                total_export += energy.get("grid_export_kwh", 0)
+                ts = telemetry.get("timestamp")
+                if ts:
+                    latest_timestamp = ts
+
+        if total_pv > 0 or total_load > 0:
+            data_points = [EnergyChartPoint(
+                timestamp=latest_timestamp,
+                pv_kwh=total_pv,
+                load_kwh=total_load,
+                grid_import_kwh=total_import,
+                grid_export_kwh=total_export,
+            )]
 
     return EnergyChartResponse(
         organization_id=site_info.organization_id,
         site_id=site_info.site_id,
         site_name=site_info.site_name,
         period=period,
-        data=data,
+        data=data_points,
     )
 
 
@@ -865,6 +912,10 @@ async def get_billing_summary(
     site_info = await get_site_with_devices(current_user, uow, site_id)
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
 
+    # Query summary tables for monthly savings
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    month_energy_kwh = await telemetry_repo.get_this_month_energy(site_info.site_id)
+
     total_pv_kwh = 0.0
     total_import_kwh = 0.0
     total_export_kwh = 0.0
@@ -877,21 +928,21 @@ async def get_billing_summary(
             total_import_kwh += energy.get("grid_import_kwh", 0)
             total_export_kwh += energy.get("grid_export_kwh", 0)
 
-    # Calculate costs (using PKR rates as example)
-    # TODO: Get actual tariff rates from site configuration
+    # Calculate costs (using PKR rates)
     import_rate = 30  # PKR/kWh
     export_rate = 15  # PKR/kWh
 
     import_cost = total_import_kwh * import_rate
     export_credit = total_export_kwh * export_rate
     savings = total_pv_kwh * import_rate
+    savings_month = month_energy_kwh * import_rate
 
     return BillingResponse(
         organization_id=site_info.organization_id,
         site_id=site_info.site_id,
         site_name=site_info.site_name,
         estimated_savings_today=round(savings, 2),
-        estimated_savings_month=0,  # TODO: Get from historical data
+        estimated_savings_month=round(savings_month, 2),
         grid_import_cost=round(import_cost, 2),
         grid_export_credit=round(export_credit, 2),
     )
@@ -911,6 +962,11 @@ async def get_all_widgets(
     """Get all widget data in a single request for initial dashboard load."""
     site_info = await get_site_with_devices(current_user, uow, site_id)
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
+
+    # Query summary tables for historical aggregates
+    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+    today_energy = await telemetry_repo.get_today_energy(site_info.site_id)
+    month_energy_kwh = await telemetry_repo.get_this_month_energy(site_info.site_id)
 
     # Aggregate all data in a single pass
     total_pv = 0.0
@@ -1088,8 +1144,8 @@ async def get_all_widgets(
             site_id=site_info.site_id,
             site_name=site_info.site_name,
             energy_today_kwh=total_energy_today,
-            energy_month_kwh=0,
-            peak_power_kw=0,
+            energy_month_kwh=month_energy_kwh,
+            peak_power_kw=today_energy["peak_power_kw"],
             co2_saved_kg=co2_avoided,
             online=devices_online > 0,
             devices_online=devices_online,
@@ -1141,8 +1197,46 @@ async def get_all_widgets(
             site_id=site_info.site_id,
             site_name=site_info.site_name,
             estimated_savings_today=round(total_energy_today * 30, 2),
-            estimated_savings_month=0,
+            estimated_savings_month=round(month_energy_kwh * 30, 2),
             grid_import_cost=round(total_import * 30, 2),
             grid_export_credit=round(total_export * 15, 2),
         ),
+    )
+
+
+class SyncResponse(BaseModel):
+    """Response for manual sync trigger."""
+    site_id: UUID
+    success: bool
+    records_upserted: int = 0
+    errors: List[str] = Field(default_factory=list)
+
+
+@router.post(
+    "/sync",
+    response_model=SyncResponse,
+    summary="Trigger manual telemetry sync",
+    description="Manually trigger telemetry sync from System B for a site. Admin only.",
+)
+async def trigger_sync(
+    site_id: UUID = Query(..., description="Site ID to sync"),
+    current_user: User = Depends(require_admin),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    sync_service: TelemetrySyncService = Depends(get_telemetry_sync_service),
+):
+    """Trigger manual telemetry sync for a specific site."""
+    logger.info(f"[sync] Manual sync triggered by {current_user.email} for site {site_id}")
+
+    result = await sync_service.sync_hourly_for_site(site_id, hours_back=2)
+    await uow.commit()
+
+    logger.info(
+        f"[sync] Sync completed: {result.records_upserted} records, {len(result.errors)} errors"
+    )
+
+    return SyncResponse(
+        site_id=site_id,
+        success=result.success,
+        records_upserted=result.records_upserted,
+        errors=result.errors,
     )

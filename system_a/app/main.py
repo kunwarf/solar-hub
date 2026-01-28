@@ -182,10 +182,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         # Redis failure is not fatal for now
         pass
 
+    # Start telemetry sync scheduler
+    try:
+        from .infrastructure.scheduler import start_scheduler
+        await start_scheduler()
+        logger.info("Telemetry sync scheduler started")
+    except Exception as e:
+        logger.warning(f"Scheduler startup failed: {e}")
+        # Scheduler failure is not fatal
+
     yield
 
     # Shutdown
     logger.info("Shutting down application...")
+
+    try:
+        from .infrastructure.scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception:
+        pass
+
     await DatabaseManager.close()
     await RedisManager.close()
     logger.info("Shutdown complete")

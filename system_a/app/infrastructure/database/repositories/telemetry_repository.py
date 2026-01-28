@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import select, func, and_, desc, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.telemetry_model import (
@@ -456,6 +457,289 @@ class SQLAlchemyTelemetryRepository:
             "total_sunshine_hours": float(row.total_sunshine) if row.total_sunshine else 0.0,
             "total_production_hours": float(row.total_production) if row.total_production else 0.0,
             "total_grid_outage_minutes": int(row.total_outage) if row.total_outage else 0,
+        }
+
+    # =========================================================================
+    # Upsert Methods (for Telemetry Sync Pipeline)
+    # =========================================================================
+
+    async def upsert_hourly_summary(
+        self,
+        site_id: UUID,
+        device_id: Optional[UUID],
+        timestamp_hour: datetime,
+        data: Dict[str, Any],
+    ) -> None:
+        """
+        Insert or update an hourly telemetry summary row.
+
+        Uses PostgreSQL ON CONFLICT DO UPDATE for idempotent upserts.
+        For site-level rows (device_id=None), uses partial unique index.
+        """
+        values = {
+            "id": uuid4(),
+            "site_id": site_id,
+            "device_id": device_id,
+            "timestamp_hour": timestamp_hour,
+            **data,
+        }
+
+        stmt = pg_insert(TelemetryHourlySummaryModel).values(**values)
+
+        # Use different conflict targets based on device_id presence
+        update_fields = {k: stmt.excluded[k] for k in data.keys()}
+        if device_id is not None:
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_hourly_site_device_time",
+                set_=update_fields,
+            )
+        else:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["site_id", "timestamp_hour"],
+                index_where=TelemetryHourlySummaryModel.device_id.is_(None),
+                set_=update_fields,
+            )
+
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def upsert_daily_summary(
+        self,
+        site_id: UUID,
+        device_id: Optional[UUID],
+        summary_date: date,
+        data: Dict[str, Any],
+    ) -> None:
+        """
+        Insert or update a daily telemetry summary row.
+
+        Uses PostgreSQL ON CONFLICT DO UPDATE for idempotent upserts.
+        """
+        values = {
+            "id": uuid4(),
+            "site_id": site_id,
+            "device_id": device_id,
+            "summary_date": summary_date,
+            **data,
+        }
+
+        stmt = pg_insert(TelemetryDailySummaryModel).values(**values)
+
+        update_fields = {k: stmt.excluded[k] for k in data.keys()}
+        update_fields["updated_at"] = datetime.now(timezone.utc)
+
+        if device_id is not None:
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_daily_site_device_date",
+                set_=update_fields,
+            )
+        else:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["site_id", "summary_date"],
+                index_where=TelemetryDailySummaryModel.device_id.is_(None),
+                set_=update_fields,
+            )
+
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def upsert_monthly_summary(
+        self,
+        site_id: UUID,
+        device_id: Optional[UUID],
+        year: int,
+        month: int,
+        data: Dict[str, Any],
+    ) -> None:
+        """
+        Insert or update a monthly telemetry summary row.
+
+        Uses PostgreSQL ON CONFLICT DO UPDATE for idempotent upserts.
+        """
+        values = {
+            "id": uuid4(),
+            "site_id": site_id,
+            "device_id": device_id,
+            "year": year,
+            "month": month,
+            **data,
+        }
+
+        stmt = pg_insert(TelemetryMonthlySummaryModel).values(**values)
+
+        update_fields = {k: stmt.excluded[k] for k in data.keys()}
+        update_fields["updated_at"] = datetime.now(timezone.utc)
+
+        if device_id is not None:
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_monthly_site_device_period",
+                set_=update_fields,
+            )
+        else:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["site_id", "year", "month"],
+                index_where=TelemetryMonthlySummaryModel.device_id.is_(None),
+                set_=update_fields,
+            )
+
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def aggregate_hourly_to_daily(
+        self,
+        site_id: UUID,
+        device_id: Optional[UUID],
+        target_date: date,
+    ) -> Dict[str, Any]:
+        """
+        Aggregate hourly summaries into daily values for a specific date.
+
+        Returns a dict suitable for upsert_daily_summary().
+        """
+        start_time = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        end_time = start_time + timedelta(days=1)
+
+        conditions = [
+            TelemetryHourlySummaryModel.site_id == site_id,
+            TelemetryHourlySummaryModel.timestamp_hour >= start_time,
+            TelemetryHourlySummaryModel.timestamp_hour < end_time,
+        ]
+        if device_id is not None:
+            conditions.append(TelemetryHourlySummaryModel.device_id == device_id)
+        else:
+            conditions.append(TelemetryHourlySummaryModel.device_id.is_(None))
+
+        query = select(
+            func.coalesce(func.sum(TelemetryHourlySummaryModel.energy_generated_kwh), 0.0).label("energy_generated_kwh"),
+            func.coalesce(func.sum(TelemetryHourlySummaryModel.energy_consumed_kwh), 0.0).label("energy_consumed_kwh"),
+            func.coalesce(func.sum(TelemetryHourlySummaryModel.energy_exported_kwh), 0.0).label("energy_exported_kwh"),
+            func.coalesce(func.sum(TelemetryHourlySummaryModel.energy_imported_kwh), 0.0).label("energy_imported_kwh"),
+            func.coalesce(func.sum(TelemetryHourlySummaryModel.energy_stored_kwh), 0.0).label("energy_stored_kwh"),
+            func.coalesce(func.sum(TelemetryHourlySummaryModel.energy_discharged_kwh), 0.0).label("energy_discharged_kwh"),
+            func.coalesce(func.max(TelemetryHourlySummaryModel.peak_power_kw), 0.0).label("peak_power_kw"),
+            func.avg(TelemetryHourlySummaryModel.average_power_kw).label("average_power_kw"),
+            func.avg(TelemetryHourlySummaryModel.avg_irradiance_w_m2).label("avg_irradiance_w_m2"),
+            func.avg(TelemetryHourlySummaryModel.avg_temperature_c).label("avg_temperature_c"),
+            func.max(TelemetryHourlySummaryModel.max_temperature_c).label("max_temperature_c"),
+            func.min(TelemetryHourlySummaryModel.min_temperature_c).label("min_temperature_c"),
+            func.avg(TelemetryHourlySummaryModel.avg_battery_soc_percent).label("avg_battery_soc_percent"),
+            func.avg(TelemetryHourlySummaryModel.avg_grid_voltage_v).label("avg_grid_voltage_v"),
+            func.avg(TelemetryHourlySummaryModel.avg_power_factor).label("avg_power_factor"),
+            func.coalesce(func.sum(TelemetryHourlySummaryModel.sample_count), 0).label("total_samples"),
+            func.count().label("hours_with_data"),
+        ).where(and_(*conditions))
+
+        result = await self._session.execute(query)
+        row = result.one()
+
+        generated = float(row.energy_generated_kwh)
+        consumed = float(row.energy_consumed_kwh)
+        exported = float(row.energy_exported_kwh)
+        imported = float(row.energy_imported_kwh)
+        hours = int(row.hours_with_data)
+
+        return {
+            "energy_generated_kwh": generated,
+            "energy_consumed_kwh": consumed,
+            "energy_exported_kwh": exported,
+            "energy_imported_kwh": imported,
+            "energy_stored_kwh": float(row.energy_stored_kwh),
+            "energy_discharged_kwh": float(row.energy_discharged_kwh),
+            "net_energy_kwh": generated - consumed,
+            "peak_power_kw": float(row.peak_power_kw),
+            "average_power_kw": float(row.average_power_kw or 0.0),
+            "sunshine_hours": max(0.0, float(hours)),
+            "production_hours": max(0.0, float(hours)),
+            "avg_irradiance_w_m2": float(row.avg_irradiance_w_m2) if row.avg_irradiance_w_m2 else None,
+            "avg_temperature_c": float(row.avg_temperature_c) if row.avg_temperature_c else None,
+            "max_temperature_c": float(row.max_temperature_c) if row.max_temperature_c else None,
+            "min_temperature_c": float(row.min_temperature_c) if row.min_temperature_c else None,
+            "avg_battery_soc_percent": float(row.avg_battery_soc_percent) if row.avg_battery_soc_percent else None,
+            "avg_grid_voltage_v": float(row.avg_grid_voltage_v) if row.avg_grid_voltage_v else None,
+            "avg_power_factor": float(row.avg_power_factor) if row.avg_power_factor else None,
+            "co2_avoided_kg": generated * 0.475,  # Pakistan grid emission factor
+            "estimated_savings_pkr": generated * 25.0,  # Average PKR/kWh rate
+            "hours_with_data": hours,
+            "data_completeness_percent": (hours / 24.0) * 100.0 if hours > 0 else 0.0,
+        }
+
+    async def aggregate_daily_to_monthly(
+        self,
+        site_id: UUID,
+        device_id: Optional[UUID],
+        year: int,
+        month: int,
+    ) -> Dict[str, Any]:
+        """
+        Aggregate daily summaries into monthly values.
+
+        Returns a dict suitable for upsert_monthly_summary().
+        """
+        # Calculate date range for the month
+        month_start = date(year, month, 1)
+        if month == 12:
+            month_end = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            month_end = date(year, month + 1, 1) - timedelta(days=1)
+
+        conditions = [
+            TelemetryDailySummaryModel.site_id == site_id,
+            TelemetryDailySummaryModel.summary_date >= month_start,
+            TelemetryDailySummaryModel.summary_date <= month_end,
+        ]
+        if device_id is not None:
+            conditions.append(TelemetryDailySummaryModel.device_id == device_id)
+        else:
+            conditions.append(TelemetryDailySummaryModel.device_id.is_(None))
+
+        query = select(
+            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_generated_kwh), 0.0).label("energy_generated_kwh"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_consumed_kwh), 0.0).label("energy_consumed_kwh"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_exported_kwh), 0.0).label("energy_exported_kwh"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_imported_kwh), 0.0).label("energy_imported_kwh"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_stored_kwh), 0.0).label("energy_stored_kwh"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_discharged_kwh), 0.0).label("energy_discharged_kwh"),
+            func.coalesce(func.max(TelemetryDailySummaryModel.peak_power_kw), 0.0).label("peak_power_kw"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.sunshine_hours), 0.0).label("total_sunshine_hours"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.production_hours), 0.0).label("total_production_hours"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.grid_outage_minutes), 0).label("total_grid_outage_minutes"),
+            func.avg(TelemetryDailySummaryModel.avg_temperature_c).label("avg_temperature_c"),
+            func.avg(TelemetryDailySummaryModel.performance_ratio).label("performance_ratio"),
+            func.avg(TelemetryDailySummaryModel.capacity_factor).label("capacity_factor"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.co2_avoided_kg), 0.0).label("co2_avoided_kg"),
+            func.coalesce(func.sum(TelemetryDailySummaryModel.estimated_savings_pkr), 0.0).label("estimated_savings_pkr"),
+            func.count().label("days_with_data"),
+        ).where(and_(*conditions))
+
+        result = await self._session.execute(query)
+        row = result.one()
+
+        generated = float(row.energy_generated_kwh)
+        consumed = float(row.energy_consumed_kwh)
+        days = int(row.days_with_data)
+
+        return {
+            "energy_generated_kwh": generated,
+            "energy_consumed_kwh": consumed,
+            "energy_exported_kwh": float(row.energy_exported_kwh),
+            "energy_imported_kwh": float(row.energy_imported_kwh),
+            "energy_stored_kwh": float(row.energy_stored_kwh),
+            "energy_discharged_kwh": float(row.energy_discharged_kwh),
+            "net_energy_kwh": generated - consumed,
+            "peak_power_kw": float(row.peak_power_kw),
+            "average_daily_generation_kwh": generated / days if days > 0 else 0.0,
+            "total_sunshine_hours": float(row.total_sunshine_hours),
+            "total_production_hours": float(row.total_production_hours),
+            "total_grid_outage_minutes": int(row.total_grid_outage_minutes),
+            "avg_temperature_c": float(row.avg_temperature_c) if row.avg_temperature_c else None,
+            "performance_ratio": float(row.performance_ratio) if row.performance_ratio else None,
+            "capacity_factor": float(row.capacity_factor) if row.capacity_factor else None,
+            "co2_avoided_kg": float(row.co2_avoided_kg),
+            "trees_equivalent": float(row.co2_avoided_kg) / 1000 * 45,  # Trees per ton CO2
+            "estimated_revenue_pkr": float(row.estimated_savings_pkr),
+            "estimated_savings_pkr": float(row.estimated_savings_pkr),
+            "days_with_data": days,
+            "data_completeness_percent": (days / month_end.day) * 100.0 if days > 0 else 0.0,
         }
 
     # =========================================================================

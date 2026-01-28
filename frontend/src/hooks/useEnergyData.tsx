@@ -1,12 +1,6 @@
-import { useMemo } from "react";
-import {
-  homeHierarchy,
-  getHomeAggregates,
-  getSystemAggregates,
-  energyStats,
-  chartData,
-  HomeHierarchy,
-} from "@/data/mockData";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { dashboardService } from "@/api/services/dashboard.service";
+import type { AllWidgetsData, EnergyChartResponse } from "@/api/services/dashboard.service";
 
 export interface EnergyAggregates {
   solarPower: number;
@@ -41,53 +35,132 @@ export interface SystemAggregates {
   warningBatteries: number;
 }
 
+interface ChartDataPoint {
+  time: string;
+  solar: number;
+  consumption: number;
+  battery: number;
+  grid: number;
+}
+
+const POLL_INTERVAL_MS = 30_000;
+
+const defaultStats: EnergyAggregates = {
+  solarPower: 0,
+  batteryPower: 0,
+  batteryLevel: 0,
+  consumption: 0,
+  gridPower: 0,
+  isGridExporting: false,
+  dailyProduction: 0,
+  dailyConsumption: 0,
+  selfConsumption: 0,
+  gridExported: 0,
+  co2Saved: 0,
+  moneySaved: 0,
+  monthlyBillAmount: 0,
+  dailyPrediction: 0,
+  avgKwPerKwp: 0,
+  installedCapacity: 0,
+};
+
+function mapWidgetsToStats(data: AllWidgetsData): EnergyAggregates {
+  const { power_flow, stats, billing, environmental } = data;
+
+  const dailyProduction = stats.energy_today_kwh;
+  const gridPowerW = power_flow.grid_power_w;
+
+  return {
+    solarPower: power_flow.pv_power_w / 1000,
+    batteryPower: Math.abs(power_flow.battery_power_w) / 1000,
+    batteryLevel: Math.round(power_flow.battery_soc_pct),
+    consumption: power_flow.load_power_w / 1000,
+    gridPower: Math.abs(gridPowerW) / 1000,
+    isGridExporting: gridPowerW < 0,
+    dailyProduction,
+    dailyConsumption: dailyProduction, // approximate - no separate consumption total
+    selfConsumption: dailyProduction > 0
+      ? Math.round(((dailyProduction - (environmental.coal_avoided_kg / 0.4 - dailyProduction)) / dailyProduction) * 100)
+      : 0,
+    gridExported: billing.grid_export_credit / 15, // reverse from PKR credit at 15 PKR/kWh
+    co2Saved: stats.co2_saved_kg,
+    moneySaved: billing.estimated_savings_today,
+    monthlyBillAmount: billing.estimated_savings_month,
+    dailyPrediction: dailyProduction * 1.05, // slight buffer until prediction service exists
+    avgKwPerKwp: stats.peak_power_kw,
+    installedCapacity: stats.peak_power_kw > 0 ? Math.ceil(stats.peak_power_kw) : 0,
+  };
+}
+
+function mapChartResponse(response: EnergyChartResponse): ChartDataPoint[] {
+  return response.data.map((point) => {
+    // Extract hour from ISO timestamp for display
+    let timeLabel: string;
+    try {
+      const dt = new Date(point.timestamp);
+      timeLabel = `${dt.getHours().toString().padStart(2, "0")}:00`;
+    } catch {
+      timeLabel = point.timestamp;
+    }
+
+    return {
+      time: timeLabel,
+      solar: parseFloat(point.pv_kwh.toFixed(1)),
+      consumption: parseFloat(point.load_kwh.toFixed(1)),
+      battery: 0, // battery chart data not in energy-chart endpoint
+      grid: parseFloat((point.grid_import_kwh - point.grid_export_kwh).toFixed(1)),
+    };
+  });
+}
+
 /**
- * Custom hook for centralized energy data access with memoization.
- * Prevents redundant aggregation calculations across components.
+ * Custom hook for centralized energy data access.
+ *
+ * Fetches from the dashboard API and polls every 30 seconds.
+ * Falls back to zero values while loading.
  */
 export function useEnergyData() {
-  // Memoize home-level aggregates
-  const homeAggregates = useMemo(() => getHomeAggregates(homeHierarchy), []);
+  const [stats, setStats] = useState<EnergyAggregates>(defaultStats);
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Memoize system aggregates
-  const systemAggregates = useMemo(() => {
-    return homeHierarchy.systems.reduce((acc, system) => {
-      acc[system.id] = getSystemAggregates(system);
-      return acc;
-    }, {} as Record<string, SystemAggregates>);
+  const fetchData = useCallback(async () => {
+    try {
+      const [widgetsData, chartResponse] = await Promise.all([
+        dashboardService.getAllWidgets(),
+        dashboardService.getEnergyChart("day"),
+      ]);
+
+      setStats(mapWidgetsToStats(widgetsData));
+      setChartData(mapChartResponse(chartResponse));
+      setError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fetch dashboard data";
+      setError(message);
+      // Keep previous data on error (don't reset to defaults)
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Memoize energy stats for dashboard
-  const stats = useMemo<EnergyAggregates>(() => ({
-    solarPower: energyStats.solarPower,
-    batteryPower: energyStats.batteryPower,
-    batteryLevel: energyStats.batteryLevel,
-    consumption: energyStats.consumption,
-    gridPower: energyStats.gridPower,
-    isGridExporting: energyStats.isGridExporting,
-    dailyProduction: energyStats.dailyProduction,
-    dailyConsumption: energyStats.dailyConsumption,
-    selfConsumption: energyStats.selfConsumption,
-    gridExported: energyStats.gridExported,
-    co2Saved: energyStats.co2Saved,
-    moneySaved: energyStats.moneySaved,
-    monthlyBillAmount: energyStats.monthlyBillAmount,
-    dailyPrediction: energyStats.dailyPrediction,
-    avgKwPerKwp: energyStats.avgKwPerKwp,
-    installedCapacity: energyStats.installedCapacity,
-  }), []);
+  useEffect(() => {
+    fetchData();
 
-  // Memoize chart data
-  const memoizedChartData = useMemo(() => chartData, []);
+    intervalRef.current = setInterval(fetchData, POLL_INTERVAL_MS);
 
-  // Memoize hierarchy
-  const hierarchy = useMemo<HomeHierarchy>(() => homeHierarchy, []);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [fetchData]);
 
   return {
     stats,
-    homeAggregates,
-    systemAggregates,
-    chartData: memoizedChartData,
-    hierarchy,
+    chartData,
+    loading,
+    error,
   };
 }

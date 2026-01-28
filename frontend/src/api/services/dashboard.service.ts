@@ -175,6 +175,22 @@ export interface BillingData {
   grid_export_credit: number;
 }
 
+export interface EnergyChartPoint {
+  timestamp: string;
+  pv_kwh: number;
+  load_kwh: number;
+  grid_import_kwh: number;
+  grid_export_kwh: number;
+}
+
+export interface EnergyChartResponse {
+  organization_id: string;
+  site_id: string;
+  site_name: string;
+  period: string;
+  data: EnergyChartPoint[];
+}
+
 export interface AllWidgetsData {
   power_flow: PowerFlowData;
   stats: StatsData;
@@ -353,6 +369,21 @@ class DashboardService {
 
     const response = await apiClient.get<BillingData>(
       API_ENDPOINTS.dashboard.billing,
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get energy chart data with historical summaries
+   * Returns hourly/daily data points depending on period
+   */
+  async getEnergyChart(period: string = 'day', siteId?: string): Promise<EnergyChartResponse> {
+    const params: Record<string, string> = { period };
+    if (siteId) params.site_id = siteId;
+
+    const response = await apiClient.get<EnergyChartResponse>(
+      API_ENDPOINTS.dashboard.energyChart,
       { params }
     );
     return response.data;

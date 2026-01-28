@@ -48,6 +48,9 @@ python-json-logger>=2.0.0
 celery>=5.3.0
 flower>=2.0.0
 
+# Scheduler (periodic sync jobs)
+apscheduler>=3.10.0
+
 # AI/ML (optional)
 openai>=1.10.0
 

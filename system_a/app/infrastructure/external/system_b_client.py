@@ -2,8 +2,9 @@
 HTTP client for System B API communication.
 """
 import logging
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import httpx
@@ -27,6 +28,27 @@ class DeviceInfo:
     organization_id: Optional[UUID] = None
     connection_status: str = "disconnected"
     is_claimed: bool = False
+
+
+@dataclass
+class TelemetryAggregate:
+    """Aggregated telemetry bucket from System B."""
+    bucket: datetime
+    avg: Optional[float] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+    first: Optional[float] = None
+    last: Optional[float] = None
+    delta: Optional[float] = None
+    sample_count: int = 0
+    quality_percent: float = 100.0
+
+
+@dataclass
+class DeviceLatestTelemetry:
+    """Latest telemetry readings for a device from System B."""
+    device_id: UUID
+    readings: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 class SystemBClientError(Exception):
@@ -276,6 +298,219 @@ class SystemBClient:
         except httpx.RequestError as e:
             logger.error("System B connection error: %s", e)
             raise SystemBClientError(f"Connection error: {str(e)}")
+
+    # =========================================================================
+    # Telemetry Query Methods
+    # =========================================================================
+
+    async def get_device_aggregates(
+        self,
+        device_id: UUID,
+        metric_name: str,
+        start_time: datetime,
+        end_time: datetime,
+        bucket_interval: str = "1 hour",
+    ) -> List[TelemetryAggregate]:
+        """
+        Get time-bucketed aggregates for a device metric.
+
+        Args:
+            device_id: Device UUID in System B
+            metric_name: Metric to aggregate (e.g., 'pv_power_w')
+            start_time: Start of time range
+            end_time: End of time range
+            bucket_interval: Aggregation interval (e.g., '1 hour', '1 day')
+
+        Returns:
+            List of TelemetryAggregate buckets
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/aggregate/{device_id}/{metric_name}"
+            params = {
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "bucket_interval": bucket_interval,
+            }
+            logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
+            response = await client.get(url, params=params)
+            logger.info("System B response: status=%d, records=%s",
+                        response.status_code,
+                        len(response.json()) if response.status_code == 200 else "error")
+
+            response.raise_for_status()
+            data = response.json()
+
+            return [
+                TelemetryAggregate(
+                    bucket=datetime.fromisoformat(item["bucket"]),
+                    avg=item.get("avg"),
+                    min=item.get("min"),
+                    max=item.get("max"),
+                    first=item.get("first"),
+                    last=item.get("last"),
+                    delta=item.get("delta"),
+                    sample_count=item.get("sample_count", 0),
+                    quality_percent=item.get("quality_percent", 100.0),
+                )
+                for item in data
+            ]
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B aggregate error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get aggregates: {e.response.text}",
+                status_code=e.response.status_code
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    async def get_site_telemetry(
+        self,
+        site_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+        metric_names: Optional[List[str]] = None,
+        device_ids: Optional[List[UUID]] = None,
+        limit: int = 50000,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get telemetry records for all devices at a site.
+
+        Args:
+            site_id: Site UUID
+            start_time: Start of time range
+            end_time: End of time range
+            metric_names: Optional filter by metric names
+            device_ids: Optional filter by device IDs
+            limit: Maximum records to return
+
+        Returns:
+            List of telemetry records as dicts
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/site/{site_id}"
+            params: Dict[str, Any] = {
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "limit": limit,
+            }
+            if metric_names:
+                params["metric_names"] = metric_names
+            if device_ids:
+                params["device_ids"] = [str(d) for d in device_ids]
+
+            logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
+            response = await client.get(url, params=params)
+            logger.info("System B response: status=%d, records=%s",
+                        response.status_code,
+                        len(response.json()) if response.status_code == 200 else "error")
+
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B site telemetry error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get site telemetry: {e.response.text}",
+                status_code=e.response.status_code
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    async def get_site_power_chart(
+        self,
+        site_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+        bucket_interval: str = "5 minutes",
+    ) -> List[Dict[str, Any]]:
+        """
+        Get aggregated power data for chart display.
+
+        Args:
+            site_id: Site UUID
+            start_time: Start of time range
+            end_time: End of time range
+            bucket_interval: Aggregation interval
+
+        Returns:
+            List of power chart data points as dicts
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/power-chart/{site_id}"
+            params = {
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "bucket_interval": bucket_interval,
+            }
+            logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
+            response = await client.get(url, params=params)
+            logger.info("System B response: status=%d, records=%s",
+                        response.status_code,
+                        len(response.json()) if response.status_code == 200 else "error")
+
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B power chart error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get power chart: {e.response.text}",
+                status_code=e.response.status_code
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    async def get_device_latest(
+        self,
+        device_id: UUID,
+    ) -> Optional[DeviceLatestTelemetry]:
+        """
+        Get the latest telemetry readings for a device.
+
+        Args:
+            device_id: Device UUID in System B
+
+        Returns:
+            DeviceLatestTelemetry if found, None if no readings exist
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/latest/{device_id}"
+            logger.info("System B request: GET %s%s", self._base_url, url)
+            response = await client.get(url)
+            logger.info("System B response: status=%d", response.status_code)
+
+            if response.status_code == 404:
+                return None
+
+            response.raise_for_status()
+            data = response.json()
+
+            return DeviceLatestTelemetry(
+                device_id=UUID(str(data["device_id"])),
+                readings=data.get("readings", {}),
+            )
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B latest telemetry error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get latest telemetry: {e.response.text}",
+                status_code=e.response.status_code
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    # =========================================================================
+    # Device Management Methods
+    # =========================================================================
 
     async def get_orphan_devices(self) -> list[DeviceInfo]:
         """
