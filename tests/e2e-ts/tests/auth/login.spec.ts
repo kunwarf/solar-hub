@@ -128,4 +128,82 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     expect(await loginPage.getEmailValue()).toBe('');
     expect(await loginPage.getPasswordValue()).toBe('');
   });
+
+  test('should store JWT token in localStorage after successful login', {
+    tag: ['@critical', '@smoke']
+  }, async ({ page }) => {
+    const email = process.env.OWNER_EMAIL || 'owner@solarhub.com';
+    const password = process.env.OWNER_PASSWORD || 'Owner123!@#';
+
+    // Clear localStorage first
+    await page.evaluate(() => localStorage.clear());
+
+    // Login
+    await loginPage.login(email, password);
+    await loginPage.expectLoginSuccess();
+
+    // Verify token is stored
+    const token = await page.evaluate(() => localStorage.getItem('token'));
+    expect(token).toBeTruthy();
+    expect(token).toMatch(/^eyJ/); // JWT format starts with 'eyJ'
+
+    // Verify token is not empty
+    expect(token!.length).toBeGreaterThan(20);
+  });
+
+  test('should logout and clear session', {
+    tag: ['@critical', '@smoke']
+  }, async ({ page }) => {
+    const email = process.env.OWNER_EMAIL || 'owner@solarhub.com';
+    const password = process.env.OWNER_PASSWORD || 'Owner123!@#';
+
+    // Login first
+    await loginPage.login(email, password);
+    await loginPage.expectLoginSuccess();
+
+    // Verify logged in
+    const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('token'));
+    expect(tokenBeforeLogout).toBeTruthy();
+
+    // Find and click logout button
+    const logoutButton = page.getByRole('button', { name: /logout|log out|sign out/i });
+    await logoutButton.click();
+
+    // Wait for redirect to login page
+    await expect(page).toHaveURL(/.*auth/, { timeout: 10000 });
+
+    // Verify token is cleared
+    const tokenAfterLogout = await page.evaluate(() => localStorage.getItem('token'));
+    expect(tokenAfterLogout).toBeNull();
+
+    // Verify session storage is also cleared
+    const sessionData = await page.evaluate(() => sessionStorage.length);
+    expect(sessionData).toBe(0);
+  });
+
+  test('should persist session across page reloads', {
+    tag: '@regression'
+  }, async ({ page }) => {
+    const email = process.env.OWNER_EMAIL || 'owner@solarhub.com';
+    const password = process.env.OWNER_PASSWORD || 'Owner123!@#';
+
+    // Login
+    await loginPage.login(email, password);
+    await loginPage.expectLoginSuccess();
+
+    // Get token before reload
+    const tokenBefore = await page.evaluate(() => localStorage.getItem('token'));
+    expect(tokenBefore).toBeTruthy();
+
+    // Reload page
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+
+    // Verify still on dashboard (not redirected to login)
+    await expect(page).toHaveURL(/.*dashboard/);
+
+    // Verify token persists
+    const tokenAfter = await page.evaluate(() => localStorage.getItem('token'));
+    expect(tokenAfter).toBe(tokenBefore);
+  });
 });
