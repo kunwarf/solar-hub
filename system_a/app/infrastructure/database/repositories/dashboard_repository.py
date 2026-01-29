@@ -59,8 +59,13 @@ class SQLAlchemyDashboardPreferencesRepository(DashboardPreferencesRepository):
 
     async def upsert(self, entity: DashboardPreferences) -> DashboardPreferences:
         """Insert or update dashboard preferences for a user."""
+        from datetime import datetime, timezone
+
         # Use PostgreSQL's INSERT ... ON CONFLICT for upsert
         widget_layout_json = [w.to_dict() for w in entity.widget_layout]
+
+        # Use current time if updated_at is None
+        updated_at = entity.updated_at if entity.updated_at else datetime.now(timezone.utc)
 
         stmt = insert(DashboardPreferencesModel).values(
             user_id=entity.user_id,
@@ -68,7 +73,7 @@ class SQLAlchemyDashboardPreferencesRepository(DashboardPreferencesRepository):
             grid_layout=entity.grid_layout.value,
             widget_layout=widget_layout_json,
             created_at=entity.created_at,
-            updated_at=entity.updated_at,
+            updated_at=updated_at,
             version=entity.version,
         ).on_conflict_do_update(
             index_elements=['user_id'],
@@ -76,7 +81,7 @@ class SQLAlchemyDashboardPreferencesRepository(DashboardPreferencesRepository):
                 'layout_preset': entity.layout_preset,
                 'grid_layout': entity.grid_layout.value,
                 'widget_layout': widget_layout_json,
-                'updated_at': entity.updated_at,
+                'updated_at': updated_at,
                 'version': entity.version,
             }
         ).returning(DashboardPreferencesModel)

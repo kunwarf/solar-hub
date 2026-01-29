@@ -93,7 +93,6 @@ class DashboardPreferences(AggregateRoot):
 
     def __post_init__(self):
         """Validate entity after initialization."""
-        super().__post_init__()
         if not self.user_id:
             raise ValidationException("user_id is required")
         if not self.layout_preset:
@@ -104,21 +103,21 @@ class DashboardPreferences(AggregateRoot):
         if not preset_id:
             raise ValidationException("preset_id cannot be empty")
         object.__setattr__(self, 'layout_preset', preset_id)
-        self._update_timestamp()
+        self.mark_updated()
 
     def update_grid_layout(self, grid_layout: GridLayout) -> None:
         """Update the grid layout mode."""
         if not isinstance(grid_layout, GridLayout):
             raise ValidationException("Invalid grid_layout")
         object.__setattr__(self, 'grid_layout', grid_layout)
-        self._update_timestamp()
+        self.mark_updated()
 
     def update_widget_layout(self, widget_layout: List[WidgetConfig]) -> None:
         """Update the complete widget layout."""
         if not isinstance(widget_layout, list):
             raise ValidationException("widget_layout must be a list")
         object.__setattr__(self, 'widget_layout', widget_layout)
-        self._update_timestamp()
+        self.mark_updated()
 
     def update_widget_visibility(self, widget_id: str, visible: bool) -> None:
         """Update visibility of a specific widget."""
@@ -140,7 +139,7 @@ class DashboardPreferences(AggregateRoot):
             raise ValidationException(f"Widget {widget_id} not found")
 
         object.__setattr__(self, 'widget_layout', new_layout)
-        self._update_timestamp()
+        self.mark_updated()
 
     def update_widget_size(self, widget_id: str, size: WidgetSize) -> None:
         """Update size of a specific widget."""
@@ -164,7 +163,7 @@ class DashboardPreferences(AggregateRoot):
         object.__setattr__(self, 'widget_layout', new_layout)
         # When manually resizing, switch to custom preset
         object.__setattr__(self, 'layout_preset', 'custom')
-        self._update_timestamp()
+        self.mark_updated()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
@@ -192,7 +191,6 @@ class CustomPreset(Entity):
 
     def __post_init__(self):
         """Validate entity after initialization."""
-        super().__post_init__()
         if not self.user_id:
             raise ValidationException("user_id is required")
         if not self.name or not self.name.strip():
@@ -209,21 +207,21 @@ class CustomPreset(Entity):
         if len(name) > 100:
             raise ValidationException("name cannot exceed 100 characters")
         object.__setattr__(self, 'name', name.strip())
-        self._update_timestamp()
+        self.mark_updated()
 
     def update_description(self, description: Optional[str]) -> None:
         """Update preset description."""
         if description and len(description) > 500:
             raise ValidationException("description cannot exceed 500 characters")
         object.__setattr__(self, 'description', description.strip() if description else None)
-        self._update_timestamp()
+        self.mark_updated()
 
     def update_widget_config(self, widget_config: List[PresetWidgetConfig]) -> None:
         """Update the widget configuration."""
         if not isinstance(widget_config, list):
             raise ValidationException("widget_config must be a list")
         object.__setattr__(self, 'widget_config', widget_config)
-        self._update_timestamp()
+        self.mark_updated()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""

@@ -50,13 +50,15 @@ async def get_dashboard_preferences(
             grid_layout=GridLayout.LIST,
             widget_layout=[],
         )
+        # Use created_at for updated_at if not set
+        updated_at = default_prefs.updated_at if default_prefs.updated_at else default_prefs.created_at
         return DashboardPreferencesResponse(
             user_id=default_prefs.user_id,
             layout_preset=default_prefs.layout_preset,
             grid_layout=default_prefs.grid_layout.value,
             widget_layout=[],
             created_at=default_prefs.created_at,
-            updated_at=default_prefs.updated_at,
+            updated_at=updated_at,
         )
 
     return DashboardPreferencesResponse(

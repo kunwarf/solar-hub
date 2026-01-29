@@ -109,10 +109,8 @@ class CustomPresetModel(BaseModel):
             description=self.description,
             widget_config=widget_configs,
             created_at=self.created_at,
-            updated_at=self.updated_at,
-            version=self.version
+            updated_at=self.updated_at
         )
-        preset._domain_events = []  # Clear events loaded from DB
         return preset
 
     @classmethod
@@ -121,6 +119,10 @@ class CustomPresetModel(BaseModel):
         # Convert PresetWidgetConfig objects to JSON
         widget_config_json = [w.to_dict() for w in preset.widget_config]
 
+        # Handle updated_at being None
+        from datetime import datetime, timezone
+        updated_at = preset.updated_at if preset.updated_at else datetime.now(timezone.utc)
+
         return cls(
             id=preset.id,
             user_id=preset.user_id,
@@ -128,16 +130,16 @@ class CustomPresetModel(BaseModel):
             description=preset.description,
             widget_config=widget_config_json,
             created_at=preset.created_at,
-            updated_at=preset.updated_at,
-            version=preset.version
+            updated_at=updated_at
         )
 
     def update_from_domain(self, preset: CustomPreset) -> None:
         """Update ORM model from domain entity."""
+        from datetime import datetime, timezone
+
         widget_config_json = [w.to_dict() for w in preset.widget_config]
 
         self.name = preset.name
         self.description = preset.description
         self.widget_config = widget_config_json
-        self.updated_at = preset.updated_at
-        self.version = preset.version
+        self.updated_at = preset.updated_at if preset.updated_at else datetime.now(timezone.utc)
