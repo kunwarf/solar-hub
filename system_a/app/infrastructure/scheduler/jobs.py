@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Register all telemetry sync jobs with the scheduler."""
+    """Register all scheduled jobs with the scheduler."""
+    # Telemetry sync jobs
     scheduler.add_job(
         sync_hourly_job,
         CronTrigger(minute=5),
@@ -36,6 +37,10 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
     logger.info("Registered 3 telemetry sync jobs")
+
+    # Billing jobs
+    from .billing_jobs import register_billing_jobs
+    register_billing_jobs(scheduler)
 
 
 async def sync_hourly_job() -> None:

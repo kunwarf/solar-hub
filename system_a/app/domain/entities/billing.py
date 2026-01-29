@@ -88,6 +88,25 @@ class TariffSlab:
 
 
 @dataclass
+class TouWindowConfig:
+    """
+    Time-of-Use window definition.
+
+    Defines peak hours for TOU tariffs.
+    """
+    start_hour: int  # 0-23
+    end_hour: int    # 0-23 (exclusive)
+
+    def contains_hour(self, hour: int) -> bool:
+        """Check if given hour falls within this window."""
+        if self.start_hour < self.end_hour:
+            return self.start_hour <= hour < self.end_hour
+        else:
+            # Window spans midnight
+            return hour >= self.start_hour or hour < self.end_hour
+
+
+@dataclass
 class TariffRates:
     """
     Complete tariff rate structure.
@@ -104,6 +123,10 @@ class TariffRates:
     peak_rate_per_kwh: Optional[Decimal] = None
     off_peak_rate_per_kwh: Optional[Decimal] = None
 
+    # TOU windows configuration (for determining peak/off-peak hours)
+    # Structure: [{"start_hour": 17, "end_hour": 22}]
+    tou_windows: List[TouWindowConfig] = field(default_factory=list)
+
     # Fixed charges
     fixed_charges_per_month: Decimal = Decimal("0")
     meter_rent: Decimal = Decimal("0")
@@ -118,6 +141,10 @@ class TariffRates:
     # Net metering
     export_rate_per_kwh: Optional[Decimal] = None  # Rate for exported energy
 
+    # Net metering settlement prices (for 3-month cycle settlement)
+    offpeak_settlement_rate: Optional[Decimal] = None  # Price for settling off-peak credits
+    peak_settlement_rate: Optional[Decimal] = None  # Price for settling peak credits
+
     # Demand charges (for industrial)
     demand_charge_per_kw: Optional[Decimal] = None  # PKR per kW of demand
 
@@ -128,6 +155,13 @@ class TariffRates:
     def is_tou_based(self) -> bool:
         """Check if tariff uses time-of-use pricing."""
         return self.peak_rate_per_kwh is not None
+
+    def is_peak_hour(self, hour: int) -> bool:
+        """Check if given hour is a peak hour based on TOU windows."""
+        if not self.tou_windows:
+            # Default: 17:00-22:00 is peak
+            return 17 <= hour < 22
+        return any(window.contains_hour(hour) for window in self.tou_windows)
 
 
 @dataclass(kw_only=True)

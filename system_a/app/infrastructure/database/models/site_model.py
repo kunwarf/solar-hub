@@ -63,6 +63,12 @@ class SiteModel(BaseModel):
     devices = relationship('DeviceModel', back_populates='site', lazy='dynamic')
     billing_simulations = relationship('BillingSimulationModel', back_populates='site', lazy='dynamic')
 
+    # Net metering billing relationships
+    billing_config = relationship('BillingConfigModel', back_populates='site', uselist=False)
+    billing_cycles = relationship('BillingCycleModel', back_populates='site', lazy='dynamic')
+    billing_months = relationship('BillingMonthModel', back_populates='site', lazy='dynamic')
+    billing_daily = relationship('BillingDailyModel', back_populates='site', lazy='dynamic')
+
     def to_domain(self) -> Site:
         """Convert ORM model to domain entity."""
         site = Site(

@@ -289,11 +289,21 @@ class SQLAlchemyBillingRepository:
                 fixed_charges=Decimal(str(slab_data.get("fixed_charges", "0"))),
             ))
 
+        # Parse TOU windows
+        tou_windows = []
+        for window_data in rates_json.get("tou_windows", []):
+            from ....domain.entities.billing import TouWindowConfig
+            tou_windows.append(TouWindowConfig(
+                start_hour=window_data["start_hour"],
+                end_hour=window_data["end_hour"],
+            ))
+
         return TariffRates(
             energy_charge_per_kwh=Decimal(str(rates_json.get("energy_charge_per_kwh", "0"))),
             slabs=slabs,
             peak_rate_per_kwh=Decimal(str(rates_json["peak_rate_per_kwh"])) if rates_json.get("peak_rate_per_kwh") else None,
             off_peak_rate_per_kwh=Decimal(str(rates_json["off_peak_rate_per_kwh"])) if rates_json.get("off_peak_rate_per_kwh") else None,
+            tou_windows=tou_windows,
             fixed_charges_per_month=Decimal(str(rates_json.get("fixed_charges_per_month", "0"))),
             meter_rent=Decimal(str(rates_json.get("meter_rent", "0"))),
             fuel_price_adjustment=Decimal(str(rates_json.get("fuel_price_adjustment", "0"))),
@@ -302,6 +312,8 @@ class SQLAlchemyBillingRepository:
             gst_percent=Decimal(str(rates_json.get("gst_percent", "17"))),
             tv_fee=Decimal(str(rates_json.get("tv_fee", "35"))),
             export_rate_per_kwh=Decimal(str(rates_json["export_rate_per_kwh"])) if rates_json.get("export_rate_per_kwh") else None,
+            offpeak_settlement_rate=Decimal(str(rates_json["offpeak_settlement_rate"])) if rates_json.get("offpeak_settlement_rate") else None,
+            peak_settlement_rate=Decimal(str(rates_json["peak_settlement_rate"])) if rates_json.get("peak_settlement_rate") else None,
             demand_charge_per_kw=Decimal(str(rates_json["demand_charge_per_kw"])) if rates_json.get("demand_charge_per_kw") else None,
         )
 
@@ -333,8 +345,17 @@ class SQLAlchemyBillingRepository:
             result["peak_rate_per_kwh"] = str(rates.peak_rate_per_kwh)
         if rates.off_peak_rate_per_kwh:
             result["off_peak_rate_per_kwh"] = str(rates.off_peak_rate_per_kwh)
+        if rates.tou_windows:
+            result["tou_windows"] = [
+                {"start_hour": w.start_hour, "end_hour": w.end_hour}
+                for w in rates.tou_windows
+            ]
         if rates.export_rate_per_kwh:
             result["export_rate_per_kwh"] = str(rates.export_rate_per_kwh)
+        if rates.offpeak_settlement_rate:
+            result["offpeak_settlement_rate"] = str(rates.offpeak_settlement_rate)
+        if rates.peak_settlement_rate:
+            result["peak_settlement_rate"] = str(rates.peak_settlement_rate)
         if rates.demand_charge_per_kw:
             result["demand_charge_per_kw"] = str(rates.demand_charge_per_kw)
 
