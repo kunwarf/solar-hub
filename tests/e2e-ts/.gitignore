@@ -1,0 +1,40 @@
+# Node modules
+node_modules/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Environment
+.env.test
+.env.local
+
+# TypeScript
+dist/
+*.tsbuildinfo
+
+# Test artifacts
+screenshots/
+videos/
+traces/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Authentication state
+test-results/.auth/*.json
