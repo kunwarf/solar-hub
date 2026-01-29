@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
   DollarSign,
   TrendingUp,
   LayoutDashboard,
+  Loader2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -42,9 +43,19 @@ import { useBillingConfig, defaultConfig, type PeakWindow } from "@/hooks/use-bi
 
 const BillingSettingsPage = () => {
   const navigate = useNavigate();
-  const { config, setConfig } = useBillingConfig();
+  const [searchParams] = useSearchParams();
+  const siteId = searchParams.get("site_id") || "default-site-id"; // Get site ID from URL or use default
+  const { config, setConfig, loadFromBackend, saveToBackend, isSyncing } = useBillingConfig();
   const [isFirstTime, setIsFirstTime] = useState(false); // Set to true for first-time wizard
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load config from backend on mount
+  useEffect(() => {
+    if (siteId && siteId !== "default-site-id") {
+      loadFromBackend(siteId);
+    }
+  }, [siteId, loadFromBackend]);
 
   const steps = [
     { number: 1, title: "Global Settings", icon: Globe },
@@ -78,13 +89,35 @@ const BillingSettingsPage = () => {
     });
   };
 
-  const handleSave = () => {
-    toast({
-      title: "Configuration Saved",
-      description: "Billing settings have been updated successfully.",
-    });
-    setIsFirstTime(false);
-    navigate("/billing");
+  const handleSave = async () => {
+    if (siteId && siteId !== "default-site-id") {
+      setIsSaving(true);
+      try {
+        await saveToBackend(siteId);
+        toast({
+          title: "Configuration Saved",
+          description: "Billing settings have been saved to the server.",
+        });
+        setIsFirstTime(false);
+        navigate("/billing");
+      } catch (err) {
+        toast({
+          title: "Save Failed",
+          description: "Failed to save billing configuration. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      // Local-only save (no site ID)
+      toast({
+        title: "Configuration Saved",
+        description: "Billing settings have been updated locally.",
+      });
+      setIsFirstTime(false);
+      navigate("/billing");
+    }
   };
 
   const handleReset = () => {
@@ -453,9 +486,9 @@ const BillingSettingsPage = () => {
             <ArrowRight className="w-4 h-4" />
           </Button>
         ) : (
-          <Button onClick={handleSave} className="gap-2">
-            <Save className="w-4 h-4" />
-            Save Configuration
+          <Button onClick={handleSave} className="gap-2" disabled={isSaving || isSyncing}>
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {isSaving ? "Saving..." : "Save Configuration"}
           </Button>
         )}
       </div>
@@ -528,11 +561,11 @@ const BillingSettingsPage = () => {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-4">
-        <Button onClick={handleSave} className="gap-2">
-          <Save className="w-4 h-4" />
-          Save Changes
+        <Button onClick={handleSave} className="gap-2" disabled={isSaving || isSyncing}>
+          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {isSaving ? "Saving..." : "Save Changes"}
         </Button>
-        <Button variant="outline" onClick={handleReset} className="gap-2">
+        <Button variant="outline" onClick={handleReset} className="gap-2" disabled={isSaving}>
           <RotateCcw className="w-4 h-4" />
           Reset to Defaults
         </Button>

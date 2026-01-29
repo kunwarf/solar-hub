@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import {
@@ -26,11 +26,17 @@ import {
   RefreshCw,
   Settings2,
   Loader2,
+  Battery,
+  Sun,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useBillingConfig } from "@/hooks/use-billing-config";
+import { useNetMetering } from "@/hooks/use-net-metering";
 import { WhatIfCalculator } from "@/components/billing/WhatIfCalculator";
 import { dashboardService } from "@/api/services/dashboard.service";
 import type { AllWidgetsData, EnergyChartResponse } from "@/api/services/dashboard.service";
@@ -133,9 +139,23 @@ function buildBillingData(
 
 const BillingPage = () => {
   const navigate = useNavigate();
-  const { formatCurrency, getCurrencySymbol } = useBillingConfig();
+  const [searchParams] = useSearchParams();
+  const siteId = searchParams.get("site_id") || "default-site-id";
+  const { formatCurrency, getCurrencySymbol, config } = useBillingConfig();
   const [billingData, setBillingData] = useState<BillingPageData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Net metering data from new API
+  const {
+    runningBill,
+    trend,
+    capacityStatus,
+    loading: netMeteringLoading,
+    refetchAll: refetchNetMetering,
+  } = useNetMetering({
+    siteId: siteId !== "default-site-id" ? siteId : "",
+    autoFetch: siteId !== "default-site-id",
+  });
 
   const fetchData = useCallback(async () => {
     try {
@@ -161,8 +181,11 @@ const BillingPage = () => {
       description: "Refreshing data from telemetry...",
     });
     try {
-      await dashboardService.getAllWidgets();
-      await fetchData();
+      await Promise.all([
+        dashboardService.getAllWidgets(),
+        fetchData(),
+        siteId !== "default-site-id" ? refetchNetMetering() : Promise.resolve(),
+      ]);
       toast({
         title: "Billing data refreshed",
         description: "Latest telemetry data has been loaded.",
@@ -213,7 +236,10 @@ const BillingPage = () => {
             <RefreshCw className="w-4 h-4" />
             Refresh Data
           </Button>
-          <Button onClick={() => navigate("/billing/settings")} className="gap-2">
+          <Button
+            onClick={() => navigate(siteId !== "default-site-id" ? `/billing/settings?site_id=${siteId}` : "/billing/settings")}
+            className="gap-2"
+          >
             <Settings2 className="w-4 h-4" />
             Configure Billing
           </Button>
@@ -368,12 +394,239 @@ const BillingPage = () => {
           </div>
         </motion.div>
 
+        {/* Running Bill (from Net Metering API) */}
+        {runningBill && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.55 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-foreground">Running Bill (Month-to-Date)</h3>
+              <Badge variant={runningBill.surplus_deficit_flag === 'SURPLUS' ? 'default' : 'destructive'}>
+                {runningBill.surplus_deficit_flag}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {/* Progress */}
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <p className="text-xs text-muted-foreground mb-1">Billing Progress</p>
+                <p className="font-mono text-xl font-bold text-foreground">
+                  {runningBill.progress_percent.toFixed(0)}%
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Day {runningBill.days_elapsed} of {runningBill.total_days_in_month}
+                </p>
+              </div>
+
+              {/* Bill to Date */}
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <p className="text-xs text-muted-foreground mb-1">Bill To-Date</p>
+                <p className="font-mono text-xl font-bold text-foreground">
+                  {formatCurrency(runningBill.bill_final_rs_to_date)}
+                </p>
+              </div>
+
+              {/* Credit Balance */}
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <p className="text-xs text-muted-foreground mb-1">Credit Balance</p>
+                <p className="font-mono text-xl font-bold text-success">
+                  {formatCurrency(runningBill.bill_credit_balance_rs_to_date)}
+                </p>
+              </div>
+
+              {/* Net Position */}
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <p className="text-xs text-muted-foreground mb-1">Net kWh Position</p>
+                <p className={cn(
+                  "font-mono text-xl font-bold",
+                  runningBill.net_kwh_position >= 0 ? "text-success" : "text-destructive"
+                )}>
+                  {runningBill.net_kwh_position >= 0 ? "+" : ""}{runningBill.net_kwh_position.toFixed(1)} kWh
+                </p>
+              </div>
+            </div>
+
+            {/* Energy Breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10">
+                <ArrowDownRight className="w-5 h-5 text-consumption" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Peak Import</p>
+                  <p className="font-mono font-medium">{runningBill.import_peak_kwh.toFixed(1)} kWh</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10">
+                <ArrowDownRight className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Off-Peak Import</p>
+                  <p className="font-mono font-medium">{runningBill.import_off_kwh.toFixed(1)} kWh</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-success/10">
+                <ArrowUpRight className="w-5 h-5 text-success" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Peak Export</p>
+                  <p className="font-mono font-medium">{runningBill.export_peak_kwh.toFixed(1)} kWh</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-success/10">
+                <ArrowUpRight className="w-5 h-5 text-success/70" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Off-Peak Export</p>
+                  <p className="font-mono font-medium">{runningBill.export_off_kwh.toFixed(1)} kWh</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Credit Pools */}
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-sm font-medium text-foreground mb-3">Credit Pools (3-Month Cycle)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
+                  <span className="text-sm text-muted-foreground">Off-Peak Credits</span>
+                  <span className="font-mono font-medium text-success">
+                    {runningBill.credits_off_cycle_kwh_balance.toFixed(1)} kWh
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
+                  <span className="text-sm text-muted-foreground">Peak Credits</span>
+                  <span className="font-mono font-medium text-success">
+                    {runningBill.credits_peak_cycle_kwh_balance.toFixed(1)} kWh
+                  </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Capacity Status */}
+        {capacityStatus && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className={cn(
+              "glass-card p-6 border",
+              capacityStatus.status === 'balanced' ? "border-success/30" :
+              capacityStatus.status === 'over-capacity' ? "border-primary/30" :
+              "border-warning/30"
+            )}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-foreground">Capacity Analysis</h3>
+              <Badge variant={
+                capacityStatus.status === 'balanced' ? 'default' :
+                capacityStatus.status === 'over-capacity' ? 'secondary' : 'destructive'
+              }>
+                {capacityStatus.status.replace('-', ' ').toUpperCase()}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sun className="w-4 h-4 text-solar" />
+                  <p className="text-xs text-muted-foreground">Installed</p>
+                </div>
+                <p className="font-mono text-xl font-bold text-foreground">
+                  {capacityStatus.installed_kw.toFixed(1)} kW
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Battery className="w-4 h-4 text-primary" />
+                  <p className="text-xs text-muted-foreground">Required for Zero Bill</p>
+                </div>
+                <p className="font-mono text-xl font-bold text-foreground">
+                  {capacityStatus.required_kw_for_zero_bill.toFixed(1)} kW
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <p className="text-xs text-muted-foreground mb-2">Deficit/Surplus</p>
+                <p className={cn(
+                  "font-mono text-xl font-bold",
+                  capacityStatus.deficit_kw <= 0 ? "text-success" : "text-destructive"
+                )}>
+                  {capacityStatus.deficit_kw <= 0 ? "+" : "-"}{Math.abs(capacityStatus.deficit_kw).toFixed(1)} kW
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <p className="text-xs text-muted-foreground mb-2">Annual Bill</p>
+                <p className="font-mono text-xl font-bold text-foreground">
+                  {formatCurrency(capacityStatus.annual_bill_rs)}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Billing Trend (from Net Metering API) */}
+        {trend.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.65 }}
+            className="glass-card p-6"
+          >
+            <h3 className="text-lg font-semibold text-foreground mb-6">Monthly Bill Trend</h3>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={trend.map(item => ({
+                    month: `${item.year}-${String(item.month).padStart(2, '0')}`,
+                    bill: item.bill_final_rs,
+                    importPeak: item.import_peak_kwh,
+                    importOff: item.import_off_kwh,
+                    exportPeak: item.export_peak_kwh,
+                    exportOff: item.export_off_kwh,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis
+                    dataKey="month"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${getCurrencySymbol()}${value}`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    formatter={(value: number, name: string) => {
+                      if (name === 'bill') return [formatCurrency(value), 'Bill'];
+                      return [`${value.toFixed(1)} kWh`, name];
+                    }}
+                  />
+                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar dataKey="bill" name="Bill (Rs)" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+        )}
+
         {/* Monthly History Chart */}
         {billingData.monthlyHistory.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
+            transition={{ delay: 0.7 }}
             className="glass-card p-6"
           >
             <h3 className="text-lg font-semibold text-foreground mb-6">Energy History</h3>

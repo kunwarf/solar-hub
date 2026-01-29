@@ -117,7 +117,7 @@ export const API_ENDPOINTS = {
     all: '/dashboard/all',
   },
 
-  // Billing
+  // Billing (legacy)
   billing: {
     overview: (siteId: string) => `/billing/sites/${siteId}/overview`,
     history: (siteId: string) => `/billing/sites/${siteId}/history`,
@@ -130,6 +130,32 @@ export const API_ENDPOINTS = {
     simulationById: (id: string) => `/billing/simulations/${id}`,
     compareTariffs: '/billing/compare-tariffs',
     yearlySummary: (siteId: string) => `/billing/yearly-summary/${siteId}`,
+  },
+
+  // Net Metering Billing (3-month netting cycle)
+  netMetering: {
+    // Config
+    getConfig: (siteId: string) => `/billing/config/${siteId}`,
+    saveConfig: '/billing/config',
+    // Running bill (to-date)
+    runningBill: '/billing/running',
+    // Daily snapshots
+    dailySnapshots: '/billing/daily',
+    // Billing months
+    months: '/billing/months',
+    monthById: (id: string) => `/billing/months/${id}`,
+    // Billing cycles (3-month)
+    cycles: '/billing/cycles',
+    cycleById: (id: string) => `/billing/cycles/${id}`,
+    closeCycle: '/billing/cycle/close',
+    // Summary & trends
+    summary: '/billing/summary',
+    trend: '/billing/trend',
+    yearly: '/billing/yearly',
+    // Capacity analysis
+    capacityStatus: '/billing/capacity/status',
+    // Admin
+    backfill: '/billing/admin/backfill',
   },
 
   // Tariffs (Pakistani DISCO rates)
