@@ -8,9 +8,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { GripVertical, X, Settings, Eye, EyeOff } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { GripVertical, X, Settings, Maximize2, Minimize2, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useDashboardLayout, WidgetId } from "@/contexts/DashboardLayoutContext";
+import { useDashboardLayout, WidgetId, WidgetSize } from "@/contexts/DashboardLayoutContext";
 
 interface DraggableWidgetProps {
   id: WidgetId;
@@ -25,8 +32,10 @@ export function DraggableWidget({
   className,
   settingsContent,
 }: DraggableWidgetProps) {
-  const { isEditMode, removeWidget, getWidgetConfig } = useDashboardLayout();
+  const { isEditMode, removeWidget, getWidgetConfig, layout, resizeWidget } = useDashboardLayout();
   const config = getWidgetConfig(id);
+  const currentWidget = layout.find(w => w.id === id);
+  const currentSize = currentWidget?.size || "medium";
 
   const {
     attributes,
@@ -74,6 +83,46 @@ export function DraggableWidget({
 
       {/* Widget Controls */}
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Size Control */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7 bg-background/90"
+              title="Change widget size"
+            >
+              {currentSize === "small" && <Minimize2 className="w-3.5 h-3.5" />}
+              {currentSize === "medium" && <Square className="w-3.5 h-3.5" />}
+              {currentSize === "large" && <Maximize2 className="w-3.5 h-3.5" />}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuLabel>Widget Size</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => resizeWidget(id, "small")}
+              className={cn(currentSize === "small" && "bg-accent")}
+            >
+              <Minimize2 className="w-4 h-4 mr-2" />
+              Small
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => resizeWidget(id, "medium")}
+              className={cn(currentSize === "medium" && "bg-accent")}
+            >
+              <Square className="w-4 h-4 mr-2" />
+              Medium
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => resizeWidget(id, "large")}
+              className={cn(currentSize === "large" && "bg-accent")}
+            >
+              <Maximize2 className="w-4 h-4 mr-2" />
+              Large
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {settingsContent && (
           <Popover>
             <PopoverTrigger asChild>
@@ -93,7 +142,7 @@ export function DraggableWidget({
             </PopoverContent>
           </Popover>
         )}
-        
+
         <Button
           variant="outline"
           size="icon"

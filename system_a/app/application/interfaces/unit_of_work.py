@@ -16,6 +16,8 @@ from .repositories import (
     DeviceRepository,
     AlertRepository,
     AlertRuleRepository,
+    DashboardPreferencesRepository,
+    CustomPresetRepository,
 )
 
 
@@ -39,6 +41,8 @@ class UnitOfWork(ABC):
     devices: DeviceRepository
     alerts: AlertRepository
     alert_rules: AlertRuleRepository
+    dashboard_preferences: DashboardPreferencesRepository
+    custom_presets: CustomPresetRepository
 
     async def __aenter__(self) -> 'UnitOfWork':
         """Enter the context manager."""

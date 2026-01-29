@@ -8,8 +8,11 @@ Creates continuous aggregates for efficient time-series queries:
 - telemetry_5min: 5-minute aggregates
 - telemetry_hourly: Hourly aggregates
 - telemetry_daily: Daily aggregates
+
+Note: This migration is skipped when USE_TIMESCALEDB=false (local dev without TimescaleDB)
 """
 from typing import Sequence, Union
+import os
 
 from alembic import op
 import sqlalchemy as sa
@@ -20,8 +23,15 @@ down_revision: Union[str, None] = "0001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Check if TimescaleDB is available (skip for local PostgreSQL dev)
+USE_TIMESCALEDB = os.getenv("USE_TIMESCALEDB", "false").lower() == "true"
+
 
 def upgrade() -> None:
+    if not USE_TIMESCALEDB:
+        print("Skipping TimescaleDB continuous aggregates (USE_TIMESCALEDB=false)")
+        return
+
     # Create 5-minute continuous aggregate
     op.execute("""
         CREATE MATERIALIZED VIEW IF NOT EXISTS telemetry_5min
@@ -86,7 +96,6 @@ def upgrade() -> None:
     """)
 
     # Add refresh policies for continuous aggregates
-    # 5-minute aggregate: refresh every 5 minutes, data from 1 hour ago to 10 minutes ago
     op.execute("""
         SELECT add_continuous_aggregate_policy('telemetry_5min',
             start_offset => INTERVAL '1 hour',
@@ -96,7 +105,6 @@ def upgrade() -> None:
         )
     """)
 
-    # Hourly aggregate: refresh every hour, data from 3 hours ago to 1 hour ago
     op.execute("""
         SELECT add_continuous_aggregate_policy('telemetry_hourly',
             start_offset => INTERVAL '3 hours',
@@ -106,7 +114,6 @@ def upgrade() -> None:
         )
     """)
 
-    # Daily aggregate: refresh daily, data from 3 days ago to 1 day ago
     op.execute("""
         SELECT add_continuous_aggregate_policy('telemetry_daily',
             start_offset => INTERVAL '3 days',
@@ -170,7 +177,6 @@ def upgrade() -> None:
     """)
 
     # Add retention policies
-    # Keep raw telemetry for 7 days
     op.execute("""
         SELECT add_retention_policy('telemetry_raw',
             INTERVAL '7 days',
@@ -178,7 +184,6 @@ def upgrade() -> None:
         )
     """)
 
-    # Keep device events for 90 days
     op.execute("""
         SELECT add_retention_policy('device_events',
             INTERVAL '90 days',
@@ -186,7 +191,6 @@ def upgrade() -> None:
         )
     """)
 
-    # Keep 5-minute aggregates for 30 days
     op.execute("""
         SELECT add_retention_policy('telemetry_5min',
             INTERVAL '30 days',
@@ -194,15 +198,12 @@ def upgrade() -> None:
         )
     """)
 
-    # Keep hourly aggregates for 1 year
     op.execute("""
         SELECT add_retention_policy('telemetry_hourly',
             INTERVAL '365 days',
             if_not_exists => TRUE
         )
     """)
-
-    # Daily aggregates kept forever (no retention policy)
 
     # Create compression policy for old raw data
     op.execute("""
@@ -221,6 +222,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not USE_TIMESCALEDB:
+        print("Skipping TimescaleDB downgrade (USE_TIMESCALEDB=false)")
+        return
+
     # Remove policies first
     op.execute("SELECT remove_compression_policy('telemetry_raw', if_exists => TRUE)")
     op.execute("SELECT remove_retention_policy('telemetry_hourly', if_exists => TRUE)")

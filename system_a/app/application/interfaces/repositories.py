@@ -14,6 +14,7 @@ from ...domain.entities.site import Site
 from ...domain.entities.device import Device, DeviceType, ProtocolType
 from ...domain.entities.alert import Alert, AlertRule
 from ...domain.entities.protocol_definition import ProtocolDefinition
+from ...domain.entities.dashboard import DashboardPreferences, CustomPreset
 
 
 # Generic type for entities
@@ -463,4 +464,85 @@ class ProtocolDefinitionRepository(Repository[ProtocolDefinition]):
     @abstractmethod
     async def protocol_id_exists(self, protocol_id: str) -> bool:
         """Check if protocol_id is already registered."""
+        pass
+
+
+class DashboardPreferencesRepository(Repository[DashboardPreferences]):
+    """Repository interface for DashboardPreferences entities."""
+
+    @abstractmethod
+    async def get_by_user_id(self, user_id: UUID) -> Optional[DashboardPreferences]:
+        """
+        Get dashboard preferences for a user.
+
+        Args:
+            user_id: User UUID
+
+        Returns:
+            Dashboard preferences if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def upsert(self, entity: DashboardPreferences) -> DashboardPreferences:
+        """
+        Insert or update dashboard preferences for a user.
+
+        Args:
+            entity: Dashboard preferences to upsert
+
+        Returns:
+            Saved dashboard preferences
+        """
+        pass
+
+
+class CustomPresetRepository(Repository[CustomPreset]):
+    """Repository interface for CustomPreset entities."""
+
+    @abstractmethod
+    async def get_by_user_id(
+        self,
+        user_id: UUID,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[CustomPreset]:
+        """
+        Get custom presets for a user.
+
+        Args:
+            user_id: User UUID
+            limit: Maximum number of presets to return
+            offset: Number of presets to skip
+
+        Returns:
+            List of custom presets
+        """
+        pass
+
+    @abstractmethod
+    async def count_by_user_id(self, user_id: UUID) -> int:
+        """
+        Count custom presets for a user.
+
+        Args:
+            user_id: User UUID
+
+        Returns:
+            Number of custom presets
+        """
+        pass
+
+    @abstractmethod
+    async def delete_by_user_and_id(self, user_id: UUID, preset_id: UUID) -> bool:
+        """
+        Delete a custom preset owned by a specific user.
+
+        Args:
+            user_id: User UUID (owner verification)
+            preset_id: Preset UUID
+
+        Returns:
+            True if deleted, False if not found or not owned by user
+        """
         pass

@@ -198,16 +198,27 @@ const BatteryNode = ({
       >
         Battery
       </text>
-      
-      {/* Value - larger font */}
+
+      {/* SOC Value - moved up slightly */}
       <text
         x={x}
-        y={y + size / 2 + 48}
+        y={y + size / 2 + 45}
         textAnchor="middle"
-        className="font-mono text-xl font-bold"
+        className="font-mono text-sm font-medium"
         fill={getFillColor()}
       >
         {level}%
+      </text>
+
+      {/* Power Value - added below SOC */}
+      <text
+        x={x}
+        y={y + size / 2 + 65}
+        textAnchor="middle"
+        className="font-mono text-xl font-bold"
+        fill={isCharging ? "#10B981" : isDischarging ? "#F59E0B" : getFillColor()}
+      >
+        {Math.abs(power).toFixed(1)} kW {isCharging ? "↑" : isDischarging ? "↓" : ""}
       </text>
     </motion.g>
   );

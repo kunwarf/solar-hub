@@ -19,6 +19,14 @@ from .billing import (
     SavingsBreakdown,
     BillingSimulation,
 )
+from .dashboard import (
+    WidgetSize,
+    GridLayout,
+    WidgetConfig,
+    PresetWidgetConfig,
+    DashboardPreferences,
+    CustomPreset,
+)
 from .report import (
     ReportType,
     ReportFormat,
@@ -53,6 +61,13 @@ __all__ = [
     'BillBreakdown',
     'SavingsBreakdown',
     'BillingSimulation',
+    # Dashboard
+    'WidgetSize',
+    'GridLayout',
+    'WidgetConfig',
+    'PresetWidgetConfig',
+    'DashboardPreferences',
+    'CustomPreset',
     # Reports
     'ReportType',
     'ReportFormat',

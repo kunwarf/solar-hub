@@ -10,6 +10,7 @@ from .sites import router as sites_router
 from .devices import router as devices_router
 from .dashboards import router as dashboards_router
 from .dashboard_widgets import router as dashboard_widgets_router
+from .dashboard_preferences import router as dashboard_preferences_router
 from .alerts import router as alerts_router
 from .billing import router as billing_router
 from .billing_daily import router as billing_daily_router
@@ -27,6 +28,7 @@ api_router.include_router(sites_router)
 api_router.include_router(devices_router)
 api_router.include_router(dashboards_router)
 api_router.include_router(dashboard_widgets_router)
+api_router.include_router(dashboard_preferences_router)
 api_router.include_router(alerts_router)
 api_router.include_router(billing_router)
 api_router.include_router(billing_daily_router)

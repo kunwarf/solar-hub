@@ -17,6 +17,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Auth from "./pages/Auth";
 import Index from "./pages/Index";
 import Devices from "./pages/Devices";
+import DeviceDetails from "./pages/DeviceDetails";
 import DeviceSettings from "./pages/DeviceSettings";
 import DeviceManagement from "./pages/DeviceManagement";
 import Telemetry from "./pages/Telemetry";
@@ -63,6 +64,7 @@ const App = () => (
                               <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
                               <Route path="/devices" element={<ProtectedRoute><Devices /></ProtectedRoute>} />
                               <Route path="/devices/manage" element={<ProtectedRoute><DeviceManagement /></ProtectedRoute>} />
+                              <Route path="/devices/:deviceId" element={<ProtectedRoute><DeviceDetails /></ProtectedRoute>} />
                               <Route path="/devices/:deviceId/settings" element={<ProtectedRoute><DeviceSettings /></ProtectedRoute>} />
                               <Route path="/telemetry" element={<ProtectedRoute><Telemetry /></ProtectedRoute>} />
                               <Route path="/scheduler" element={<ProtectedRoute><SmartScheduler /></ProtectedRoute>} />

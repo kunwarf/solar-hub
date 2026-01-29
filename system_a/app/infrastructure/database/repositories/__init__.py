@@ -7,6 +7,10 @@ from .site_repository import SQLAlchemySiteRepository
 from .device_repository import SQLAlchemyDeviceRepository
 from .alert_repository import SQLAlchemyAlertRepository, SQLAlchemyAlertRuleRepository
 from .billing_repository import SQLAlchemyBillingRepository
+from .dashboard_repository import (
+    SQLAlchemyDashboardPreferencesRepository,
+    SQLAlchemyCustomPresetRepository,
+)
 from .telemetry_repository import (
     SQLAlchemyTelemetryRepository,
     SiteEnergyTotals,
@@ -24,6 +28,8 @@ __all__ = [
     'SQLAlchemyAlertRepository',
     'SQLAlchemyAlertRuleRepository',
     'SQLAlchemyBillingRepository',
+    'SQLAlchemyDashboardPreferencesRepository',
+    'SQLAlchemyCustomPresetRepository',
     'SQLAlchemyTelemetryRepository',
     'SiteEnergyTotals',
     'OrgEnergyTotals',

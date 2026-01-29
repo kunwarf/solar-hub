@@ -14,6 +14,7 @@ from .telemetry_model import (
     DeviceTelemetrySnapshotModel,
 )
 from .billing_model import TariffPlanModel, BillingSimulationModel
+from .dashboard_model import DashboardPreferencesModel, CustomPresetModel
 from .net_metering_model import (
     BillingConfigModel,
     BillingCycleModel,
@@ -41,6 +42,8 @@ __all__ = [
     'DeviceTelemetrySnapshotModel',
     'TariffPlanModel',
     'BillingSimulationModel',
+    'DashboardPreferencesModel',
+    'CustomPresetModel',
     'BillingConfigModel',
     'BillingCycleModel',
     'BillingMonthModel',

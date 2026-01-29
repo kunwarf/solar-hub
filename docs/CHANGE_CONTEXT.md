@@ -2,7 +2,7 @@
 
 > **Audience:** An AI agent making autonomous modifications to this codebase.
 > **Tone:** Instructional and strict. Follow these rules to prevent breaking changes and preserve system intent.
-> **Last Updated:** 2026-01-27
+> **Last Updated:** 2026-01-28
 
 ---
 
@@ -94,6 +94,12 @@ These are rules that must NEVER be violated. Breaking any of these will cause sy
 9. **TimescaleDB hypertables must not be altered with standard DDL.** The `telemetry_raw` table in System B is a TimescaleDB hypertable with continuous aggregates. Use TimescaleDB-specific APIs (`add_compression_policy`, `add_retention_policy`) instead of standard `ALTER TABLE`.
 
 10. **Frontend token storage keys must match backend token structure.** The `tokenStorage` object in `frontend/src/api/client.ts` and the `JWTHandler` in `system_a/app/infrastructure/security/jwt_handler.py` must agree on token field names (`access_token`, `refresh_token`).
+
+11. **Registration must auto-create the full entity hierarchy.** When a new user registers, `RegistrationService` must create User → Organization (`"{first_name}'s Organization"`) → Site (`"My Home"`) in sequence. Skipping any step leaves the hierarchy incomplete and breaks dashboard queries that traverse User → Organization → Site → Device.
+
+12. **Device-site linkage must be bidirectional.** Sites store a `device_ids` array AND devices store a `site_id` FK. When claiming, releasing, or moving a device, BOTH sides must be updated. Failing to update both creates orphan references that silently break device listings and telemetry aggregation.
+
+13. **Telemetry cache writes must be atomic.** System B's `TelemetryCacheWriter` writes `device:{serial}:telemetry`, `device:{serial}:status`, and `device:{serial}:last_seen` in a single Redis pipeline. Never write these keys individually — partial writes cause inconsistent state (e.g., status says "online" but telemetry key is missing).
 
 ### 2.2 Database Invariants
 
@@ -512,6 +518,54 @@ System A uses this SQLAlchemy naming convention (defined in `connection.py`):
 
 All constraints must follow this pattern. Do not use anonymous constraints.
 
+### 5.13 End-to-End Telemetry Data Flow Chain
+
+When modifying any part of the telemetry pipeline, understand the full chain and which files are involved at each stage:
+
+```
+Stage 1: Device → System B
+  ESP32 sends raw Modbus data over TCP to System B Device Server (port 8502)
+  Files: system_b/device_server/main.py, system_b/app/infrastructure/protocols/
+
+Stage 2: System B → Redis + TimescaleDB
+  TelemetryCacheWriter writes 3 keys atomically (telemetry, status, last_seen)
+  TelemetryRepository inserts into telemetry_raw hypertable
+  Files: system_b/app/infrastructure/cache/, system_b/app/infrastructure/database/
+
+Stage 3: System A reads Redis
+  TelemetryCacheReader reads all 3 keys, adds staleness indicator
+  Files: system_a/app/infrastructure/cache/telemetry_cache.py
+
+Stage 4: System A aggregates per site
+  TelemetryService sums device-level telemetry into site-level values
+  Files: system_a/app/application/services/telemetry_service.py
+
+Stage 5: Dashboard API serves to frontend
+  Dashboard endpoints (power-flow, stats, energy-chart, battery)
+  Files: system_a/app/api/v1/dashboards.py, system_a/app/api/schemas/
+
+Stage 6: Frontend displays
+  TelemetryContext polls /dashboard/power-flow every 10s
+  Components convert W → kW, detect charging/exporting states
+  Files: frontend/src/contexts/TelemetryContext.tsx, frontend/src/pages/Index.tsx,
+         frontend/src/components/dashboard/EnergyFlowDiagram.tsx
+```
+
+**Known gap:** `useEnergyData` hook still returns hardcoded mock data for stat cards and energy charts. The backend endpoints `/dashboard/stats` and `/dashboard/energy-chart` exist but are not wired to these frontend components yet.
+
+### 5.14 Frontend Data Display Patterns
+
+**Power value convention:** All backend telemetry values are in **watts**. Frontend components convert to kilowatts (÷ 1000) at the display layer. Do not convert in services or hooks — keep raw watts until rendering.
+
+**Device telemetry overlay:** The `Devices.tsx` page fetches the device list, then overlays real-time telemetry by matching **serial number** from Redis cache onto each `DeviceCard`. The card renders type-specific metrics:
+- Inverters: PV power, grid power, load power
+- Batteries: SOC percentage, charge/discharge power
+- Meters: import/export readings
+
+**State detection logic:**
+- Battery: `power > 0` = charging, `power < 0` = discharging, `power === 0` = idle
+- Grid: `power < 0` = exporting, `power > 0` = importing
+
 ---
 
 ## 6. Anti-Patterns
@@ -730,6 +784,28 @@ Frontend Context Provider added/modified
   → All child components re-render on provider state changes
   → Hooks using the context must be inside the provider tree
   → Other providers nested inside may lose state if provider remounts
+```
+
+```
+Telemetry pipeline changed (any stage)
+  → Stage 1: system_b/device_server/ (TCP ingestion)
+  → Stage 2: system_b/app/infrastructure/cache/ (Redis write - 3 atomic keys)
+  → Stage 2: system_b/app/infrastructure/database/ (TimescaleDB insert)
+  → Stage 3: system_a/app/infrastructure/cache/telemetry_cache.py (Redis read + staleness)
+  → Stage 4: system_a/app/application/services/telemetry_service.py (site aggregation)
+  → Stage 5: system_a/app/api/v1/dashboards.py (dashboard API endpoints)
+  → Stage 6: frontend/src/contexts/TelemetryContext.tsx (polling + state)
+  → Stage 6: frontend/src/components/dashboard/ (display + W→kW conversion)
+  ⚠ JSON structure changes require ALL stages to be updated
+```
+
+```
+Entity hierarchy changed (User/Organization/Site/Device relationships)
+  → RegistrationService must maintain auto-creation order
+  → Device claiming must update both System A (site_id, org_id) and System B (owner_id, status)
+  → Sites device_ids array AND Devices site_id FK must stay in sync
+  → Dashboard queries traverse the full hierarchy for data aggregation
+  → Frontend hooks (useDevices, useSites, useOrganizations) depend on the hierarchy
 ```
 
 ### 9.4 Pre-Change Checklist

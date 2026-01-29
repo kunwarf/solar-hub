@@ -4,10 +4,14 @@ TimescaleDB connection management for System B (Telemetry).
 Provides async SQLAlchemy engine and session management for time-series data.
 """
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
 from sqlalchemy import MetaData, event, text
+
+# Check if TimescaleDB extension should be used (skip for local dev without TimescaleDB)
+USE_TIMESCALEDB = os.getenv("USE_TIMESCALEDB", "false").lower() == "true"
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -132,8 +136,9 @@ async def init_db() -> None:
     engine = TimescaleDBManager.get_engine()
 
     async with engine.begin() as conn:
-        # Enable TimescaleDB extension (idempotent)
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
+        # Enable TimescaleDB extension (idempotent) - skip for local dev without TimescaleDB
+        if USE_TIMESCALEDB:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
 
         # Verify that required tables exist (created by migrations)

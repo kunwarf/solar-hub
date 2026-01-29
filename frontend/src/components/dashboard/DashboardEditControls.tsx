@@ -33,14 +33,22 @@ import {
   List,
   Grid2X2,
   Grid3X3,
+  LayoutTemplate,
 } from "lucide-react";
 import { useDashboardLayout, GridLayout } from "@/contexts/DashboardLayoutContext";
 import { WidgetPicker } from "./WidgetPicker";
+import { PresetPicker } from "./PresetPicker";
 
 export function DashboardEditControls() {
-  const { isEditMode, setIsEditMode, resetToDefault, visibleWidgets, hiddenWidgets, gridLayout, setGridLayout } = useDashboardLayout();
+  const { isEditMode, setIsEditMode, resetToDefault, visibleWidgets, hiddenWidgets, gridLayout, setGridLayout, currentPreset, builtInPresets } = useDashboardLayout();
   const [isWidgetPickerOpen, setIsWidgetPickerOpen] = useState(false);
+  const [isPresetPickerOpen, setIsPresetPickerOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const getCurrentPresetName = () => {
+    const preset = builtInPresets.find(p => p.id === currentPreset);
+    return preset?.name || "Custom";
+  };
 
   const handleToggleEditMode = () => {
     setIsEditMode(!isEditMode);
@@ -80,7 +88,20 @@ export function DashboardEditControls() {
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Add Widget</span>
             </Button>
-            
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsPresetPickerOpen(true)}
+              className="gap-1.5"
+            >
+              <LayoutTemplate className="w-4 h-4" />
+              <span className="hidden sm:inline">Presets</span>
+              <Badge variant="secondary" className="ml-1 text-xs px-1.5">
+                {getCurrentPresetName()}
+              </Badge>
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1">
@@ -160,6 +181,11 @@ export function DashboardEditControls() {
       <WidgetPicker
         open={isWidgetPickerOpen}
         onOpenChange={setIsWidgetPickerOpen}
+      />
+
+      <PresetPicker
+        open={isPresetPickerOpen}
+        onOpenChange={setIsPresetPickerOpen}
       />
 
       <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>

@@ -411,20 +411,41 @@ const Index = () => {
             gridLayout === "3x3" && "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6"
           )}>
             {/* Render widgets in order from visibleWidgets */}
-            {visibleWidgets.map((widget) => (
-              <DraggableWidget 
-                key={widget.id} 
-                id={widget.id}
-                className={cn(
-                  gridLayout !== "list" && "h-full",
-                  // Full-width widgets in grid mode
-                  gridLayout !== "list" && (widget.id === "stat-cards" || widget.id === "energy-chart") && "md:col-span-2",
-                  gridLayout === "3x3" && (widget.id === "stat-cards" || widget.id === "energy-chart") && "lg:col-span-3"
-                )}
-              >
-                {renderWidget(widget.id)}
-              </DraggableWidget>
-            ))}
+            {visibleWidgets.map((widget) => {
+              // Dynamic column span based on widget size
+              const getColumnSpan = () => {
+                if (gridLayout === "list") return "";
+
+                const size = widget.size || "medium";
+
+                if (gridLayout === "2x2") {
+                  if (size === "large") return "md:col-span-2";
+                  if (size === "medium") return "md:col-span-2";
+                  return ""; // small = single column
+                }
+
+                if (gridLayout === "3x3") {
+                  if (size === "large") return "md:col-span-2 lg:col-span-3";
+                  if (size === "medium") return "md:col-span-2";
+                  return ""; // small = single column
+                }
+
+                return "";
+              };
+
+              return (
+                <DraggableWidget
+                  key={widget.id}
+                  id={widget.id}
+                  className={cn(
+                    gridLayout !== "list" && "h-full",
+                    getColumnSpan()
+                  )}
+                >
+                  {renderWidget(widget.id)}
+                </DraggableWidget>
+              );
+            })}
 
             {/* Production Comparison Chart (not draggable) */}
             {isWidgetVisible("energy-chart") && (

@@ -12,6 +12,10 @@ from .repositories.organization_repository import SQLAlchemyOrganizationReposito
 from .repositories.site_repository import SQLAlchemySiteRepository
 from .repositories.device_repository import SQLAlchemyDeviceRepository
 from .repositories.alert_repository import SQLAlchemyAlertRepository, SQLAlchemyAlertRuleRepository
+from .repositories.dashboard_repository import (
+    SQLAlchemyDashboardPreferencesRepository,
+    SQLAlchemyCustomPresetRepository,
+)
 
 
 class SQLAlchemyUnitOfWork(UnitOfWork):
@@ -36,6 +40,8 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
         self._devices: Optional[SQLAlchemyDeviceRepository] = None
         self._alerts: Optional[SQLAlchemyAlertRepository] = None
         self._alert_rules: Optional[SQLAlchemyAlertRuleRepository] = None
+        self._dashboard_preferences: Optional[SQLAlchemyDashboardPreferencesRepository] = None
+        self._custom_presets: Optional[SQLAlchemyCustomPresetRepository] = None
 
     async def __aenter__(self) -> "SQLAlchemyUnitOfWork":
         """Enter async context - create session."""
@@ -102,6 +108,24 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._alert_rules = SQLAlchemyAlertRuleRepository(self._session)
         return self._alert_rules
 
+    @property
+    def dashboard_preferences(self) -> SQLAlchemyDashboardPreferencesRepository:
+        """Get dashboard preferences repository."""
+        if self._dashboard_preferences is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._dashboard_preferences = SQLAlchemyDashboardPreferencesRepository(self._session)
+        return self._dashboard_preferences
+
+    @property
+    def custom_presets(self) -> SQLAlchemyCustomPresetRepository:
+        """Get custom presets repository."""
+        if self._custom_presets is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._custom_presets = SQLAlchemyCustomPresetRepository(self._session)
+        return self._custom_presets
+
     async def commit(self) -> None:
         """Commit current transaction."""
         if self._session:
@@ -124,6 +148,8 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._devices = None
             self._alerts = None
             self._alert_rules = None
+            self._dashboard_preferences = None
+            self._custom_presets = None
 
     def collect_domain_events(self) -> List[DomainEvent]:
         """

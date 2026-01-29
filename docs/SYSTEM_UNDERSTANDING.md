@@ -1,7 +1,7 @@
 # Solar Hub - System Understanding Document
 
 **Purpose:** Reference document for AI sessions modifying this codebase.
-**Last Updated:** 2026-01-27
+**Last Updated:** 2026-01-28
 **Source of Truth:** This document summarizes the codebase as-built and the requirements in `SYSTEM_REQUIREMENTS.md`.
 
 ---
@@ -212,9 +212,34 @@ MicroPython firmware for ESP32 devices that act as field dataloggers:
 
 ---
 
-## 5. Data Flow
+## 5. Data Flow and Entity Hierarchy
 
-### 5.1 Telemetry Ingestion (Device -> Dashboard)
+### 5.1 Entity Hierarchy
+
+The system uses a strict ownership hierarchy:
+
+```
+User → Organization → Sites → Devices
+```
+
+| Entity | Parent | Auto-Created? | Key Fields |
+|--------|--------|---------------|------------|
+| **User** | — | Via registration | email, role, status, organization_id |
+| **Organization** | — | Yes: `"{first_name}'s Organization"` during registration | name, owner_id, subscription_plan |
+| **Site** | Organization | Yes: `"My Home"` during registration | name, organization_id, device_ids[], location |
+| **Device** | Site | Only when claimed | serial_number, site_id, organization_id (denormalized), device_type |
+
+**Registration auto-creation flow:**
+1. User submits registration form (name, email, password, optional `device_serial`)
+2. System A's `RegistrationService` creates: User → Organization (`"{first_name}'s Organization"`) → Site (`"My Home"`)
+3. If `device_serial` provided: System A validates with System B → claims device → links to site
+
+**Important structural details:**
+- **Denormalized `organization_id` on Device:** Devices have both `site_id` (direct parent) and `organization_id` (grandparent). This avoids joins when filtering devices by organization.
+- **Bidirectional device-site linkage:** Sites store a `device_ids` array AND devices store a `site_id` FK. Both must stay in sync when moving or claiming devices.
+- **Device ownership is cross-system:** System A stores the user-facing ownership (site_id, organization_id). System B stores the device registry (owner_id, claimed status). The `claim` and `release` operations must update both systems.
+
+### 5.2 Telemetry Ingestion (Device → Dashboard)
 
 ```
 ESP32 Datalogger                System B                    Redis               System A              Frontend
@@ -234,16 +259,39 @@ ESP32 Datalogger                System B                    Redis               
      |                            |                           |                    |                     |
 ```
 
-### 5.2 Device Registration & User Claim
+**System B write (TelemetryCacheWriter):**
+The `TelemetryCacheWriter` uses an **atomic Redis pipeline** to write three keys simultaneously per device reading:
+- `device:{serial}:telemetry` → JSON blob with all telemetry fields (TTL 120s)
+- `device:{serial}:status` → `"online"` string (TTL 120s)
+- `device:{serial}:last_seen` → Unix timestamp (TTL 120s)
 
-1. ESP32 powers on, connects to System B TCP server (port 8502), sends `REGISTER` message with serial number.
-2. System B creates device record with status `orphan`, owner_id=NULL.
-3. User registers via frontend -> `POST /api/v1/auth/register` to System A with optional `device_serial`.
-4. System A validates serial with System B -> `GET /devices/serial/{serial}`.
-5. If device exists and is orphan: System A creates user, creates default site "My Home", claims device via `PUT /devices/{id}/claim`.
-6. Device status changes from `orphan` to `claimed`.
+All three keys are written in a single `pipeline.execute()` call using `setex`, ensuring they expire together.
 
-### 5.3 Dashboard Widget Data
+**System A read (TelemetryCacheReader):**
+The `TelemetryCacheReader` reads all three Redis keys and adds a **staleness indicator** — if `last_seen` is older than a configurable threshold, the data is marked as stale even if the TTL hasn't expired.
+
+**System A aggregation (TelemetryService):**
+The `TelemetryService` aggregates telemetry across all devices for a given site:
+1. Retrieves the site's device list
+2. Reads Redis cache for each device
+3. Sums power values (solar, battery, grid, load) across devices
+4. Returns site-level aggregated telemetry to dashboard endpoints
+
+**Fallback path:**
+If Redis is unavailable, System A falls back to `SystemBClient` HTTP calls for device metadata. This path does NOT provide real-time telemetry — only device registration data and historical queries.
+
+### 5.3 Device Registration & User Claim
+
+1. ESP32 powers on, connects to System B TCP server (port 8502), sends `REGISTER` message with serial number, device type, and firmware version.
+2. System B creates device record with status `orphan`, owner_id=NULL, stores in its device registry.
+3. User registers via frontend → `POST /api/v1/auth/register` to System A with optional `device_serial`.
+4. System A's `RegistrationService` creates the user, organization, and site, then:
+   - Validates serial with System B → `GET /devices/serial/{serial}`
+   - If device exists and is orphan: claims device via `PUT /devices/{id}/claim`
+   - Creates local Device record in System A linked to the new site
+5. Device status changes from `orphan` to `claimed` in System B.
+
+### 5.4 Dashboard Widget Data
 
 Each dashboard widget has its own API endpoint with independent cache TTL and refresh rate:
 - Power Flow: 5s cache, 5s refresh (reads Redis `device:{serial}:telemetry`)
@@ -252,7 +300,7 @@ Each dashboard widget has its own API endpoint with independent cache TTL and re
 - Battery Status: 10s cache, 10s refresh
 - All endpoints accept `site_id` and optional `device_serial` query parameters
 
-### 5.4 Redis Key Structure
+### 5.5 Redis Key Structure
 
 ```
 device:{serial}:telemetry     -> JSON blob (TTL: 120s)     [Written by System B]
@@ -263,6 +311,27 @@ device:{serial}:chart:day     -> Chart data JSON (TTL: 5min)  [Written by System
 device:{serial}:chart:week    -> Chart data JSON (TTL: 15min) [Written by System A]
 device:{serial}:chart:month   -> Chart data JSON (TTL: 1hr)   [Written by System A]
 ```
+
+### 5.6 Frontend Data Display
+
+**Real-time telemetry (working):**
+- `TelemetryContext` polls `GET /api/v1/dashboard/power-flow` every **10 seconds**
+- Provides solar, battery, grid, and load power values to all dashboard components
+- `Index.tsx` (main dashboard) checks for real telemetry data first; only shows placeholder if no data exists
+- `EnergyFlowDiagram` displays animated power flow between solar → battery → load → grid
+- Power values are **converted from watts to kilowatts** (÷ 1000) at the component level
+- Battery state detection: charging (power > 0), discharging (power < 0), idle (power = 0)
+- Grid state detection: exporting (power < 0), importing (power > 0)
+
+**Device-level telemetry (working):**
+- `Devices.tsx` page fetches device list via `useDevices` hook
+- Real-time telemetry from Redis is overlaid onto each device card by matching **serial number**
+- `DeviceCard` displays type-specific metrics (e.g., PV power for inverters, SOC for batteries)
+
+**Mock data still in use:**
+- `useEnergyData` hook returns **hardcoded mock data** for stat cards and energy charts
+- This should eventually be replaced with calls to `/api/v1/dashboard/stats` and `/api/v1/dashboard/energy-chart` endpoints (which exist in the backend)
+- Energy production/consumption history charts show illustrative data, not real values
 
 ---
 

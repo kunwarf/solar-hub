@@ -13,6 +13,7 @@ Creates all tables for telemetry storage in TimescaleDB:
 - ingestion_batches: Batch tracking
 """
 from typing import Sequence, Union
+import os
 
 from alembic import op
 import sqlalchemy as sa
@@ -24,10 +25,14 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Check if TimescaleDB is available (skip for local PostgreSQL dev)
+USE_TIMESCALEDB = os.getenv("USE_TIMESCALEDB", "false").lower() == "true"
+
 
 def upgrade() -> None:
-    # Enable TimescaleDB extension
-    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+    # Enable TimescaleDB extension (skip for local dev without TimescaleDB)
+    if USE_TIMESCALEDB:
+        op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
 
     # Enable uuid-ossp extension
     op.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
@@ -78,15 +83,16 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("time", "device_id", "metric_name"),
     )
 
-    # Convert telemetry_raw to hypertable
-    op.execute("""
-        SELECT create_hypertable(
-            'telemetry_raw',
-            'time',
-            chunk_time_interval => INTERVAL '1 day',
-            if_not_exists => TRUE
-        )
-    """)
+    # Convert telemetry_raw to hypertable (skip for local dev without TimescaleDB)
+    if USE_TIMESCALEDB:
+        op.execute("""
+            SELECT create_hypertable(
+                'telemetry_raw',
+                'time',
+                chunk_time_interval => INTERVAL '1 day',
+                if_not_exists => TRUE
+            )
+        """)
 
     # Create indexes on telemetry_raw
     op.create_index("idx_telemetry_raw_device_time", "telemetry_raw", ["device_id", "time"])
@@ -111,15 +117,16 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("time", "device_id", "event_type"),
     )
 
-    # Convert device_events to hypertable
-    op.execute("""
-        SELECT create_hypertable(
-            'device_events',
-            'time',
-            chunk_time_interval => INTERVAL '1 day',
-            if_not_exists => TRUE
-        )
-    """)
+    # Convert device_events to hypertable (skip for local dev without TimescaleDB)
+    if USE_TIMESCALEDB:
+        op.execute("""
+            SELECT create_hypertable(
+                'device_events',
+                'time',
+                chunk_time_interval => INTERVAL '1 day',
+                if_not_exists => TRUE
+            )
+        """)
 
     # Create indexes on device_events
     op.create_index("idx_device_events_device", "device_events", ["device_id", "time"])

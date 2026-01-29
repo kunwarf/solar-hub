@@ -326,6 +326,62 @@ export interface AllWidgetsData {
   billing: BillingData;
 }
 
+// Dashboard Preferences Types
+export interface WidgetConfigAPI {
+  id: string;
+  visible: boolean;
+  size: 'small' | 'medium' | 'large';
+  settings?: Record<string, any>;
+}
+
+export interface PresetWidgetConfigAPI {
+  id: string;
+  visible: boolean;
+  size: 'small' | 'medium' | 'large';
+}
+
+export interface DashboardPreferences {
+  user_id: string;
+  layout_preset: string;
+  grid_layout: 'list' | '2x2' | '3x3';
+  widget_layout: WidgetConfigAPI[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DashboardPreferencesUpdate {
+  layout_preset?: string;
+  grid_layout?: 'list' | '2x2' | '3x3';
+  widget_layout?: WidgetConfigAPI[];
+}
+
+export interface CustomPreset {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  widget_config: PresetWidgetConfigAPI[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomPresetListResponse {
+  presets: CustomPreset[];
+  total: number;
+}
+
+export interface CustomPresetCreate {
+  name: string;
+  description?: string;
+  widget_config: PresetWidgetConfigAPI[];
+}
+
+export interface CustomPresetUpdate {
+  name?: string;
+  description?: string;
+  widget_config?: PresetWidgetConfigAPI[];
+}
+
 class DashboardService {
   /**
    * Get organization dashboard overview
@@ -623,6 +679,84 @@ class DashboardService {
         billing,
       };
     }
+  }
+
+  // =========================================================================
+  // Dashboard Preferences & Custom Presets
+  // =========================================================================
+
+  /**
+   * Get current user's dashboard preferences
+   */
+  async getPreferences(): Promise<DashboardPreferences> {
+    const response = await apiClient.get<DashboardPreferences>(
+      '/users/me/dashboard/preferences'
+    );
+    return response.data;
+  }
+
+  /**
+   * Update current user's dashboard preferences
+   */
+  async updatePreferences(data: DashboardPreferencesUpdate): Promise<DashboardPreferences> {
+    const response = await apiClient.put<DashboardPreferences>(
+      '/users/me/dashboard/preferences',
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * List current user's custom presets
+   */
+  async listPresets(params?: { limit?: number; offset?: number }): Promise<CustomPresetListResponse> {
+    const response = await apiClient.get<CustomPresetListResponse>(
+      '/users/me/dashboard/presets',
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a new custom preset
+   */
+  async createPreset(data: CustomPresetCreate): Promise<CustomPreset> {
+    const response = await apiClient.post<CustomPreset>(
+      '/users/me/dashboard/presets',
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Get a specific custom preset
+   */
+  async getPreset(presetId: string): Promise<CustomPreset> {
+    const response = await apiClient.get<CustomPreset>(
+      `/users/me/dashboard/presets/${presetId}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Update a custom preset
+   */
+  async updatePreset(presetId: string, data: CustomPresetUpdate): Promise<CustomPreset> {
+    const response = await apiClient.put<CustomPreset>(
+      `/users/me/dashboard/presets/${presetId}`,
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Delete a custom preset
+   */
+  async deletePreset(presetId: string): Promise<{ message: string }> {
+    const response = await apiClient.delete<{ message: string }>(
+      `/users/me/dashboard/presets/${presetId}`
+    );
+    return response.data;
   }
 }
 
