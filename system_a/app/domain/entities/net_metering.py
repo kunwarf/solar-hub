@@ -168,7 +168,7 @@ class CreditPool(ValueObject):
         return self.credits_kwh * settlement_price
 
 
-@dataclass
+@dataclass(kw_only=True)
 class BillingConfig(Entity):
     """
     Per-site billing configuration.
@@ -239,7 +239,7 @@ class BillingConfig(Entity):
         return ((billing_month_number - 1) // 3) + 1
 
 
-@dataclass
+@dataclass(kw_only=True)
 class BillingCycle(Entity):
     """
     3-month netting cycle record.
@@ -326,7 +326,7 @@ class BillingCycle(Entity):
         self.mark_updated()
 
 
-@dataclass
+@dataclass(kw_only=True)
 class BillingMonth(Entity):
     """
     Finalized monthly billing record.
@@ -502,7 +502,7 @@ class BillingMonth(Entity):
         self.mark_updated()
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DailyBillingSnapshot(Entity):
     """
     Daily billing snapshot for running bill view.

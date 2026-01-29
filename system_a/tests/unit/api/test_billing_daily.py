@@ -186,6 +186,7 @@ class TestRunningBillSchemas:
             response = RunningBillResponse(
                 site_id=SITE_ID,
                 date=date.today(),
+                billing_month_id=None,
                 billing_period_start=date.today(),
                 billing_period_end=date.today(),
                 days_elapsed=0,
@@ -599,85 +600,91 @@ class TestNetMeteringCalculator:
     """Tests for net metering calculator domain service."""
 
     def test_determine_tou_period_peak(self):
-        """determine_tou_period should return PEAK for peak hours."""
+        """determine_tou_period should return True for peak hours."""
         from system_a.app.domain.services.net_metering_calculator import (
             NetMeteringCalculator,
         )
         from system_a.app.domain.entities.net_metering import TouConfig, TouWindow
 
+        calculator = NetMeteringCalculator()
         config = TouConfig(peak_windows=[TouWindow(start_hour=17, end_hour=22)])
-        result = NetMeteringCalculator.determine_tou_period(19, config)
+        result = calculator.determine_tou_period(19, config)
 
-        assert result == "PEAK"
+        assert result is True  # Peak hour
 
     def test_determine_tou_period_offpeak(self):
-        """determine_tou_period should return OFFPEAK for off-peak hours."""
+        """determine_tou_period should return False for off-peak hours."""
         from system_a.app.domain.services.net_metering_calculator import (
             NetMeteringCalculator,
         )
         from system_a.app.domain.entities.net_metering import TouConfig, TouWindow
 
+        calculator = NetMeteringCalculator()
         config = TouConfig(peak_windows=[TouWindow(start_hour=17, end_hour=22)])
-        result = NetMeteringCalculator.determine_tou_period(10, config)
+        result = calculator.determine_tou_period(10, config)
 
-        assert result == "OFFPEAK"
+        assert result is False  # Off-peak hour
 
-    def test_calculate_monthly_bill(self):
-        """calculate_monthly_bill should compute bill components correctly."""
+    def test_calculate_raw_net_import(self):
+        """calculate_raw_net_import should compute net import correctly."""
         from system_a.app.domain.services.net_metering_calculator import (
             NetMeteringCalculator,
         )
-        from system_a.app.domain.entities.net_metering import (
-            BillingPrices,
-            MonthlyEnergyAggregate,
+
+        calculator = NetMeteringCalculator()
+
+        # Net import case
+        result = calculator.calculate_raw_net_import(
+            import_kwh=Decimal("200"),
+            export_kwh=Decimal("100"),
         )
+        assert result == Decimal("100")  # 200 - 100 = 100 net import
 
-        prices = BillingPrices(
-            price_offpeak_import=Decimal("50"),
-            price_peak_import=Decimal("60"),
-            price_offpeak_settlement=Decimal("22"),
-            price_peak_settlement=Decimal("22"),
-            fixed_charge_per_billing_month=Decimal("1000"),
+        # Net export case
+        result = calculator.calculate_raw_net_import(
+            import_kwh=Decimal("50"),
+            export_kwh=Decimal("150"),
         )
-
-        energy = MonthlyEnergyAggregate(
-            import_off_kwh=Decimal("200"),
-            export_off_kwh=Decimal("100"),
-            import_peak_kwh=Decimal("50"),
-            export_peak_kwh=Decimal("20"),
-            solar_generation_kwh=Decimal("300"),
-            load_consumption_kwh=Decimal("250"),
-        )
-
-        result = NetMeteringCalculator.calculate_monthly_bill(energy, prices)
-
-        # off-peak: 200 import, 100 export -> 100 net import @ 50 = 5000
-        # peak: 50 import, 20 export -> 30 net import @ 60 = 1800
-        # fixed: 1000
-        # total: 7800
-        assert result["bill_off_energy_rs"] == Decimal("5000")
-        assert result["bill_peak_energy_rs"] == Decimal("1800")
-        assert result["bill_fixed_rs"] == Decimal("1000")
-        assert result["bill_total_rs"] == Decimal("7800")
+        assert result == Decimal("-100")  # 50 - 150 = -100 net export
 
     def test_apply_cycle_credits(self):
-        """apply_cycle_credits should correctly apply credit pools."""
+        """apply_cycle_credits should correctly apply credit pool."""
         from system_a.app.domain.services.net_metering_calculator import (
             NetMeteringCalculator,
         )
         from system_a.app.domain.entities.net_metering import CreditPool
 
-        off_credits = CreditPool(credits_kwh=Decimal("50"))
-        peak_credits = CreditPool(credits_kwh=Decimal("20"))
+        calculator = NetMeteringCalculator()
+        credit_pool = CreditPool(credits_kwh=Decimal("50"))
 
-        result = NetMeteringCalculator.apply_cycle_credits(
-            import_off_kwh=Decimal("80"),
-            import_peak_kwh=Decimal("30"),
-            off_credits=off_credits,
-            peak_credits=peak_credits,
+        # Apply credits to net import
+        net_import, new_pool, credits_applied, credits_generated = calculator.apply_cycle_credits(
+            raw_net_import=Decimal("80"),
+            credit_pool=credit_pool,
         )
 
-        assert result["net_import_off_kwh"] == Decimal("30")  # 80 - 50
-        assert result["net_import_peak_kwh"] == Decimal("10")  # 30 - 20
-        assert result["credits_applied_off_kwh"] == Decimal("50")
-        assert result["credits_applied_peak_kwh"] == Decimal("20")
+        assert net_import == Decimal("30")  # 80 - 50 = 30 after credits
+        assert new_pool.credits_kwh == Decimal("0")  # All credits used
+        assert credits_applied == Decimal("50")
+        assert credits_generated == Decimal("0")
+
+    def test_apply_cycle_credits_generates_credits(self):
+        """apply_cycle_credits should generate credits from net export."""
+        from system_a.app.domain.services.net_metering_calculator import (
+            NetMeteringCalculator,
+        )
+        from system_a.app.domain.entities.net_metering import CreditPool
+
+        calculator = NetMeteringCalculator()
+        credit_pool = CreditPool(credits_kwh=Decimal("10"))
+
+        # Net export generates credits
+        net_import, new_pool, credits_applied, credits_generated = calculator.apply_cycle_credits(
+            raw_net_import=Decimal("-50"),  # Net export of 50
+            credit_pool=credit_pool,
+        )
+
+        assert net_import == Decimal("0")  # No import
+        assert new_pool.credits_kwh == Decimal("60")  # 10 + 50 = 60
+        assert credits_applied == Decimal("0")
+        assert credits_generated == Decimal("50")
