@@ -5,6 +5,7 @@ Provides endpoints for sending commands to physical devices and querying their c
 Settings are NOT stored in database - they are read from and written to actual devices.
 Frontend uses localStorage for caching.
 """
+import logging
 from typing import Any, Dict, Optional
 from uuid import UUID
 
@@ -21,6 +22,7 @@ from ...domain.entities.user import User
 from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["Device Commands"])
 
 
@@ -123,13 +125,26 @@ async def query_device_settings(
     system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ) -> QuerySettingsResponse:
     """Query current settings from the physical device."""
+    logger.info(
+        "[query-settings] Request from user=%s, device_id=%s, setting_keys=%s",
+        current_user.email,
+        device_id,
+        request.setting_keys,
+    )
+
     await check_device_access(device_id, current_user, uow)
 
     # Get device to find site_id
     device = await uow.devices.get_by_id(device_id)
+    logger.info(
+        "[query-settings] Device found: serial=%s, site_id=%s",
+        device.serial_number,
+        device.site_id,
+    )
 
     try:
         # Send query command to device via System B
+        logger.info("[query-settings] Calling System B send_command API...")
         command_response = await system_b_client.send_command(
             device_id=device_id,
             site_id=device.site_id,
@@ -141,15 +156,27 @@ async def query_device_settings(
             priority=7,  # Higher priority for settings queries
             expires_in_minutes=5,  # Short expiry for real-time queries
         )
+        logger.info(
+            "[query-settings] System B response received: command_id=%s, status=%s",
+            command_response.get("id"),
+            command_response.get("status"),
+        )
 
-        return QuerySettingsResponse(
+        response = QuerySettingsResponse(
             command_id=command_response.get("id", ""),
             status=command_response.get("status", "pending"),
             settings=command_response.get("result", {}).get("settings") if command_response.get("result") else None,
             message="Settings query command sent to device",
         )
+        logger.info("[query-settings] Returning response to frontend")
+        return response
 
     except SystemBClientError as e:
+        logger.error(
+            "[query-settings] System B error: status_code=%s, message=%s",
+            e.status_code,
+            str(e),
+        )
         raise HTTPException(
             status_code=e.status_code or status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to query device settings: {str(e)}",
@@ -220,13 +247,27 @@ async def get_command_status(
     system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ) -> CommandStatusResponse:
     """Get the status of a command."""
+    logger.info(
+        "[command-status] Request from user=%s, device_id=%s, command_id=%s",
+        current_user.email,
+        device_id,
+        command_id,
+    )
+
     await check_device_access(device_id, current_user, uow)
 
     try:
         # Get command status from System B
+        logger.info("[command-status] Calling System B get_command_status API...")
         command_status = await system_b_client.get_command_status(command_id)
+        logger.info(
+            "[command-status] System B response: status=%s, has_result=%s, has_error=%s",
+            command_status.get("status"),
+            bool(command_status.get("result")),
+            bool(command_status.get("error_message")),
+        )
 
-        return CommandStatusResponse(
+        response = CommandStatusResponse(
             command_id=str(command_id),
             status=command_status.get("status", "unknown"),
             progress=command_status.get("progress"),
@@ -235,8 +276,15 @@ async def get_command_status(
             created_at=command_status.get("created_at", ""),
             updated_at=command_status.get("updated_at"),
         )
+        logger.info("[command-status] Returning response to frontend")
+        return response
 
     except SystemBClientError as e:
+        logger.error(
+            "[command-status] System B error: status_code=%s, message=%s",
+            e.status_code,
+            str(e),
+        )
         if e.status_code == 404:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
