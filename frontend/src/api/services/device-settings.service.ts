@@ -5,7 +5,7 @@
  * Settings vary by device type (inverter, battery, meter) and manufacturer.
  */
 
-import { apiClient } from '../client';
+import apiClient from '../client';
 
 // ============== Types ==============
 

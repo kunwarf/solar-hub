@@ -4,7 +4,7 @@
  * Provides methods for sending commands to physical devices and querying their current settings.
  */
 
-import { apiClient } from '../client';
+import apiClient from '../client';
 
 // ============== Types ==============
 
