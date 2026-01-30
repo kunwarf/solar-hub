@@ -315,15 +315,24 @@ class DeviceManager:
         """
         Get device state by serial number.
 
+        Checks both inverter serial (serial_number) and data logger serial (data_logger_serial).
+
         Args:
-            serial_number: Device serial number.
+            serial_number: Device serial number (can be either inverter or data logger serial).
 
         Returns:
             DeviceState or None if not found.
         """
+        # First try quick lookup by inverter serial (most common case)
         device_id = self._devices_by_serial.get(serial_number)
         if device_id:
             return self._devices.get(device_id)
+
+        # If not found, check data logger serials (for commands from System A)
+        for device_state in self._devices.values():
+            if device_state.data_logger_serial == serial_number:
+                return device_state
+
         return None
 
     def get_device_by_connection(
