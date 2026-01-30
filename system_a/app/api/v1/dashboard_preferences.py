@@ -3,8 +3,11 @@ Dashboard preferences and custom presets API endpoints.
 """
 from typing import List
 from uuid import UUID
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+logger = logging.getLogger(__name__)
 
 from ..dependencies import get_current_user, get_unit_of_work
 from ..schemas.dashboard_preference_schemas import (
