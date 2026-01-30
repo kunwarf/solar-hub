@@ -57,8 +57,8 @@ export class SettingsPage extends BasePage {
   constructor(page: Page) {
     super(page);
 
-    // Main
-    this.pageTitle = page.getByRole('heading', { name: /settings|preferences|account/i });
+    // Main (use .first() to avoid strict mode violation with multiple settings headings)
+    this.pageTitle = page.getByRole('heading', { name: /^settings$/i }).first();
 
     // Tabs
     this.accountTab = page.getByRole('tab', { name: /account|profile/i });

@@ -43,8 +43,8 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     // Verify redirected to dashboard
     await expect(page).toHaveURL(/\/$/);
 
-    // Verify token is stored
-    const token = await loginPage.getLocalStorageItem('token');
+    // Verify token is stored (using correct key)
+    const token = await loginPage.getLocalStorageItem('solar_hub_access_token');
     expect(token).toBeTruthy();
     expect(token).toMatch(/^eyJ/); // JWT format
   });
@@ -165,9 +165,12 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenBeforeLogout).toBeTruthy();
 
-    // Find and click logout button
-    const logoutButton = page.getByRole('button', { name: /logout|log out|sign out/i });
-    await logoutButton.click();
+    // Find and click logout button (try multiple possible locations)
+    const logoutButton = page.getByRole('button', { name: /logout|log out|sign out/i })
+      .or(page.getByRole('menuitem', { name: /logout|log out|sign out/i }))
+      .or(page.getByText(/logout|log out|sign out/i).first());
+
+    await logoutButton.click({ timeout: 10000 });
 
     // Wait for redirect to login page
     await expect(page).toHaveURL(/.*auth/, { timeout: 10000 });

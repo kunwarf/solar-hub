@@ -132,7 +132,7 @@ export class OutagesPage extends BasePage {
    * Check if grid status indicator is displayed
    */
   async hasGridStatusIndicator(): Promise<boolean> {
-    return await this.gridStatusIndicator.isVisible();
+    return await this.gridStatusIndicator.isVisible({ timeout: 10000 }).catch(() => false);
   }
 
   /**

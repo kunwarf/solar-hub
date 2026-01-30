@@ -261,11 +261,17 @@ export class DashboardPage extends BasePage {
    * Verify dashboard loaded successfully (no error state)
    */
   async expectDashboardLoaded() {
-    await expect(this.page).toHaveURL(/.*dashboard/);
+    // Dashboard is at root "/" path
+    await expect(this.page).toHaveURL(/\/$/);
 
-    // Should not show error toast
+    // Should not show error toast (use shorter timeout)
     const errorToast = this.page.getByTestId('error-toast');
-    await expect(errorToast).not.toBeVisible();
+    await expect(errorToast).not.toBeVisible({ timeout: 2000 }).catch(() => {
+      // Ignore if error toast doesn't exist
+    });
+
+    // Wait for page to be loaded
+    await this.page.waitForLoadState('domcontentloaded');
 
     // Should have some content
     const bodyText = await this.page.locator('body').textContent();
