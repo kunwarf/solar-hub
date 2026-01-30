@@ -167,17 +167,28 @@ class CommandWorker:
     async def _process_pending_commands(self) -> None:
         """Process batch of pending commands."""
         if not self._fetch_pending or not self._executor:
+            # Log why we're not processing
+            if not self._fetch_pending:
+                logger.warning("[COMMAND_WORKER] Cannot process commands: _fetch_pending callback not set")
+            if not self._executor:
+                logger.warning("[COMMAND_WORKER] Cannot process commands: executor not set")
             return
 
         try:
             # Fetch pending commands
+            logger.debug("[COMMAND_WORKER] Fetching pending commands (batch_size=%d)", self.batch_size)
             commands = await self._fetch_pending(limit=self.batch_size)
+
+            if commands:
+                logger.info("[COMMAND_WORKER] Fetched %d pending commands", len(commands))
+            else:
+                logger.debug("[COMMAND_WORKER] No pending commands found")
 
             for command in commands:
                 await self._execute_command(command)
 
         except Exception as e:
-            logger.error(f"Error fetching pending commands: {e}")
+            logger.error(f"[COMMAND_WORKER] Error fetching pending commands: {e}", exc_info=True)
 
     async def _execute_command(self, command: Dict[str, Any]) -> None:
         """
@@ -191,40 +202,56 @@ class CommandWorker:
         command_type = command.get("command_type")
         command_params = command.get("command_params") or {}
 
-        logger.debug(f"Executing command {command_id} for device {device_id}")
+        logger.info(
+            f"[COMMAND_WORKER] Executing command {command_id}: "
+            f"type={command_type}, device={device_id}, params={command_params}"
+        )
 
         # Mark as sent
         if self._mark_sent:
             try:
                 await self._mark_sent(command_id)
+                logger.info(f"[COMMAND_WORKER] Marked command {command_id} as SENT")
             except Exception as e:
-                logger.error(f"Failed to mark command {command_id} as sent: {e}")
+                logger.error(f"[COMMAND_WORKER] Failed to mark command {command_id} as sent: {e}")
 
         try:
             # Execute through device
+            logger.info(f"[COMMAND_WORKER] Sending command {command_id} to device {device_id} via executor...")
             result = await self._executor.execute(
                 device_id=device_id,
                 command_type=command_type,
                 command_params=command_params,
             )
 
+            logger.info(
+                f"[COMMAND_WORKER] Command {command_id} executor result: "
+                f"success={result.get('success')}, error={result.get('error')}"
+            )
+
             # Mark as completed
             if self._mark_completed:
                 await self._mark_completed(command_id, result)
+                logger.info(f"[COMMAND_WORKER] Marked command {command_id} as COMPLETED")
 
             self._commands_processed += 1
-            logger.debug(f"Command {command_id} completed successfully")
+            logger.info(f"[COMMAND_WORKER] ✓ Command {command_id} completed successfully")
 
         except Exception as e:
             # Mark as failed
+            logger.error(
+                f"[COMMAND_WORKER] ✗ Command {command_id} execution failed: {e}",
+                exc_info=True
+            )
+
             if self._mark_failed:
                 try:
                     await self._mark_failed(command_id, str(e))
+                    logger.info(f"[COMMAND_WORKER] Marked command {command_id} as FAILED")
                 except Exception as mark_err:
-                    logger.error(f"Failed to mark command {command_id} as failed: {mark_err}")
+                    logger.error(f"[COMMAND_WORKER] Failed to mark command {command_id} as failed: {mark_err}")
 
             self._commands_failed += 1
-            logger.error(f"Command {command_id} failed: {e}")
 
     async def _run_expire_stale(self) -> None:
         """Expire stale commands."""

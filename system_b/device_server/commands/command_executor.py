@@ -88,46 +88,17 @@ class ModbusCommandExecutor:
         """
         params = params or {}
 
+        logger.info(
+            f"[COMMAND_EXECUTOR] Starting execution: device={device_id}, "
+            f"type={command_type}, params={params}"
+        )
+
         try:
             # Get device state and adapter
             device_state = self.device_manager.get_device(device_id)
             if not device_state:
-                return CommandResult(
-                    success=False,
-                    command_type=command_type,
-                    device_id=device_id,
-                    error=f"Device not found: {device_id}",
-                )
-
-            adapter = self.device_manager.get_adapter(device_id)
-            if not adapter:
-                return CommandResult(
-                    success=False,
-                    command_type=command_type,
-                    device_id=device_id,
-                    error=f"No adapter for device: {device_id}",
-                )
-
-            # Get device type
-            device_type = device_state.device_type
-            if hasattr(device_type, 'value'):
-                device_type = device_type.value
-
-            # Get command definition
-            cmd_def = get_command_definition(device_type, command_type)
-            if not cmd_def:
-                available = list(DEVICE_COMMANDS.get(device_type, {}).keys())
-                return CommandResult(
-                    success=False,
-                    command_type=command_type,
-                    device_id=device_id,
-                    error=f"Unknown command '{command_type}' for {device_type}. "
-                          f"Available: {available}",
-                )
-
-            # Validate parameters
-            is_valid, error_msg = validate_command_params(cmd_def, params)
-            if not is_valid:
+                error_msg = f"Device not found: {device_id}"
+                logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
                 return CommandResult(
                     success=False,
                     command_type=command_type,
@@ -135,16 +106,73 @@ class ModbusCommandExecutor:
                     error=error_msg,
                 )
 
+            logger.info(
+                f"[COMMAND_EXECUTOR] Device state found: "
+                f"type={device_state.device_type}, status={device_state.status}"
+            )
+
+            adapter = self.device_manager.get_adapter(device_id)
+            if not adapter:
+                error_msg = f"No adapter for device: {device_id}"
+                logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                return CommandResult(
+                    success=False,
+                    command_type=command_type,
+                    device_id=device_id,
+                    error=error_msg,
+                )
+
+            logger.info(f"[COMMAND_EXECUTOR] Adapter found for device {device_id}")
+
+            # Get device type
+            device_type = device_state.device_type
+            if hasattr(device_type, 'value'):
+                device_type = device_type.value
+
+            logger.info(f"[COMMAND_EXECUTOR] Looking up command definition for device_type={device_type}")
+
+            # Get command definition
+            cmd_def = get_command_definition(device_type, command_type)
+            if not cmd_def:
+                available = list(DEVICE_COMMANDS.get(device_type, {}).keys())
+                error_msg = f"Unknown command '{command_type}' for {device_type}. Available: {available}"
+                logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                return CommandResult(
+                    success=False,
+                    command_type=command_type,
+                    device_id=device_id,
+                    error=error_msg,
+                )
+
+            logger.info(f"[COMMAND_EXECUTOR] Command definition found: register={cmd_def.get('register')}")
+
+            # Validate parameters
+            is_valid, error_msg = validate_command_params(cmd_def, params)
+            if not is_valid:
+                logger.error(f"[COMMAND_EXECUTOR] Parameter validation failed: {error_msg}")
+                return CommandResult(
+                    success=False,
+                    command_type=command_type,
+                    device_id=device_id,
+                    error=error_msg,
+                )
+
+            logger.info(f"[COMMAND_EXECUTOR] Parameters validated successfully")
+
             # Encode value(s)
             register = cmd_def["register"]
 
             if "fixed_value" in cmd_def:
                 # Fixed value command (e.g., restart)
                 value = cmd_def["fixed_value"]
+                logger.info(
+                    f"[COMMAND_EXECUTOR] Writing fixed value to Modbus: "
+                    f"device={device_id}, register={register}, value={value}"
+                )
                 await adapter.write_register(register, value)
                 logger.info(
-                    f"Executed {command_type} on device {device_id}: "
-                    f"wrote {value} to register {register}"
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
+                    f"wrote value={value} to register={register}"
                 )
                 return CommandResult(
                     success=True,
@@ -159,9 +187,13 @@ class ModbusCommandExecutor:
                 param_name = cmd_def["param"]
                 param_value = params[param_name]
                 value = cmd_def["values"][param_value]
+                logger.info(
+                    f"[COMMAND_EXECUTOR] Writing enum value to Modbus: "
+                    f"device={device_id}, register={register}, {param_name}={param_value} (raw={value})"
+                )
                 await adapter.write_register(register, value)
                 logger.info(
-                    f"Executed {command_type} on device {device_id}: "
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
                     f"set {param_name}={param_value} (register {register}={value})"
                 )
                 return CommandResult(
@@ -183,9 +215,13 @@ class ModbusCommandExecutor:
                         val = int(val)
                     values.append(val)
 
+                logger.info(
+                    f"[COMMAND_EXECUTOR] Writing multiple values to Modbus: "
+                    f"device={device_id}, register={register}, values={values}, params={params}"
+                )
                 await adapter.write_registers(register, values)
                 logger.info(
-                    f"Executed {command_type} on device {device_id}: "
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
                     f"wrote {values} to registers starting at {register}"
                 )
                 return CommandResult(
@@ -206,9 +242,14 @@ class ModbusCommandExecutor:
                 else:
                     value = int(raw_value)
 
+                logger.info(
+                    f"[COMMAND_EXECUTOR] Writing scaled value to Modbus: "
+                    f"device={device_id}, register={register}, "
+                    f"{param_name}={raw_value} (scaled={value})"
+                )
                 await adapter.write_register(register, value)
                 logger.info(
-                    f"Executed {command_type} on device {device_id}: "
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
                     f"set {param_name}={raw_value} (register {register}={value})"
                 )
                 return CommandResult(
@@ -220,7 +261,10 @@ class ModbusCommandExecutor:
                 )
 
         except Exception as e:
-            logger.error(f"Command execution failed: {e}")
+            logger.error(
+                f"[COMMAND_EXECUTOR] ✗ Command execution failed for device {device_id}: {e}",
+                exc_info=True
+            )
             return CommandResult(
                 success=False,
                 command_type=command_type,

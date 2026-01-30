@@ -28,6 +28,7 @@ from .storage.timescale_writer import TimescaleWriter
 from .storage.system_a_client import SystemAClient
 from .storage.redis_cache import TelemetryCacheWriter
 from .storage.device_registry_client import DeviceRegistryClient
+from .storage.command_db_client import CommandDatabaseClient
 from .commands.command_executor import ModbusCommandExecutor
 from .workers.command_worker import CommandWorker
 
@@ -74,6 +75,7 @@ class DeviceServer:
         self.system_a_client: Optional[SystemAClient] = None
         self.redis_cache: Optional[TelemetryCacheWriter] = None
         self.device_registry_client: Optional[DeviceRegistryClient] = None
+        self.command_db_client: Optional[CommandDatabaseClient] = None
         self.command_executor: Optional[ModbusCommandExecutor] = None
         self.command_worker: Optional[CommandWorker] = None
 
@@ -130,6 +132,10 @@ class DeviceServer:
         # Start polling scheduler
         await self.polling_scheduler.start()
 
+        # Initialize command database client
+        self.command_db_client = CommandDatabaseClient(self.settings.device_registry_db)
+        await self.command_db_client.connect()
+
         # Initialize command executor and worker
         self.command_executor = ModbusCommandExecutor(self.device_manager)
         self.command_worker = CommandWorker(
@@ -137,8 +143,16 @@ class DeviceServer:
             batch_size=10,
         )
         self.command_worker.set_executor(self.command_executor)
-        # Note: Database callbacks for command queue would be wired here
-        # when implementing persistent command queue from System A
+
+        # Wire database callbacks for command queue
+        logger.info("[DEVICE_SERVER] Wiring command worker database callbacks...")
+        self.command_worker.set_fetch_pending(self.command_db_client.fetch_pending_commands)
+        self.command_worker.set_mark_sent(self.command_db_client.mark_sent)
+        self.command_worker.set_mark_completed(self.command_db_client.mark_completed)
+        self.command_worker.set_mark_failed(self.command_db_client.mark_failed)
+        self.command_worker.set_expire_stale(self.command_db_client.expire_stale_commands)
+        logger.info("[DEVICE_SERVER] Command worker database callbacks wired successfully")
+
         await self.command_worker.start()
 
         # Start TCP server
@@ -191,6 +205,9 @@ class DeviceServer:
 
         if self.device_registry_client:
             await self.device_registry_client.disconnect()
+
+        if self.command_db_client:
+            await self.command_db_client.disconnect()
 
         logger.info("Device Server stopped")
 

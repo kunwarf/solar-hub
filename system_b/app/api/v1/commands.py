@@ -41,6 +41,12 @@ async def create_command(
     """
     Create a new device command.
     """
+    logger.info(
+        f"[COMMAND_API] Received command creation request: "
+        f"device={request.device_id}, type={request.command_type}, "
+        f"params={request.command_params}, priority={request.priority}"
+    )
+
     command_repo = CommandRepository(session)
     event_repo = EventRepository(session)
     service = CommandService(command_repo, event_repo)
@@ -54,6 +60,12 @@ async def create_command(
             scheduled_at=request.scheduled_at,
             expires_in_minutes=request.expires_in_minutes,
             priority=request.priority,
+        )
+
+        logger.info(
+            f"[COMMAND_API] ✓ Command created successfully: "
+            f"id={command.id}, device={command.device_id}, "
+            f"type={command.command_type}, status={command.status.value}"
         )
 
         return CommandResponse(
@@ -94,14 +106,22 @@ async def get_command(
     """
     Get command details.
     """
+    logger.debug(f"[COMMAND_API] Retrieving command: id={command_id}")
+
     command_repo = CommandRepository(session)
     command = await command_repo.get_by_id(command_id)
 
     if not command:
+        logger.warning(f"[COMMAND_API] Command not found: id={command_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Command not found",
         )
+
+    logger.debug(
+        f"[COMMAND_API] Command retrieved: id={command_id}, "
+        f"status={command.status.value}, type={command.command_type}"
+    )
 
     return CommandResponse(
         id=command.id,
