@@ -3,9 +3,11 @@ Command executor for Modbus devices.
 
 Executes commands by translating them to Modbus register write operations.
 """
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from uuid import UUID
 
@@ -344,29 +346,100 @@ class ModbusCommandExecutor:
                 writable_registers = [r for r in register_map if r.get("rw") in ("RW", "RW/RO")]
                 logger.info(f"[COMMAND_EXECUTOR] Found {len(writable_registers)} writable registers")
 
-                # Read all writable registers
+                # Try to load chunk configuration for optimized reading
+                chunk_config_path = Path(__file__).parent.parent / "register_chunks" / f"{protocol_id}_chunks.json"
                 settings = {}
-                for reg in writable_registers:
-                    reg_id = reg.get("id")
-                    if not reg_id:
-                        continue
+
+                if chunk_config_path.exists():
+                    # Use optimized chunk reading
+                    logger.info(f"[COMMAND_EXECUTOR] Using chunk configuration: {chunk_config_path.name}")
 
                     try:
-                        address = reg["addr"]
-                        size = max(1, reg.get("size", 1))
-                        scale = reg.get("scale", 1.0)
+                        with open(chunk_config_path, "r") as f:
+                            chunk_config = json.load(f)
 
-                        # Read register
-                        values = await adapter._read_holding_regs(address, size)
-                        if values and len(values) > 0:
-                            # Decode value
-                            raw_value = values[0] if size == 1 else values
-                            scaled_value = raw_value * scale
-                            settings[reg_id] = scaled_value
-                            logger.debug(f"[COMMAND_EXECUTOR] Read {reg_id} from register {address}: {scaled_value}")
+                        # Build register lookup for fast access
+                        register_lookup = {r["id"]: r for r in register_map if r.get("id")}
+
+                        # Read each chunk
+                        for chunk_idx, chunk in enumerate(chunk_config.get("chunks", []), 1):
+                            start_addr = chunk["start_address"]
+                            count = chunk["count"]
+                            expected_ids = set(chunk.get("register_ids", []))
+
+                            try:
+                                logger.debug(f"[COMMAND_EXECUTOR] Reading chunk {chunk_idx}: {count} registers from {start_addr}")
+                                chunk_values = await adapter._read_holding_regs(start_addr, count)
+
+                                if not chunk_values:
+                                    logger.warning(f"[COMMAND_EXECUTOR] Chunk {chunk_idx} read failed")
+                                    continue
+
+                                # Extract values for registers in this chunk
+                                for reg_id in expected_ids:
+                                    if reg_id not in register_lookup:
+                                        continue
+
+                                    reg = register_lookup[reg_id]
+                                    reg_addr = reg["addr"]
+                                    offset = reg_addr - start_addr
+
+                                    if offset < 0 or offset >= len(chunk_values):
+                                        logger.debug(f"[COMMAND_EXECUTOR] Register {reg_id} offset {offset} out of bounds")
+                                        continue
+
+                                    size = max(1, reg.get("size", 1))
+                                    scale = reg.get("scale", 1.0)
+
+                                    if size == 1:
+                                        raw_value = chunk_values[offset]
+                                    else:
+                                        # Multi-register value
+                                        raw_value = chunk_values[offset:offset+size]
+
+                                    scaled_value = raw_value * scale
+                                    settings[reg_id] = scaled_value
+                                    logger.debug(f"[COMMAND_EXECUTOR] Read {reg_id} from chunk offset {offset}: {scaled_value}")
+
+                            except Exception as e:
+                                logger.warning(f"[COMMAND_EXECUTOR] Error reading chunk {chunk_idx}: {e}")
+                                # Continue with next chunk
+
+                        logger.info(
+                            f"[COMMAND_EXECUTOR] ✓ Chunk reading completed: "
+                            f"{len(settings)}/{len(writable_registers)} registers read "
+                            f"using {len(chunk_config.get('chunks', []))} chunks"
+                        )
+
                     except Exception as e:
-                        logger.debug(f"[COMMAND_EXECUTOR] Could not read register {reg_id} (addr {address}): {e}")
-                        # Continue reading other registers
+                        logger.error(f"[COMMAND_EXECUTOR] Error loading chunk config: {e}")
+                        logger.info(f"[COMMAND_EXECUTOR] Falling back to individual register reads")
+                        settings = {}
+
+                # Fall back to individual register reads if no chunks or chunk reading failed
+                if not settings:
+                    logger.info(f"[COMMAND_EXECUTOR] Reading registers individually")
+                    for reg in writable_registers:
+                        reg_id = reg.get("id")
+                        if not reg_id:
+                            continue
+
+                        try:
+                            address = reg["addr"]
+                            size = max(1, reg.get("size", 1))
+                            scale = reg.get("scale", 1.0)
+
+                            # Read register
+                            values = await adapter._read_holding_regs(address, size)
+                            if values and len(values) > 0:
+                                # Decode value
+                                raw_value = values[0] if size == 1 else values
+                                scaled_value = raw_value * scale
+                                settings[reg_id] = scaled_value
+                                logger.debug(f"[COMMAND_EXECUTOR] Read {reg_id} from register {address}: {scaled_value}")
+                        except Exception as e:
+                            logger.debug(f"[COMMAND_EXECUTOR] Could not read register {reg_id} (addr {address}): {e}")
+                            # Continue reading other registers
 
                 logger.info(f"[COMMAND_EXECUTOR] ✓ Successfully queried {len(settings)} settings")
                 return CommandResult(
