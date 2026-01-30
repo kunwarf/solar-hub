@@ -243,7 +243,7 @@ class ModbusCommandExecutor:
                 return CommandResult(
                     success=False,
                     command_type=command_type,
-                    device_id=device_id,
+                    device_id=device_state.device_id,
                     error=error_msg,
                 )
 
@@ -256,7 +256,7 @@ class ModbusCommandExecutor:
                 return CommandResult(
                     success=False,
                     command_type=command_type,
-                    device_id=device_id,
+                    device_id=device_state.device_id,
                     error=error_msg,
                 )
 
@@ -270,17 +270,17 @@ class ModbusCommandExecutor:
                 value = cmd_def["fixed_value"]
                 logger.info(
                     f"[COMMAND_EXECUTOR] Writing fixed value to Modbus: "
-                    f"device={device_id}, register={register}, value={value}"
+                    f"device={device_state.device_id}, register={register}, value={value}"
                 )
                 await adapter.write_register(register, value)
                 logger.info(
-                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_state.device_id}: "
                     f"wrote value={value} to register={register}"
                 )
                 return CommandResult(
                     success=True,
                     command_type=command_type,
-                    device_id=device_id,
+                    device_id=device_state.device_id,
                     register=register,
                     value=value,
                 )
@@ -292,17 +292,17 @@ class ModbusCommandExecutor:
                 value = cmd_def["values"][param_value]
                 logger.info(
                     f"[COMMAND_EXECUTOR] Writing enum value to Modbus: "
-                    f"device={device_id}, register={register}, {param_name}={param_value} (raw={value})"
+                    f"device={device_state.device_id}, register={register}, {param_name}={param_value} (raw={value})"
                 )
                 await adapter.write_register(register, value)
                 logger.info(
-                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_state.device_id}: "
                     f"set {param_name}={param_value} (register {register}={value})"
                 )
                 return CommandResult(
                     success=True,
                     command_type=command_type,
-                    device_id=device_id,
+                    device_id=device_state.device_id,
                     register=register,
                     value=value,
                 )
@@ -320,17 +320,17 @@ class ModbusCommandExecutor:
 
                 logger.info(
                     f"[COMMAND_EXECUTOR] Writing multiple values to Modbus: "
-                    f"device={device_id}, register={register}, values={values}, params={params}"
+                    f"device={device_state.device_id}, register={register}, values={values}, params={params}"
                 )
                 await adapter.write_registers(register, values)
                 logger.info(
-                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_state.device_id}: "
                     f"wrote {values} to registers starting at {register}"
                 )
                 return CommandResult(
                     success=True,
                     command_type=command_type,
-                    device_id=device_id,
+                    device_id=device_state.device_id,
                     register=register,
                     values=values,
                 )
@@ -347,18 +347,18 @@ class ModbusCommandExecutor:
 
                 logger.info(
                     f"[COMMAND_EXECUTOR] Writing scaled value to Modbus: "
-                    f"device={device_id}, register={register}, "
+                    f"device={device_state.device_id}, register={register}, "
                     f"{param_name}={raw_value} (scaled={value})"
                 )
                 await adapter.write_register(register, value)
                 logger.info(
-                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_id}: "
+                    f"[COMMAND_EXECUTOR] ✓ Successfully executed {command_type} on device {device_state.device_id}: "
                     f"set {param_name}={raw_value} (register {register}={value})"
                 )
                 return CommandResult(
                     success=True,
                     command_type=command_type,
-                    device_id=device_id,
+                    device_id=device_state.device_id,
                     register=register,
                     value=value,
                 )
