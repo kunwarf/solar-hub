@@ -51,9 +51,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load user on mount
+  // Load user on mount (skip if on auth page to prevent reload loop)
   useEffect(() => {
     const loadUser = async () => {
+      // Skip loading user if we're on the auth page
+      if (window.location.pathname.includes('/auth')) {
+        setIsLoading(false);
+        return;
+      }
+
       try {
         const currentUser = await authService.getCurrentUser();
         setUser(currentUser);

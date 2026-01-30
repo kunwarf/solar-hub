@@ -134,7 +134,10 @@ apiClient.interceptors.response.use(
       const refreshToken = tokenStorage.getRefreshToken();
       if (!refreshToken) {
         tokenStorage.clearTokens();
-        window.location.href = '/auth';
+        // Only redirect if not already on auth page to prevent reload loop
+        if (!window.location.pathname.includes('/auth')) {
+          window.location.href = '/auth';
+        }
         return Promise.reject(error);
       }
 
@@ -156,7 +159,10 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError as Error, null);
         tokenStorage.clearTokens();
-        window.location.href = '/auth';
+        // Only redirect if not already on auth page to prevent reload loop
+        if (!window.location.pathname.includes('/auth')) {
+          window.location.href = '/auth';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
