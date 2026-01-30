@@ -11,7 +11,7 @@ from .definitions import (
     CommandConfig,
     ProtocolDefinition,
 )
-from .registry import ProtocolRegistry
+from .registry import ProtocolRegistry, get_protocol_registry, set_protocol_registry
 from .loader import ProtocolLoader
 
 __all__ = [
@@ -25,4 +25,6 @@ __all__ = [
     "ProtocolDefinition",
     "ProtocolRegistry",
     "ProtocolLoader",
+    "get_protocol_registry",
+    "set_protocol_registry",
 ]

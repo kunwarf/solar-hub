@@ -248,3 +248,40 @@ class ProtocolRegistry:
             if count > 0:
                 lines.append(f"  {device_type.value}: {count}")
         return "\n".join(lines)
+
+
+# Global singleton instance
+_global_registry: Optional[ProtocolRegistry] = None
+
+
+def get_protocol_registry() -> ProtocolRegistry:
+    """
+    Get the global protocol registry singleton.
+
+    Initializes the registry on first call by loading from config files.
+
+    Returns:
+        The global ProtocolRegistry instance.
+    """
+    global _global_registry
+
+    if _global_registry is None:
+        # Initialize from default config location
+        logger.info("Initializing global protocol registry...")
+        _global_registry = ProtocolRegistry.from_config()
+
+    return _global_registry
+
+
+def set_protocol_registry(registry: ProtocolRegistry) -> None:
+    """
+    Set the global protocol registry instance.
+
+    Used for testing or custom initialization.
+
+    Args:
+        registry: The ProtocolRegistry instance to use globally.
+    """
+    global _global_registry
+    _global_registry = registry
+    logger.info(f"Global protocol registry set with {len(registry)} protocols")

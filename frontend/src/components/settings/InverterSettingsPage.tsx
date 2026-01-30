@@ -344,6 +344,16 @@ export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
     maxExportPower: 13000,
     solarSellEnabled: true,
     solarPriority: "load-first", // "battery-first" or "load-first"
+    limitControlFunction: 0,
+    zeroExportPower: 0,
+    gridChargingStartVoltage: 48.0,
+    gridChargingStartCapacity: 30,
+    gridChargeBatteryCurrent: 19,
+    acChargeBatteryEnabled: true,
+    gridPeakShavingPower: 8000,
+    gridPhaseSequence: 0,
+    gridStandard: 0,
+    gridTypeSetting: 0,
   });
 
   const [specification, setSpecification] = useState({
@@ -354,6 +364,16 @@ export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
     batteryCapacity: 1010,
     maxChargeCurrent: 75,
     maxDischargeCurrent: 100,
+    batteryShutdownCapacity: 10,
+    batteryRestartCapacity: 15,
+    batteryLowCapacity: 20,
+    batteryShutdownVoltage: 44.0,
+    batteryRestartVoltage: 48.0,
+    batteryLowVoltage: 46.0,
+    batteryEqualizationVoltage: 58.4,
+    batteryFloatingVoltage: 54.0,
+    batteryModeSource: 1, // 0=Voltage, 1=Capacity, 2=No Battery
+    batteryType: 0,
   });
 
   const [workMode, setWorkMode] = useState({
@@ -379,6 +399,64 @@ export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
     maxFeedInPower: 12000,
   });
 
+  const [generatorSettings, setGeneratorSettings] = useState({
+    generatorMaxRunTime: 24,
+    generatorDownTime: 0,
+    generatorChargingStartVoltage: 48.0,
+    generatorChargingStartCapacity: 30,
+    generatorChargeBatteryCurrent: 50,
+    generatorChargeEnabled: false,
+    generatorPortUsage: 0,
+    generatorConnectedToGridInput: false,
+    genPeakShavingPower: 8000,
+    smartloadOffVoltage: 44.0,
+    smartloadOffCapacity: 10,
+    smartloadOnVoltage: 50.0,
+    smartloadOnCapacity: 50,
+  });
+
+  const [touSettings, setTouSettings] = useState({
+    touSelling: 0,
+    prog1Time: "00:00",
+    prog2Time: "07:00",
+    prog3Time: "09:00",
+    prog4Time: "15:00",
+    prog5Time: "17:00",
+    prog6Time: "23:00",
+    prog1Power: 100,
+    prog2Power: 1000,
+    prog3Power: 3000,
+    prog4Power: 1120,
+    prog5Power: 2400,
+    prog6Power: 1000,
+    prog1Voltage: 54.0,
+    prog2Voltage: 54.0,
+    prog3Voltage: 58.0,
+    prog4Voltage: 58.0,
+    prog5Voltage: 54.0,
+    prog6Voltage: 54.0,
+    prog1Capacity: 50,
+    prog2Capacity: 50,
+    prog3Capacity: 98,
+    prog4Capacity: 98,
+    prog5Capacity: 50,
+    prog6Capacity: 50,
+    prog1ChargeMode: 0, // 0=Auto, 1=Charge, 2=Discharge
+    prog2ChargeMode: 0,
+    prog3ChargeMode: 1,
+    prog4ChargeMode: 0,
+    prog5ChargeMode: 2,
+    prog6ChargeMode: 0,
+  });
+
+  const [advancedSettings, setAdvancedSettings] = useState({
+    batteryEqualizationDayCycle: 30,
+    batteryEqualizationTime: 120,
+    maxSolarSellPower: 15600,
+    solarArcFaultMode: 0,
+    externalCtDirection: 0,
+  });
+
   const [auxiliarySettings, setAuxiliarySettings] = useState({
     generatorConnectedToGrid: false,
     generatorPeakShaving: false,
@@ -396,7 +474,7 @@ export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
       const changed = JSON.stringify(getCurrentSettings()) !== JSON.stringify(originalSettings);
       setHasChanges(changed);
     }
-  }, [gridSettings, batterySettings, workMode, workModeDetail, auxiliarySettings, touWindows]);
+  }, [gridSettings, batterySettings, workMode, workModeDetail, generatorSettings, touSettings, advancedSettings, auxiliarySettings, touWindows]);
 
   const getCurrentSettings = () => {
     return {
@@ -404,6 +482,9 @@ export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
       ...batterySettings,
       ...workMode,
       ...workModeDetail,
+      ...generatorSettings,
+      ...touSettings,
+      ...advancedSettings,
       ...auxiliarySettings,
       // TOU windows would need separate handling
     };
@@ -482,8 +563,48 @@ export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
   };
 
   const applySettingsToState = (settings: Record<string, any>) => {
-    // Map register values to UI state
-    // This is a simplified version - you'd map all fields properly
+    // ===== Battery Configuration (13 fields) =====
+    if (settings.battery_capacity_ah !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryCapacity: settings.battery_capacity_ah }));
+    }
+    if (settings.battery_max_charge_current_a !== undefined) {
+      setbatterySettings(prev => ({ ...prev, maxChargeCurrent: settings.battery_max_charge_current_a }));
+    }
+    if (settings.battery_max_discharge_current_a !== undefined) {
+      setbatterySettings(prev => ({ ...prev, maxDischargeCurrent: settings.battery_max_discharge_current_a }));
+    }
+    if (settings.battery_shutdown_capacity_pct !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryShutdownCapacity: settings.battery_shutdown_capacity_pct }));
+    }
+    if (settings.battery_restart_capacity_pct !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryRestartCapacity: settings.battery_restart_capacity_pct }));
+    }
+    if (settings.battery_low_capacity_pct !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryLowCapacity: settings.battery_low_capacity_pct }));
+    }
+    if (settings.battery_shutdown_voltage_v !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryShutdownVoltage: settings.battery_shutdown_voltage_v }));
+    }
+    if (settings.battery_restart_voltage_v !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryRestartVoltage: settings.battery_restart_voltage_v }));
+    }
+    if (settings.battery_low_voltage_v !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryLowVoltage: settings.battery_low_voltage_v }));
+    }
+    if (settings.battery_equalization_voltage_v !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryEqualizationVoltage: settings.battery_equalization_voltage_v }));
+    }
+    if (settings.battery_floating_voltage_v !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryFloatingVoltage: settings.battery_floating_voltage_v }));
+    }
+    if (settings.battery_mode_source !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryModeSource: settings.battery_mode_source }));
+    }
+    if (settings.lithium_battery_type !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryType: settings.lithium_battery_type }));
+    }
+
+    // ===== Grid Settings (13 fields) =====
     if (settings.max_export_power_w !== undefined) {
       setGridSettings(prev => ({ ...prev, maxExportPower: settings.max_export_power_w }));
     }
@@ -496,14 +617,193 @@ export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
         solarPriority: settings.solar_priority === 0 ? "battery-first" : "load-first"
       }));
     }
-    if (settings.battery_capacity_ah !== undefined) {
-      setbatterySettings(prev => ({ ...prev, batteryCapacity: settings.battery_capacity_ah }));
+    if (settings.limit_control_function !== undefined) {
+      setGridSettings(prev => ({ ...prev, limitControlFunction: settings.limit_control_function }));
     }
-    if (settings.battery_max_charge_current_a !== undefined) {
-      setbatterySettings(prev => ({ ...prev, maxChargeCurrent: settings.battery_max_charge_current_a }));
+    if (settings.zero_export_power_w !== undefined) {
+      setGridSettings(prev => ({ ...prev, zeroExportPower: settings.zero_export_power_w }));
     }
-    if (settings.battery_max_discharge_current_a !== undefined) {
-      setbatterySettings(prev => ({ ...prev, maxDischargeCurrent: settings.battery_max_discharge_current_a }));
+    if (settings.grid_charging_start_voltage_v !== undefined) {
+      setGridSettings(prev => ({ ...prev, gridChargingStartVoltage: settings.grid_charging_start_voltage_v }));
+    }
+    if (settings.grid_charging_start_capacity_pct !== undefined) {
+      setGridSettings(prev => ({ ...prev, gridChargingStartCapacity: settings.grid_charging_start_capacity_pct }));
+    }
+    if (settings.grid_charge_battery_current_a !== undefined) {
+      setGridSettings(prev => ({ ...prev, gridChargeBatteryCurrent: settings.grid_charge_battery_current_a }));
+    }
+    if (settings.ac_charge_battery !== undefined) {
+      setGridSettings(prev => ({ ...prev, acChargeBatteryEnabled: settings.ac_charge_battery === 0 }));
+    }
+    if (settings.grid_peak_shaving_power_w !== undefined) {
+      setGridSettings(prev => ({ ...prev, gridPeakShavingPower: settings.grid_peak_shaving_power_w }));
+    }
+    if (settings.grid_phase_sequence !== undefined) {
+      setGridSettings(prev => ({ ...prev, gridPhaseSequence: settings.grid_phase_sequence }));
+    }
+    if (settings.grid_standard !== undefined) {
+      setGridSettings(prev => ({ ...prev, gridStandard: settings.grid_standard }));
+    }
+    if (settings.grid_type_setting !== undefined) {
+      setGridSettings(prev => ({ ...prev, gridTypeSetting: settings.grid_type_setting }));
+    }
+
+    // ===== TOU Scheduling (37 fields) =====
+    if (settings.tou_selling !== undefined) {
+      setTouSettings(prev => ({ ...prev, touSelling: settings.tou_selling }));
+    }
+    // TOU Times (6 fields)
+    if (settings.prog1_time !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog1Time: settings.prog1_time }));
+    }
+    if (settings.prog2_time !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog2Time: settings.prog2_time }));
+    }
+    if (settings.prog3_time !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog3Time: settings.prog3_time }));
+    }
+    if (settings.prog4_time !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog4Time: settings.prog4_time }));
+    }
+    if (settings.prog5_time !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog5Time: settings.prog5_time }));
+    }
+    if (settings.prog6_time !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog6Time: settings.prog6_time }));
+    }
+    // TOU Power (6 fields)
+    if (settings.prog1_power_w !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog1Power: settings.prog1_power_w }));
+    }
+    if (settings.prog2_power_w !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog2Power: settings.prog2_power_w }));
+    }
+    if (settings.prog3_power_w !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog3Power: settings.prog3_power_w }));
+    }
+    if (settings.prog4_power_w !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog4Power: settings.prog4_power_w }));
+    }
+    if (settings.prog5_power_w !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog5Power: settings.prog5_power_w }));
+    }
+    if (settings.prog6_power_w !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog6Power: settings.prog6_power_w }));
+    }
+    // TOU Voltage (6 fields)
+    if (settings.prog1_voltage_v !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog1Voltage: settings.prog1_voltage_v }));
+    }
+    if (settings.prog2_voltage_v !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog2Voltage: settings.prog2_voltage_v }));
+    }
+    if (settings.prog3_voltage_v !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog3Voltage: settings.prog3_voltage_v }));
+    }
+    if (settings.prog4_voltage_v !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog4Voltage: settings.prog4_voltage_v }));
+    }
+    if (settings.prog5_voltage_v !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog5Voltage: settings.prog5_voltage_v }));
+    }
+    if (settings.prog6_voltage_v !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog6Voltage: settings.prog6_voltage_v }));
+    }
+    // TOU Capacity (6 fields)
+    if (settings.prog1_capacity_pct !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog1Capacity: settings.prog1_capacity_pct }));
+    }
+    if (settings.prog2_capacity_pct !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog2Capacity: settings.prog2_capacity_pct }));
+    }
+    if (settings.prog3_capacity_pct !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog3Capacity: settings.prog3_capacity_pct }));
+    }
+    if (settings.prog4_capacity_pct !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog4Capacity: settings.prog4_capacity_pct }));
+    }
+    if (settings.prog5_capacity_pct !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog5Capacity: settings.prog5_capacity_pct }));
+    }
+    if (settings.prog6_capacity_pct !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog6Capacity: settings.prog6_capacity_pct }));
+    }
+    // TOU Charge Mode (6 fields)
+    if (settings.prog1_charge_mode !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog1ChargeMode: settings.prog1_charge_mode }));
+    }
+    if (settings.prog2_charge_mode !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog2ChargeMode: settings.prog2_charge_mode }));
+    }
+    if (settings.prog3_charge_mode !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog3ChargeMode: settings.prog3_charge_mode }));
+    }
+    if (settings.prog4_charge_mode !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog4ChargeMode: settings.prog4_charge_mode }));
+    }
+    if (settings.prog5_charge_mode !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog5ChargeMode: settings.prog5_charge_mode }));
+    }
+    if (settings.prog6_charge_mode !== undefined) {
+      setTouSettings(prev => ({ ...prev, prog6ChargeMode: settings.prog6_charge_mode }));
+    }
+
+    // ===== Generator/Auxiliary (14 fields) =====
+    if (settings.generator_max_run_time_h !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorMaxRunTime: settings.generator_max_run_time_h }));
+    }
+    if (settings.generator_down_time_h !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorDownTime: settings.generator_down_time_h }));
+    }
+    if (settings.generator_charging_start_voltage_v !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorChargingStartVoltage: settings.generator_charging_start_voltage_v }));
+    }
+    if (settings.generator_charging_start_capacity_pct !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorChargingStartCapacity: settings.generator_charging_start_capacity_pct }));
+    }
+    if (settings.generator_charge_battery_current_a !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorChargeBatteryCurrent: settings.generator_charge_battery_current_a }));
+    }
+    if (settings.generator_charge_enabled !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorChargeEnabled: settings.generator_charge_enabled === 1 }));
+    }
+    if (settings.generator_port_usage !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorPortUsage: settings.generator_port_usage }));
+    }
+    if (settings.generator_connected_to_grid_input !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, generatorConnectedToGridInput: settings.generator_connected_to_grid_input === 1 }));
+    }
+    if (settings.gen_peak_shaving_power_w !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, genPeakShavingPower: settings.gen_peak_shaving_power_w }));
+    }
+    if (settings.smartload_off_voltage_v !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, smartloadOffVoltage: settings.smartload_off_voltage_v }));
+    }
+    if (settings.smartload_off_capacity_pct !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, smartloadOffCapacity: settings.smartload_off_capacity_pct }));
+    }
+    if (settings.smartload_on_voltage_v !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, smartloadOnVoltage: settings.smartload_on_voltage_v }));
+    }
+    if (settings.smartload_on_capacity_pct !== undefined) {
+      setGeneratorSettings(prev => ({ ...prev, smartloadOnCapacity: settings.smartload_on_capacity_pct }));
+    }
+
+    // ===== Advanced (5 fields) =====
+    if (settings.battery_equalization_day_cycle !== undefined) {
+      setAdvancedSettings(prev => ({ ...prev, batteryEqualizationDayCycle: settings.battery_equalization_day_cycle }));
+    }
+    if (settings.battery_equalization_time !== undefined) {
+      setAdvancedSettings(prev => ({ ...prev, batteryEqualizationTime: settings.battery_equalization_time }));
+    }
+    if (settings.max_solar_sell_power_w !== undefined) {
+      setAdvancedSettings(prev => ({ ...prev, maxSolarSellPower: settings.max_solar_sell_power_w }));
+    }
+    if (settings.solar_arc_fault_mode !== undefined) {
+      setAdvancedSettings(prev => ({ ...prev, solarArcFaultMode: settings.solar_arc_fault_mode }));
+    }
+    if (settings.external_ct_direction !== undefined) {
+      setAdvancedSettings(prev => ({ ...prev, externalCtDirection: settings.external_ct_direction }));
     }
   };
 

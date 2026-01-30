@@ -5,11 +5,13 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class IdentificationConfigSchema(BaseModel):
     """Configuration for device identification."""
+    model_config = ConfigDict(protected_namespaces=())
+
     register: Optional[int] = Field(None, description="Modbus register address for identification")
     size: int = Field(default=1, ge=1, le=100, description="Number of registers to read")
     expected_values: List[int] = Field(default_factory=list, description="Valid identification values")
@@ -20,6 +22,8 @@ class IdentificationConfigSchema(BaseModel):
 
 class SerialNumberConfigSchema(BaseModel):
     """Configuration for extracting device serial number."""
+    model_config = ConfigDict(protected_namespaces=())
+
     register: Optional[int] = Field(None, description="Modbus register address for serial")
     size: int = Field(default=5, ge=1, le=50, description="Number of registers")
     encoding: str = Field(default="ascii", description="Encoding: ascii, hex, or raw")
