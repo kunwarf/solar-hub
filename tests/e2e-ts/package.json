@@ -16,7 +16,22 @@
     "test:webkit": "playwright test --project=webkit",
     "test:mobile": "playwright test --project=mobile-chrome",
     "report": "playwright show-report",
-    "codegen": "playwright codegen http://localhost:8081"
+    "codegen": "playwright codegen http://localhost:8081",
+    "regression:local": "playwright test --config=regression-suite.config.ts",
+    "regression:local:smoke": "playwright test --config=regression-suite.config.ts --grep @smoke",
+    "regression:local:critical": "playwright test --config=regression-suite.config.ts --grep @critical",
+    "regression:local:headed": "playwright test --config=regression-suite.config.ts --headed",
+    "regression:local:ui": "playwright test --config=regression-suite.config.ts --ui",
+    "regression:local:debug": "playwright test --config=regression-suite.config.ts --debug",
+    "regression:report": "playwright show-report test-results/regression-report",
+    "regression:auth": "playwright test --config=regression-suite.config.ts tests/auth/",
+    "regression:devices": "playwright test --config=regression-suite.config.ts tests/devices/",
+    "regression:dashboard": "playwright test --config=regression-suite.config.ts tests/dashboard/",
+    "regression:billing": "playwright test --config=regression-suite.config.ts tests/billing/",
+    "regression:settings": "playwright test --config=regression-suite.config.ts tests/settings/",
+    "regression:outages": "playwright test --config=regression-suite.config.ts tests/outages/",
+    "regression:analytics": "playwright test --config=regression-suite.config.ts tests/analytics/",
+    "regression:admin": "playwright test --config=regression-suite.config.ts tests/admin/"
   },
   "keywords": [
     "playwright",
