@@ -103,51 +103,16 @@ async def get_device_settings(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> DeviceSettingsResponse:
     """Get device settings."""
-    await check_device_access(device_id, current_user, uow)
-
-    # Get device to determine type/manufacturer
-    device = await uow.devices.get_by_id(device_id)
-
-    async with uow:
-        # Try to get existing settings
-        settings_record = await uow.session.execute(
-            "SELECT * FROM device_settings WHERE device_id = :device_id",
-            {"device_id": str(device_id)},
-        )
-        settings_row = settings_record.fetchone()
-
-        if settings_row:
-            # Return existing settings
-            return DeviceSettingsResponse(
-                id=str(settings_row.id),
-                device_id=str(settings_row.device_id),
-                device_type=settings_row.device_type,
-                manufacturer=settings_row.manufacturer,
-                model=settings_row.model,
-                settings=settings_row.settings,
-                is_default=settings_row.is_default,
-                created_at=settings_row.created_at.isoformat(),
-                updated_at=settings_row.updated_at.isoformat(),
-            )
-        else:
-            # Return default settings
-            default_settings = get_default_settings(
-                device.device_type.value,
-                device.manufacturer,
-                device.model,
-            )
-
-            return DeviceSettingsResponse(
-                id="default",
-                device_id=str(device_id),
-                device_type=device.device_type.value,
-                manufacturer=device.manufacturer,
-                model=device.model,
-                settings=default_settings,
-                is_default=True,
-                created_at=device.created_at.isoformat(),
-                updated_at=device.updated_at.isoformat(),
-            )
+    # This endpoint is deprecated. Settings are now read directly from devices via commands.
+    # Use POST /devices/{device_id}/commands/query-settings instead.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "This endpoint is deprecated. Device settings are now read directly from physical devices. "
+            "Use POST /devices/{device_id}/commands/query-settings to query current settings from the device. "
+            "Settings are cached in the frontend localStorage."
+        ),
+    )
 
 
 @router.put(
@@ -163,81 +128,15 @@ async def update_device_settings(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> DeviceSettingsResponse:
     """Update device settings."""
-    await check_device_access(device_id, current_user, uow)
-
-    # Get device to determine type/manufacturer
-    device = await uow.devices.get_by_id(device_id)
-
-    async with uow:
-        # Check if settings exist
-        settings_query = await uow.session.execute(
-            "SELECT * FROM device_settings WHERE device_id = :device_id",
-            {"device_id": str(device_id)},
-        )
-        existing = settings_query.fetchone()
-
-        if existing:
-            # Update existing settings
-            await uow.session.execute(
-                """
-                UPDATE device_settings
-                SET settings = :settings,
-                    updated_by = :updated_by,
-                    updated_at = NOW(),
-                    is_default = false
-                WHERE device_id = :device_id
-                RETURNING *
-                """,
-                {
-                    "device_id": str(device_id),
-                    "settings": settings_update.settings,
-                    "updated_by": str(current_user.id),
-                },
-            )
-        else:
-            # Create new settings
-            await uow.session.execute(
-                """
-                INSERT INTO device_settings (
-                    id, device_id, device_type, manufacturer, model,
-                    settings, is_default, created_by, updated_by
-                )
-                VALUES (
-                    gen_random_uuid(), :device_id, :device_type, :manufacturer, :model,
-                    :settings, false, :created_by, :updated_by
-                )
-                """,
-                {
-                    "device_id": str(device_id),
-                    "device_type": device.device_type.value,
-                    "manufacturer": device.manufacturer,
-                    "model": device.model,
-                    "settings": settings_update.settings,
-                    "created_by": str(current_user.id),
-                    "updated_by": str(current_user.id),
-                },
-            )
-
-        await uow.commit()
-
-        # Fetch updated settings
-        updated_query = await uow.session.execute(
-            "SELECT * FROM device_settings WHERE device_id = :device_id",
-            {"device_id": str(device_id)},
-        )
-        updated_row = updated_query.fetchone()
-
-        return DeviceSettingsResponse(
-            id=str(updated_row.id),
-            device_id=str(updated_row.device_id),
-            device_type=updated_row.device_type,
-            manufacturer=updated_row.manufacturer,
-            model=updated_row.model,
-            settings=updated_row.settings,
-            is_default=updated_row.is_default,
-            created_at=updated_row.created_at.isoformat(),
-            updated_at=updated_row.updated_at.isoformat(),
-        )
+    # This endpoint is deprecated. Settings are now written directly to devices via commands.
+    # Use POST /devices/{device_id}/commands/update-settings instead.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "This endpoint is deprecated. Device settings are now written directly to physical devices. "
+            "Use POST /devices/{device_id}/commands/update-settings to update settings on the device."
+        ),
+    )
 
 
 @router.post(
@@ -252,30 +151,13 @@ async def reset_device_settings(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> DeviceSettingsResetResponse:
     """Reset device settings to defaults."""
-    await check_device_access(device_id, current_user, uow)
-
-    # Get device to determine type/manufacturer
-    device = await uow.devices.get_by_id(device_id)
-
-    # Get default settings
-    default_settings = get_default_settings(
-        device.device_type.value,
-        device.manufacturer,
-        device.model,
-    )
-
-    async with uow:
-        # Delete existing custom settings
-        await uow.session.execute(
-            "DELETE FROM device_settings WHERE device_id = :device_id",
-            {"device_id": str(device_id)},
-        )
-
-        await uow.commit()
-
-    return DeviceSettingsResetResponse(
-        message="Device settings reset to defaults",
-        settings=default_settings,
+    # This endpoint is deprecated. Settings are managed directly on devices via commands.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "This endpoint is deprecated. Device settings are managed directly on physical devices. "
+            "Use POST /devices/{device_id}/commands/update-settings to write default settings to the device."
+        ),
     )
 
 
@@ -291,11 +173,11 @@ async def delete_device_settings(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> None:
     """Delete device settings."""
-    await check_device_access(device_id, current_user, uow)
-
-    async with uow:
-        await uow.session.execute(
-            "DELETE FROM device_settings WHERE device_id = :device_id",
-            {"device_id": str(device_id)},
-        )
-        await uow.commit()
+    # This endpoint is deprecated. Settings are managed directly on devices via commands.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "This endpoint is deprecated. Device settings are managed directly on physical devices. "
+            "There is no database storage to delete."
+        ),
+    )
