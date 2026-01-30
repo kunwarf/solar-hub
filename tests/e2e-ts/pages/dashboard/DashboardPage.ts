@@ -58,10 +58,10 @@ export class DashboardPage extends BasePage {
   }
 
   /**
-   * Navigate to dashboard page
+   * Navigate to dashboard page (at root "/")
    */
   async goto() {
-    await this.page.goto('/dashboard');
+    await this.page.goto('/');
     await this.waitForLoaded();
   }
 

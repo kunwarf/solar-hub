@@ -41,7 +41,7 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     await loginPage.expectLoginSuccess();
 
     // Verify redirected to dashboard
-    await expect(page).toHaveURL(/.*dashboard/);
+    await expect(page).toHaveURL(/\/$/);
 
     // Verify token is stored
     const token = await loginPage.getLocalStorageItem('token');
@@ -143,7 +143,7 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     await loginPage.expectLoginSuccess();
 
     // Verify token is stored
-    const token = await page.evaluate(() => localStorage.getItem('token'));
+    const token = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(token).toBeTruthy();
     expect(token).toMatch(/^eyJ/); // JWT format starts with 'eyJ'
 
@@ -162,7 +162,7 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     await loginPage.expectLoginSuccess();
 
     // Verify logged in
-    const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('token'));
+    const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenBeforeLogout).toBeTruthy();
 
     // Find and click logout button
@@ -173,7 +173,7 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     await expect(page).toHaveURL(/.*auth/, { timeout: 10000 });
 
     // Verify token is cleared
-    const tokenAfterLogout = await page.evaluate(() => localStorage.getItem('token'));
+    const tokenAfterLogout = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenAfterLogout).toBeNull();
 
     // Verify session storage is also cleared
@@ -192,7 +192,7 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     await loginPage.expectLoginSuccess();
 
     // Get token before reload
-    const tokenBefore = await page.evaluate(() => localStorage.getItem('token'));
+    const tokenBefore = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenBefore).toBeTruthy();
 
     // Reload page
@@ -200,10 +200,10 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     await page.waitForLoadState('domcontentloaded');
 
     // Verify still on dashboard (not redirected to login)
-    await expect(page).toHaveURL(/.*dashboard/);
+    await expect(page).toHaveURL(/\/$/);
 
     // Verify token persists
-    const tokenAfter = await page.evaluate(() => localStorage.getItem('token'));
+    const tokenAfter = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenAfter).toBe(tokenBefore);
   });
 });

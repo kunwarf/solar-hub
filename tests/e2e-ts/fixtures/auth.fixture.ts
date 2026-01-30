@@ -29,11 +29,11 @@ export const test = base.extend<AuthFixtures>({
    */
   authenticatedPage: async ({ page }, use) => {
     // StorageState is already loaded from global setup
-    // Just navigate to dashboard to verify authentication
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    // Just navigate to dashboard (root path) to verify authentication
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-    // Verify token exists
-    const token = await page.evaluate(() => localStorage.getItem('token'));
+    // Verify token exists (using the correct key)
+    const token = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     if (!token) {
       throw new Error('Not authenticated: No token found in localStorage');
     }

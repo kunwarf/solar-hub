@@ -227,8 +227,8 @@ test.describe('Dashboard - Data Validation', { tag: ['@dashboard', '@integration
   test('should display loading states while fetching data', {
     tag: '@regression'
   }, async ({ authenticatedPage }) => {
-    // Navigate to fresh dashboard
-    await authenticatedPage.goto('/dashboard');
+    // Navigate to fresh dashboard (root "/")
+    await authenticatedPage.goto('/');
 
     // Look for loading indicators (spinners, skeletons, etc.)
     const loadingIndicators = authenticatedPage.locator(

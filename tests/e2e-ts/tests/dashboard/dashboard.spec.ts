@@ -241,10 +241,10 @@ test.describe('Dashboard', { tag: '@dashboard' }, () => {
     await authenticatedPage.waitForLoadState('domcontentloaded');
 
     // Should still be on dashboard (not redirected to login)
-    await expect(authenticatedPage).toHaveURL(/.*dashboard/);
+    await expect(authenticatedPage).toHaveURL(/\/$/);
 
     // Should still have token
-    const token = await authenticatedPage.evaluate(() => localStorage.getItem('token'));
+    const token = await authenticatedPage.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(token).toBeTruthy();
   });
 });

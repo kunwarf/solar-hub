@@ -62,13 +62,14 @@ export class LoginPage extends BasePage {
   }
 
   /**
-   * Expect login to be successful (redirected to dashboard)
+   * Expect login to be successful (redirected to dashboard at root "/")
    */
   async expectLoginSuccess() {
-    await expect(this.page).toHaveURL(/.*dashboard/, { timeout: 15000 });
+    // Dashboard is at root path "/"
+    await expect(this.page).toHaveURL(/\/$/, { timeout: 15000 });
 
-    // Verify token exists
-    const token = await this.getLocalStorageItem('token');
+    // Verify token exists (using correct key)
+    const token = await this.getLocalStorageItem('solar_hub_access_token');
     expect(token).toBeTruthy();
   }
 

@@ -180,6 +180,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 720 },
+        storageState: 'test-results/.auth/owner.json',
       },
       dependencies: ['setup'],
     },
@@ -305,15 +306,16 @@ export default defineConfig({
   /**
    * Web server configuration
    * Automatically start frontend server before tests
+   * Disabled for remote testing
    */
-  webServer: process.env.CI ? {
-    command: 'npm run dev',
-    url: 'http://localhost:8081',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 minutes to start server
-    stdout: 'pipe',
-    stderr: 'pipe',
-  } : undefined,
+  // webServer: process.env.CI ? {
+  //   command: 'npm run dev',
+  //   url: 'http://localhost:8081',
+  //   reuseExistingServer: !process.env.CI,
+  //   timeout: 120 * 1000, // 2 minutes to start server
+  //   stdout: 'pipe',
+  //   stderr: 'pipe',
+  // } : undefined,
 
   /**
    * Metadata for reporters

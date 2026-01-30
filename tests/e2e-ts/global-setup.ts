@@ -80,16 +80,18 @@ async function setupAuthState(
     // Wait for login form to be visible
     await page.waitForSelector('input[type="email"]', { timeout: 10000 });
 
-    // Fill credentials
+    // Fill credentials with delays to prevent re-renders
     const emailInput = page.locator('input[type="email"]').first();
     const passwordInput = page.locator('input[type="password"]').first();
 
     await emailInput.fill(credentials.email);
+    await page.waitForTimeout(500); // Wait for validation
     await passwordInput.fill(credentials.password);
+    await page.waitForTimeout(500); // Wait for validation
 
-    // Submit login
+    // Submit login - use force click to handle detachment
     const submitButton = page.locator('button[type="submit"]').first();
-    await submitButton.click();
+    await submitButton.click({ force: true });
 
     // Wait for successful login - either dashboard URL or token in localStorage
     try {
@@ -99,8 +101,8 @@ async function setupAuthState(
       await page.waitForTimeout(3000);
     }
 
-    // Verify token exists in localStorage
-    const token = await page.evaluate(() => localStorage.getItem('token'));
+    // Verify token exists in localStorage (using the correct key)
+    const token = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
 
     if (!token) {
       throw new Error(`No auth token found for ${role}`);
