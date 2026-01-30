@@ -189,17 +189,17 @@ class ModbusCommandExecutor:
             logger.error(f"[COMMAND_EXECUTOR] {error_msg}", exc_info=True)
             return None, error_msg
 
-    async def execute_command(
+    async def _execute_on_device(
         self,
-        device_id: UUID,
+        device_state,
         command_type: str,
         params: Optional[Dict[str, Any]] = None,
     ) -> CommandResult:
         """
-        Execute a command on a device.
+        Execute a command on a resolved device.
 
         Args:
-            device_id: Target device ID
+            device_state: Resolved device state from DeviceManager
             command_type: Type of command to execute
             params: Command parameters
 
@@ -208,27 +208,11 @@ class ModbusCommandExecutor:
         """
         params = params or {}
 
-        logger.info(
-            f"[COMMAND_EXECUTOR] Starting execution: device={device_id}, "
-            f"type={command_type}, params={params}"
-        )
-
         try:
-            # Resolve device (handles both device_server UUIDs and System A UUIDs)
-            device_state, error_msg = await self._resolve_device(device_id)
-            if not device_state:
-                logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
-                return CommandResult(
-                    success=False,
-                    command_type=command_type,
-                    device_id=device_id,
-                    error=error_msg,
-                )
-
             logger.info(
-                f"[COMMAND_EXECUTOR] Device resolved: "
+                f"[COMMAND_EXECUTOR] Executing on device: "
                 f"serial={device_state.serial_number}, type={device_state.device_type}, "
-                f"status={device_state.status}, internal_id={device_state.device_id}"
+                f"command={command_type}, params={params}"
             )
 
             # Get adapter using the device_server's internal device ID
@@ -239,14 +223,9 @@ class ModbusCommandExecutor:
                 return CommandResult(
                     success=False,
                     command_type=command_type,
-                    device_id=device_id,
+                    device_id=device_state.device_id,
                     error=error_msg,
                 )
-
-            logger.info(
-                f"[COMMAND_EXECUTOR] Adapter found for device {device_state.serial_number} "
-                f"(internal_id: {device_state.device_id})"
-            )
 
             # Get device type
             device_type = device_state.device_type
@@ -386,15 +365,51 @@ class ModbusCommandExecutor:
 
         except Exception as e:
             logger.error(
-                f"[COMMAND_EXECUTOR] ✗ Command execution failed for device {device_id}: {e}",
+                f"[COMMAND_EXECUTOR] ✗ Command execution failed: {e}",
                 exc_info=True
             )
             return CommandResult(
                 success=False,
                 command_type=command_type,
-                device_id=device_id,
+                device_id=device_state.device_id,
                 error=str(e),
             )
+
+    async def execute_command(
+        self,
+        device_id: UUID,
+        command_type: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> CommandResult:
+        """
+        Execute a command on a device (with UUID resolution for backwards compatibility).
+
+        Args:
+            device_id: Target device ID (System A's UUID)
+            command_type: Type of command to execute
+            params: Command parameters
+
+        Returns:
+            CommandResult with execution status
+        """
+        logger.info(
+            f"[COMMAND_EXECUTOR] Starting execution with UUID: device={device_id}, "
+            f"type={command_type}"
+        )
+
+        # Resolve device (handles both device_server UUIDs and System A UUIDs)
+        device_state, error_msg = await self._resolve_device(device_id)
+        if not device_state:
+            logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+            return CommandResult(
+                success=False,
+                command_type=command_type,
+                device_id=device_id,
+                error=error_msg,
+            )
+
+        # Execute on resolved device
+        return await self._execute_on_device(device_state, command_type, params)
 
     async def read_register(
         self,
@@ -433,6 +448,7 @@ class ModbusCommandExecutor:
         device_id: UUID,
         command_type: str,
         command_params: Dict[str, Any],
+        device_serial: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a command on a device (CommandExecutor protocol).
@@ -441,13 +457,36 @@ class ModbusCommandExecutor:
         CommandWorker for queue-based command processing.
 
         Args:
-            device_id: Target device ID
+            device_id: Target device ID (System A's UUID)
             command_type: Type of command to execute
             command_params: Command parameters
+            device_serial: Optional device serial for direct lookup (preferred)
 
         Returns:
             Dictionary with execution result
         """
+        # If serial is provided, use it directly (no fallbacks needed!)
+        if device_serial:
+            logger.info(f"[COMMAND_EXECUTOR] Using device_serial from command: {device_serial}")
+            device_state = self.device_manager.get_device_by_serial(device_serial)
+
+            if device_state:
+                logger.info(
+                    f"[COMMAND_EXECUTOR] ✓ Device found by serial: {device_serial} "
+                    f"(type={device_state.device_type}, internal_id={device_state.device_id})"
+                )
+                result = await self._execute_on_device(device_state, command_type, command_params)
+                return result.to_dict()
+            else:
+                logger.warning(f"[COMMAND_EXECUTOR] Device with serial {device_serial} not found in DeviceManager")
+                return CommandResult(
+                    success=False,
+                    command_type=command_type,
+                    device_id=device_id,
+                    error=f"Device with serial {device_serial} not connected",
+                ).to_dict()
+
+        # Fallback to old UUID resolution (will be removed once System A sends serial)
         result = await self.execute_command(device_id, command_type, command_params)
         return result.to_dict()
 

@@ -518,6 +518,7 @@ class SystemBClient:
         site_id: UUID,
         command_type: str,
         command_params: Optional[Dict[str, Any]] = None,
+        device_serial: Optional[str] = None,
         priority: int = 5,
         expires_in_minutes: int = 60,
     ) -> Dict[str, Any]:
@@ -531,6 +532,7 @@ class SystemBClient:
             site_id: Site UUID
             command_type: Command type string
             command_params: Optional command parameters
+            device_serial: Device serial number for direct lookup in System B
             priority: Command priority (1-10, default 5)
             expires_in_minutes: Expiry time in minutes
 
@@ -552,6 +554,8 @@ class SystemBClient:
             }
             if command_params:
                 payload["command_params"] = command_params
+            if device_serial:
+                payload["device_serial"] = device_serial
 
             logger.info("System B request: POST %s%s, payload=%s", self._base_url, url, payload)
             response = await client.post(url, json=payload)

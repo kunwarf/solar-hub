@@ -195,16 +195,17 @@ class CommandWorker:
         Execute a single command.
 
         Args:
-            command: Command dictionary with id, device_id, command_type, command_params.
+            command: Command dictionary with id, device_id, command_type, command_params, device_serial.
         """
         command_id = command.get("id")
         device_id = command.get("device_id")
+        device_serial = command.get("device_serial")  # Get serial from command
         command_type = command.get("command_type")
         command_params = command.get("command_params") or {}
 
         logger.info(
             f"[COMMAND_WORKER] Executing command {command_id}: "
-            f"type={command_type}, device={device_id}, params={command_params}"
+            f"type={command_type}, device={device_id}, serial={device_serial}, params={command_params}"
         )
 
         # Mark as sent
@@ -222,6 +223,7 @@ class CommandWorker:
                 device_id=device_id,
                 command_type=command_type,
                 command_params=command_params,
+                device_serial=device_serial,  # Pass serial for direct lookup
             )
 
             logger.info(

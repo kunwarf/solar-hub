@@ -38,6 +38,7 @@ class CommandModel(Base):
     id = Column(PGUUID(as_uuid=True), primary_key=True)
     device_id = Column(PGUUID(as_uuid=True), nullable=False)
     site_id = Column(PGUUID(as_uuid=True), nullable=False)
+    device_serial = Column(String(100), nullable=True)  # Optional: device serial for direct lookup
     command_type = Column(String(100), nullable=False)
     command_params = Column(JSON)
     status = Column(String(50), nullable=False)
@@ -127,6 +128,7 @@ class CommandDatabaseClient:
                         "id": model.id,
                         "device_id": model.device_id,
                         "site_id": model.site_id,
+                        "device_serial": model.device_serial,  # Include serial for direct lookup
                         "command_type": model.command_type,
                         "command_params": model.command_params or {},
                         "status": model.status,

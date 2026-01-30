@@ -137,6 +137,7 @@ async def query_device_settings(
             command_params={
                 "setting_keys": request.setting_keys,
             } if request.setting_keys else None,
+            device_serial=device.serial_number,  # Pass serial for direct lookup in System B
             priority=7,  # Higher priority for settings queries
             expires_in_minutes=5,  # Short expiry for real-time queries
         )
@@ -187,6 +188,7 @@ async def update_device_settings(
                 "updated_by": str(current_user.id),
                 "updated_by_email": current_user.email,
             },
+            device_serial=device.serial_number,  # Pass serial for direct lookup in System B
             priority=8,  # High priority for settings updates
             expires_in_minutes=10,
         )

@@ -12,6 +12,7 @@ class CommandCreateRequest(BaseModel):
     """Request to create a device command."""
     device_id: UUID
     site_id: UUID
+    device_serial: Optional[str] = Field(None, description="Device serial number for direct lookup")
     command_type: str = Field(..., min_length=1, max_length=100)
     command_params: Optional[Dict[str, Any]] = None
     scheduled_at: Optional[datetime] = None
