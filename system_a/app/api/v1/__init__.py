@@ -9,6 +9,7 @@ from .organizations import router as organizations_router
 from .sites import router as sites_router
 from .devices import router as devices_router
 from .device_settings import router as device_settings_router
+from .device_commands import router as device_commands_router
 from .dashboards import router as dashboards_router
 from .dashboard_widgets import router as dashboard_widgets_router
 from .dashboard_preferences import router as dashboard_preferences_router
@@ -28,6 +29,7 @@ api_router.include_router(organizations_router)
 api_router.include_router(sites_router)
 api_router.include_router(devices_router)
 api_router.include_router(device_settings_router)
+api_router.include_router(device_commands_router)
 api_router.include_router(dashboards_router)
 api_router.include_router(dashboard_widgets_router)
 api_router.include_router(dashboard_preferences_router)
