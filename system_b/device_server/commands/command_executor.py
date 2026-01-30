@@ -104,7 +104,7 @@ class ModbusCommandExecutor:
             from sqlalchemy import text
             async with self.device_registry_client._session_factory() as session:
                 result = await session.execute(
-                    text("SELECT serial_number FROM device_registry WHERE id = :device_id"),
+                    text("SELECT serial_number FROM device_registry WHERE device_id = :device_id"),
                     {"device_id": str(device_id)}
                 )
                 row = result.fetchone()
