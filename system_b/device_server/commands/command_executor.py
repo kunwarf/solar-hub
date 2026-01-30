@@ -115,23 +115,44 @@ class ModbusCommandExecutor:
                     return None, error_msg
 
                 serial_number = row[0]
-                logger.info(f"[COMMAND_EXECUTOR] Found serial number {serial_number} for device {device_id}")
+                logger.info(f"[COMMAND_EXECUTOR] Found data logger serial {serial_number} for device {device_id}")
 
-                # Look up device by serial number in device_manager
+                # Try lookup by data logger serial first
                 device_state = self.device_manager.get_device_by_serial(serial_number)
                 if device_state:
                     logger.info(
-                        f"[COMMAND_EXECUTOR] Device found by serial: {serial_number} "
+                        f"[COMMAND_EXECUTOR] Device found by data logger serial: {serial_number} "
                         f"(internal ID: {device_state.device_id})"
                     )
                     return device_state, None
-                else:
-                    error_msg = (
-                        f"Device with serial {serial_number} is registered but not connected. "
-                        f"Ensure the device is powered on and connected to the network."
-                    )
-                    logger.warning(f"[COMMAND_EXECUTOR] {error_msg}")
-                    return None, error_msg
+
+                # Data logger serial didn't work, try inverter serial from metadata
+                logger.info(f"[COMMAND_EXECUTOR] Device not found by data logger serial, checking inverter serial...")
+                result2 = await session.execute(
+                    text("SELECT metadata->>'inverter_serial' FROM device_registry WHERE device_id = :device_id"),
+                    {"device_id": str(device_id)}
+                )
+                row2 = result2.fetchone()
+
+                if row2 and row2[0]:
+                    inverter_serial = row2[0]
+                    logger.info(f"[COMMAND_EXECUTOR] Found inverter serial {inverter_serial} in metadata")
+
+                    device_state = self.device_manager.get_device_by_serial(inverter_serial)
+                    if device_state:
+                        logger.info(
+                            f"[COMMAND_EXECUTOR] Device found by inverter serial: {inverter_serial} "
+                            f"(internal ID: {device_state.device_id})"
+                        )
+                        return device_state, None
+
+                # Neither serial worked
+                error_msg = (
+                    f"Device with data logger serial {serial_number} is registered but not connected. "
+                    f"Ensure the device is powered on and connected to the network."
+                )
+                logger.warning(f"[COMMAND_EXECUTOR] {error_msg}")
+                return None, error_msg
 
         except Exception as e:
             error_msg = f"Error resolving device {device_id}: {str(e)}"
