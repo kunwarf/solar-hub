@@ -44,7 +44,7 @@ class CommandModel(Base):
     priority = Column(Integer, default=5)
     created_at = Column(DateTime(timezone=True), nullable=False)
     expires_at = Column(DateTime(timezone=True))
-    result_data = Column(JSON)
+    result = Column(JSON)  # Note: column is 'result', not 'result_data'
     error_message = Column(Text)
 
 logger = logging.getLogger(__name__)
@@ -184,7 +184,7 @@ class CommandDatabaseClient:
                     .where(CommandModel.id == command_id)
                     .values(
                         status=CommandStatus.COMPLETED.value,
-                        result_data=result_data,
+                        result=result_data,  # Column name is 'result'
                     )
                 )
                 await session.commit()
