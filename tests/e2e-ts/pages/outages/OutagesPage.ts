@@ -241,6 +241,9 @@ export class OutagesPage extends BasePage {
    * Verify grid status is displayed
    */
   async expectGridStatusDisplayed() {
+    // Wait for page to load first
+    await this.waitForLoaded();
+
     const hasStatus = await this.hasGridStatusIndicator();
     expect(hasStatus).toBe(true);
 

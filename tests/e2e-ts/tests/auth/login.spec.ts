@@ -165,12 +165,24 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenBeforeLogout).toBeTruthy();
 
-    // Dismiss onboarding wizard if present (it blocks interactions)
-    const closeButton = page.getByRole('button', { name: /close|skip/i });
-    if (await closeButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await closeButton.click();
-      await page.waitForTimeout(500);
+    // Dismiss onboarding wizard if present by trying multiple methods
+    // Try the X close button (top right of dialog)
+    const closeXButton = page.locator('[aria-label="Close"]').or(page.getByRole('button', { name: /^close$/i }));
+    if (await closeXButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await closeXButton.click({ force: true });
+      await page.waitForTimeout(1000);
     }
+
+    // Try "Skip for now" button
+    const skipButton = page.getByRole('button', { name: /skip for now/i });
+    if (await skipButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await skipButton.click({ force: true });
+      await page.waitForTimeout(1000);
+    }
+
+    // Wait for dialog overlay to disappear
+    const dialogOverlay = page.locator('[class*="bg-black/80"]').or(page.locator('[aria-hidden="true"][data-state="open"]'));
+    await dialogOverlay.waitFor({ state: 'hidden', timeout: 3000 }).catch(() => null);
 
     // Open user menu dropdown (User icon button)
     const userMenuButton = page.getByRole('button').filter({ has: page.locator('svg').first() }).last();

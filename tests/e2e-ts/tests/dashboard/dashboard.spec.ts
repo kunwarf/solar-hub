@@ -18,12 +18,24 @@ test.describe('Dashboard', { tag: '@dashboard' }, () => {
 
     await dashboardPage.goto();
 
-    // Dismiss onboarding wizard if present
-    const closeButton = authenticatedPage.getByRole('button', { name: /close|skip/i });
-    if (await closeButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await closeButton.click();
-      await authenticatedPage.waitForTimeout(500);
+    // Dismiss onboarding wizard if present by trying multiple methods
+    // Try the X close button (top right of dialog)
+    const closeXButton = authenticatedPage.locator('[aria-label="Close"]').or(authenticatedPage.getByRole('button', { name: /^close$/i }));
+    if (await closeXButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await closeXButton.click({ force: true });
+      await authenticatedPage.waitForTimeout(1000);
     }
+
+    // Try "Skip for now" button
+    const skipButton = authenticatedPage.getByRole('button', { name: /skip for now/i });
+    if (await skipButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await skipButton.click({ force: true });
+      await authenticatedPage.waitForTimeout(1000);
+    }
+
+    // Wait for dialog overlay to disappear
+    const dialogOverlay = authenticatedPage.locator('[class*="bg-black/80"]').or(authenticatedPage.locator('[aria-hidden="true"][data-state="open"]'));
+    await dialogOverlay.waitFor({ state: 'hidden', timeout: 3000 }).catch(() => null);
   });
 
   test('should load dashboard successfully', {
