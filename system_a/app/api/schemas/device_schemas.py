@@ -108,9 +108,9 @@ class DeviceResponse(BaseModel):
 
 class DeviceDetailResponse(DeviceResponse):
     """Detailed device response with config and metrics."""
-    connection_config: ConnectionConfigSchema
-    latest_metrics: Optional[DeviceMetricsSchema]
-    metadata: Optional[Dict[str, Any]]
+    connection_config: Optional[ConnectionConfigSchema] = None
+    latest_metrics: Optional[DeviceMetricsSchema] = None
+    metadata: Optional[Dict[str, Any]] = None
     total_messages_received: int = 0
     total_errors: int = 0
     uptime_percentage: float = 0.0
