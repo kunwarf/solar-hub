@@ -60,14 +60,83 @@ class ModbusCommandExecutor:
     Modbus register writes using command definitions.
     """
 
-    def __init__(self, device_manager: "DeviceManager"):
+    def __init__(self, device_manager: "DeviceManager", device_registry_client=None):
         """
         Initialize the command executor.
 
         Args:
             device_manager: Device manager for accessing device adapters
+            device_registry_client: Optional device registry client for UUID to serial mapping
         """
         self.device_manager = device_manager
+        self.device_registry_client = device_registry_client
+
+    async def _resolve_device(self, device_id: UUID):
+        """
+        Resolve device by UUID.
+
+        First tries direct UUID lookup in device_manager.
+        If not found, queries device registry to get serial number,
+        then looks up by serial number.
+
+        Args:
+            device_id: Device UUID (could be from System A or device_server)
+
+        Returns:
+            Tuple of (device_state, error_message)
+        """
+        # Try direct UUID lookup first (for device_server's own UUIDs)
+        device_state = self.device_manager.get_device(device_id)
+        if device_state:
+            logger.debug(f"[COMMAND_EXECUTOR] Device found by UUID: {device_id}")
+            return device_state, None
+
+        # Device not found by UUID - try looking up by serial from device registry
+        if not self.device_registry_client:
+            error_msg = f"Device {device_id} not found and no device registry available"
+            logger.warning(f"[COMMAND_EXECUTOR] {error_msg}")
+            return None, error_msg
+
+        logger.info(f"[COMMAND_EXECUTOR] Device {device_id} not found by UUID, querying device registry...")
+
+        try:
+            # Query device registry to get serial number from UUID
+            from sqlalchemy import text
+            async with self.device_registry_client._session_factory() as session:
+                result = await session.execute(
+                    text("SELECT serial_number FROM device_registry WHERE id = :device_id"),
+                    {"device_id": str(device_id)}
+                )
+                row = result.fetchone()
+
+                if not row:
+                    error_msg = f"Device {device_id} not found in device registry"
+                    logger.warning(f"[COMMAND_EXECUTOR] {error_msg}")
+                    return None, error_msg
+
+                serial_number = row[0]
+                logger.info(f"[COMMAND_EXECUTOR] Found serial number {serial_number} for device {device_id}")
+
+                # Look up device by serial number in device_manager
+                device_state = self.device_manager.get_device_by_serial(serial_number)
+                if device_state:
+                    logger.info(
+                        f"[COMMAND_EXECUTOR] Device found by serial: {serial_number} "
+                        f"(internal ID: {device_state.device_id})"
+                    )
+                    return device_state, None
+                else:
+                    error_msg = (
+                        f"Device with serial {serial_number} is registered but not connected. "
+                        f"Ensure the device is powered on and connected to the network."
+                    )
+                    logger.warning(f"[COMMAND_EXECUTOR] {error_msg}")
+                    return None, error_msg
+
+        except Exception as e:
+            error_msg = f"Error resolving device {device_id}: {str(e)}"
+            logger.error(f"[COMMAND_EXECUTOR] {error_msg}", exc_info=True)
+            return None, error_msg
 
     async def execute_command(
         self,
@@ -94,10 +163,9 @@ class ModbusCommandExecutor:
         )
 
         try:
-            # Get device state and adapter
-            device_state = self.device_manager.get_device(device_id)
+            # Resolve device (handles both device_server UUIDs and System A UUIDs)
+            device_state, error_msg = await self._resolve_device(device_id)
             if not device_state:
-                error_msg = f"Device not found: {device_id}"
                 logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
                 return CommandResult(
                     success=False,
@@ -107,13 +175,15 @@ class ModbusCommandExecutor:
                 )
 
             logger.info(
-                f"[COMMAND_EXECUTOR] Device state found: "
-                f"type={device_state.device_type}, status={device_state.status}"
+                f"[COMMAND_EXECUTOR] Device resolved: "
+                f"serial={device_state.serial_number}, type={device_state.device_type}, "
+                f"status={device_state.status}, internal_id={device_state.device_id}"
             )
 
-            adapter = self.device_manager.get_adapter(device_id)
+            # Get adapter using the device_server's internal device ID
+            adapter = self.device_manager.get_adapter(device_state.device_id)
             if not adapter:
-                error_msg = f"No adapter for device: {device_id}"
+                error_msg = f"No adapter for device: {device_state.serial_number}"
                 logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
                 return CommandResult(
                     success=False,
@@ -122,7 +192,10 @@ class ModbusCommandExecutor:
                     error=error_msg,
                 )
 
-            logger.info(f"[COMMAND_EXECUTOR] Adapter found for device {device_id}")
+            logger.info(
+                f"[COMMAND_EXECUTOR] Adapter found for device {device_state.serial_number} "
+                f"(internal_id: {device_state.device_id})"
+            )
 
             # Get device type
             device_type = device_state.device_type

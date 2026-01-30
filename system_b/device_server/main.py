@@ -136,8 +136,11 @@ class DeviceServer:
         self.command_db_client = CommandDatabaseClient(self.settings.device_registry_db)
         await self.command_db_client.connect()
 
-        # Initialize command executor and worker
-        self.command_executor = ModbusCommandExecutor(self.device_manager)
+        # Initialize command executor with device registry for UUID to serial mapping
+        self.command_executor = ModbusCommandExecutor(
+            self.device_manager,
+            device_registry_client=self.device_registry_client
+        )
         self.command_worker = CommandWorker(
             poll_interval=1.0,
             batch_size=10,
