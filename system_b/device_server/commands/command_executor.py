@@ -165,9 +165,20 @@ class ModbusCommandExecutor:
                 else:
                     logger.warning(f"[COMMAND_EXECUTOR] No metadata row found for device {device_id}")
 
-                # Neither serial worked
+                # Fallback: if we have exactly one device connected, use it
+                all_devices = list(self.device_manager._devices.values())
+                if len(all_devices) == 1:
+                    device_state = all_devices[0]
+                    logger.info(
+                        f"[COMMAND_EXECUTOR] Using fallback: only one device connected "
+                        f"(serial={device_state.serial_number}, internal_id={device_state.device_id})"
+                    )
+                    return device_state, None
+
+                # Neither serial worked and no single-device fallback
                 error_msg = (
                     f"Device with data logger serial {serial_number} is registered but not connected. "
+                    f"Metadata doesn't have inverter_serial and {len(all_devices)} devices are connected. "
                     f"Ensure the device is powered on and connected to the network."
                 )
                 logger.warning(f"[COMMAND_EXECUTOR] {error_msg}")
