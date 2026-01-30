@@ -75,8 +75,8 @@ class DeviceSettings(Base):
 
     # Relationships
     device = relationship("DeviceModel", back_populates="settings")
-    creator = relationship("User", foreign_keys=[created_by])
-    updater = relationship("User", foreign_keys=[updated_by])
+    creator = relationship("UserModel", foreign_keys=[created_by])
+    updater = relationship("UserModel", foreign_keys=[updated_by])
 
     # Composite index for manufacturer + model lookups
     __table_args__ = (
