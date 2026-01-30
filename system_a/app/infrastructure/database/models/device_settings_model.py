@@ -74,7 +74,7 @@ class DeviceSettings(Base):
     )
 
     # Relationships
-    device = relationship("Device", back_populates="settings")
+    device = relationship("DeviceModel", back_populates="settings")
     creator = relationship("User", foreign_keys=[created_by])
     updater = relationship("User", foreign_keys=[updated_by])
 
