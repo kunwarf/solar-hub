@@ -75,6 +75,19 @@ class SQLAlchemyOrganizationRepository(OrganizationRepository):
         count = result.scalar()
         return count > 0
 
+    async def is_member(self, organization_id: UUID, user_id: UUID) -> bool:
+        """Check if a user is a member of an organization."""
+        from ...database.models.organization_model import OrganizationMemberModel
+
+        result = await self._session.execute(
+            select(func.count()).select_from(OrganizationMemberModel).where(
+                OrganizationMemberModel.organization_id == organization_id,
+                OrganizationMemberModel.user_id == user_id
+            )
+        )
+        count = result.scalar()
+        return count > 0
+
     async def add(self, entity: Organization) -> Organization:
         """Add new organization."""
         model = OrganizationModel.from_domain(entity)
