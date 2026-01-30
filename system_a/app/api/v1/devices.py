@@ -163,6 +163,21 @@ def device_to_detail_response(device: Device) -> DeviceDetailResponse:
             last_updated=device.latest_metrics.last_updated,
         )
 
+    # Handle optional connection_config
+    connection_config_schema = None
+    if device.connection_config:
+        connection_config_schema = ConnectionConfigSchema(
+            protocol=device.connection_config.protocol.value,
+            host=device.connection_config.host,
+            port=device.connection_config.port,
+            slave_id=device.connection_config.slave_id,
+            mqtt_topic=device.connection_config.mqtt_topic,
+            api_endpoint=device.connection_config.api_endpoint,
+            auth_token=None,  # Don't expose auth token
+            polling_interval_seconds=device.connection_config.polling_interval_seconds,
+            timeout_seconds=device.connection_config.timeout_seconds,
+        )
+
     return DeviceDetailResponse(
         id=device.id,
         site_id=device.site_id,
@@ -174,22 +189,12 @@ def device_to_detail_response(device: Device) -> DeviceDetailResponse:
         name=device.name,
         description=None,  # Device entity doesn't have description field
         status=device.status.value,
-        protocol=device.protocol.value,
+        protocol=device.connection_config.protocol.value if device.connection_config else "mqtt",
         firmware_version=device.firmware_version,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
         updated_at=device.updated_at,
-        connection_config=ConnectionConfigSchema(
-            protocol=device.connection_config.protocol.value,
-            host=device.connection_config.host,
-            port=device.connection_config.port,
-            slave_id=device.connection_config.slave_id,
-            mqtt_topic=device.connection_config.mqtt_topic,
-            api_endpoint=device.connection_config.api_endpoint,
-            auth_token=None,  # Don't expose auth token
-            polling_interval_seconds=device.connection_config.polling_interval_seconds,
-            timeout_seconds=device.connection_config.timeout_seconds,
-        ),
+        connection_config=connection_config_schema,
         latest_metrics=metrics_schema,
         metadata=device.metadata,
         total_messages_received=device.total_messages_received,
