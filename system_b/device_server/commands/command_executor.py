@@ -117,6 +117,13 @@ class ModbusCommandExecutor:
                 serial_number = row[0]
                 logger.info(f"[COMMAND_EXECUTOR] Found data logger serial {serial_number} for device {device_id}")
 
+                # Log what devices are currently in DeviceManager
+                all_devices = list(self.device_manager._devices.values())
+                logger.info(
+                    f"[COMMAND_EXECUTOR] DeviceManager has {len(all_devices)} devices: " +
+                    ", ".join([f"{d.serial_number} ({d.device_type})" for d in all_devices[:5]])
+                )
+
                 # Try lookup by data logger serial first
                 device_state = self.device_manager.get_device_by_serial(serial_number)
                 if device_state:
@@ -134,17 +141,29 @@ class ModbusCommandExecutor:
                 )
                 row2 = result2.fetchone()
 
-                if row2 and row2[0]:
+                if row2:
                     inverter_serial = row2[0]
-                    logger.info(f"[COMMAND_EXECUTOR] Found inverter serial {inverter_serial} in metadata")
+                    logger.info(f"[COMMAND_EXECUTOR] Metadata query returned: {inverter_serial}")
 
-                    device_state = self.device_manager.get_device_by_serial(inverter_serial)
-                    if device_state:
-                        logger.info(
-                            f"[COMMAND_EXECUTOR] Device found by inverter serial: {inverter_serial} "
-                            f"(internal ID: {device_state.device_id})"
-                        )
-                        return device_state, None
+                    if inverter_serial:
+                        logger.info(f"[COMMAND_EXECUTOR] Found inverter serial {inverter_serial} in metadata, looking up device...")
+
+                        device_state = self.device_manager.get_device_by_serial(inverter_serial)
+                        if device_state:
+                            logger.info(
+                                f"[COMMAND_EXECUTOR] ✓ Device found by inverter serial: {inverter_serial} "
+                                f"(internal ID: {device_state.device_id})"
+                            )
+                            return device_state, None
+                        else:
+                            logger.warning(
+                                f"[COMMAND_EXECUTOR] Inverter serial {inverter_serial} found in metadata "
+                                f"but device not found in DeviceManager"
+                            )
+                    else:
+                        logger.warning(f"[COMMAND_EXECUTOR] Metadata query returned None - inverter_serial not set in metadata")
+                else:
+                    logger.warning(f"[COMMAND_EXECUTOR] No metadata row found for device {device_id}")
 
                 # Neither serial worked
                 error_msg = (
