@@ -172,7 +172,7 @@ def device_to_detail_response(device: Device) -> DeviceDetailResponse:
         model=device.model,
         serial_number=device.serial_number,
         name=device.name,
-        description=device.description,
+        description=None,  # Device entity doesn't have description field
         status=device.status.value,
         protocol=device.protocol.value,
         firmware_version=device.firmware_version,
@@ -524,8 +524,7 @@ async def update_device(
     # Update fields
     if request.name is not None:
         device.name = request.name
-    if request.description is not None:
-        device.description = request.description
+    # Note: description field removed from Device entity
     if request.metadata is not None:
         device.metadata = request.metadata
 
