@@ -27,7 +27,20 @@ test.describe('Outages - Grid Monitoring', { tag: '@outages' }, () => {
 
   test('should display grid status indicator', {
     tag: ['@smoke', '@critical']
-  }, async () => {
+  }, async ({ authenticatedPage }) => {
+    // Wait for API response to ensure data is loaded
+    const apiResponse = authenticatedPage.waitForResponse(
+      resp => resp.url().includes('/api/v1/dashboard/power-flow') || resp.url().includes('/api/v1/outages'),
+      { timeout: 30000 }
+    );
+
+    await apiResponse.catch(() => {
+      console.log('API response timeout - continuing with test');
+    });
+
+    // Additional wait for rendering
+    await authenticatedPage.waitForTimeout(2000);
+
     // Verify grid status is shown
     await outagesPage.expectGridStatusDisplayed();
   });

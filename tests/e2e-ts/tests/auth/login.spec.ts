@@ -165,38 +165,47 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenBeforeLogout).toBeTruthy();
 
-    // Dismiss onboarding wizard if present by trying multiple methods
-    // Try the X close button (top right of dialog)
-    const closeXButton = page.locator('[aria-label="Close"]').or(page.getByRole('button', { name: /^close$/i }));
-    if (await closeXButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await closeXButton.click({ force: true });
-      await page.waitForTimeout(1500);
-    }
-
-    // Try "Skip for now" button
-    const skipButton = page.getByRole('button', { name: /skip for now/i });
-    if (await skipButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await skipButton.click({ force: true });
-      await page.waitForTimeout(1500);
-    }
-
-    // Wait for dialog overlay to completely disappear
-    const dialogOverlay = page.locator('[data-state="open"][class*="bg-black"]');
-    await dialogOverlay.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => null);
-
-    // Additional wait to ensure animations complete
+    // Aggressively dismiss onboarding wizard
+    // Method 1: Press ESC key to close any dialogs
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Escape');
     await page.waitForTimeout(1000);
 
-    // Open user menu dropdown - use more specific selector
-    // Target the rounded-full button with User icon in header (not floating action buttons)
-    const userMenuButton = page.locator('header button.rounded-full').last();
+    // Method 2: Try clicking close/skip buttons
+    const closeButtons = page.locator('button:has-text("Close"), button:has-text("Skip"), button[aria-label="Close"]');
+    const count = await closeButtons.count();
+    for (let i = 0; i < count; i++) {
+      const btn = closeButtons.nth(i);
+      if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
+        await btn.click({ force: true });
+        await page.waitForTimeout(500);
+      }
+    }
 
-    // Wait for button to be actionable (not blocked by overlays)
-    await userMenuButton.waitFor({ state: 'visible', timeout: 5000 });
+    // Method 3: Click backdrop/overlay to close dialog
+    const overlay = page.locator('[data-state="open"][class*="bg-black"]');
+    if (await overlay.isVisible({ timeout: 500 }).catch(() => false)) {
+      await overlay.click({ force: true, position: { x: 5, y: 5 } });
+      await page.waitForTimeout(1000);
+    }
 
-    // Use force click to bypass any remaining overlay issues
-    await userMenuButton.click({ force: true, timeout: 10000 });
-    await page.waitForTimeout(500);
+    // Wait for all overlays to be gone
+    await page.locator('[data-state="open"]').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => null);
+    await page.waitForTimeout(1500);
+
+    // Open user menu - try multiple strategies
+    // Strategy 1: Use specific selector for user menu button
+    const userMenuButton = page.locator('header').locator('button').filter({ hasText: '' }).last();
+
+    // Strategy 2: If that fails, use position-based approach (click in top-right corner where user menu should be)
+    try {
+      await userMenuButton.click({ force: true, timeout: 5000 });
+    } catch (e) {
+      // Fallback: Click in the top-right corner area
+      await page.mouse.click(page.viewportSize()!.width - 50, 50);
+    }
+    await page.waitForTimeout(1000);
 
     // Click logout menu item
     const logoutMenuItem = page.getByRole('menuitem', { name: /log out/i });
