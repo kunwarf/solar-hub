@@ -86,30 +86,14 @@ export function useDeviceSettings(
   }, [deviceId]);
 
   /**
-   * Load settings from database (fallback)
+   * Load settings from database (DEPRECATED - fallback removed)
+   * Settings are now stored only on device and in localStorage cache.
+   * This function is kept for backwards compatibility but does nothing.
    */
   const loadFromDatabase = useCallback(async () => {
-    try {
-      const dbSettings = await deviceSettingsService.getDeviceSettings(deviceId);
-
-      if (dbSettings && dbSettings.settings) {
-        // Save to localStorage for caching
-        saveDeviceSettings(deviceId, deviceType, dbSettings.settings, false);
-
-        setSettings(dbSettings.settings);
-        setUsingFallback(true);
-        setIsStale(true); // Database might be outdated
-        setLastSyncedAt(dbSettings.updated_at || null);
-
-        console.log('Loaded settings from database fallback');
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error('Failed to load from database:', err);
-      return false;
-    }
-  }, [deviceId, deviceType]);
+    console.log('Database fallback skipped - settings stored on device only');
+    return false;
+  }, []);
 
   /**
    * Query device for current settings (PRIMARY PATH)
@@ -137,13 +121,8 @@ export function useDeviceSettings(
         // Update localStorage cache
         updateSettingsFromDevice(deviceId, deviceType, deviceSettings);
 
-        // Update database backup
-        try {
-          await deviceSettingsService.updateDeviceSettings(deviceId, deviceSettings);
-        } catch (dbErr) {
-          console.warn('Failed to update database backup:', dbErr);
-          // Non-fatal, continue with device settings
-        }
+        // Database backup removed - settings now live on device only
+        // localStorage provides caching, device commands provide authoritative source
 
         // Update state
         setSettings(deviceSettings);
@@ -193,10 +172,8 @@ export function useDeviceSettings(
         saveDeviceSettings(deviceId, deviceType, newSettings, false);
         setSettings(newSettings);
 
-        // 2. Save to database (backup) - don't wait
-        deviceSettingsService.updateDeviceSettings(deviceId, newSettings).catch(err => {
-          console.warn('Failed to save to database backup:', err);
-        });
+        // 2. Database backup removed - device commands are the authoritative source
+        // localStorage provides optimistic updates and caching
 
         // 3. Send command to device (primary)
         const response = await deviceCommandsService.updateSettings(
