@@ -286,6 +286,305 @@ class ModbusCommandExecutor:
                     error=None,
                 )
 
+            # Handle read_all_configurable operations (query ALL RW registers)
+            if cmd_def.get("operation") == "read_all_configurable":
+                logger.info(f"[COMMAND_EXECUTOR] Executing read_all_configurable operation for {command_type}")
+
+                # Get protocol and register map
+                protocol_id = device_state.protocol_id
+                from ..devices.adapter_factory import AdapterFactory
+                from ..config import get_device_server_settings
+
+                settings_obj = get_device_server_settings()
+                factory = AdapterFactory(settings=settings_obj)
+
+                # Load register map
+                from ..protocols.registry import get_protocol_registry
+                registry = get_protocol_registry()
+                protocol = registry.get(protocol_id)
+
+                if not protocol:
+                    error_msg = f"Protocol '{protocol_id}' not found"
+                    logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=error_msg,
+                    )
+
+                register_map = factory.load_register_map(protocol)
+                if not register_map:
+                    # Fallback to legacy registers if defined
+                    logger.warning(f"[COMMAND_EXECUTOR] No register map found, using legacy registers")
+                    settings = {}
+                    for reg_def in cmd_def.get("registers", []):
+                        try:
+                            address = reg_def["address"]
+                            name = reg_def["name"]
+                            scale = reg_def.get("scale", 1)
+                            values = await adapter._read_holding_regs(address, 1)
+                            if values and len(values) > 0:
+                                settings[name] = values[0] * scale
+                        except Exception as e:
+                            logger.error(f"[COMMAND_EXECUTOR] Error reading register {address}: {e}")
+
+                    return CommandResult(
+                        success=True,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        values=list(settings.values()),
+                        error=None,
+                    )
+
+                # Filter for writable registers only
+                writable_registers = [r for r in register_map if r.get("rw") in ("RW", "RW/RO")]
+                logger.info(f"[COMMAND_EXECUTOR] Found {len(writable_registers)} writable registers")
+
+                # Read all writable registers
+                settings = {}
+                for reg in writable_registers:
+                    reg_id = reg.get("id")
+                    if not reg_id:
+                        continue
+
+                    try:
+                        address = reg["addr"]
+                        size = max(1, reg.get("size", 1))
+                        scale = reg.get("scale", 1.0)
+
+                        # Read register
+                        values = await adapter._read_holding_regs(address, size)
+                        if values and len(values) > 0:
+                            # Decode value
+                            raw_value = values[0] if size == 1 else values
+                            scaled_value = raw_value * scale
+                            settings[reg_id] = scaled_value
+                            logger.debug(f"[COMMAND_EXECUTOR] Read {reg_id} from register {address}: {scaled_value}")
+                    except Exception as e:
+                        logger.debug(f"[COMMAND_EXECUTOR] Could not read register {reg_id} (addr {address}): {e}")
+                        # Continue reading other registers
+
+                logger.info(f"[COMMAND_EXECUTOR] ✓ Successfully queried {len(settings)} settings")
+                return CommandResult(
+                    success=True,
+                    command_type=command_type,
+                    device_id=device_state.device_id,
+                    values=list(settings.values()),
+                    error=None,
+                )
+
+            # Handle read_modify_write operations (update_settings)
+            if cmd_def.get("operation") == "read_modify_write":
+                logger.info(f"[COMMAND_EXECUTOR] Executing read_modify_write operation for {command_type}")
+
+                # Get settings to update
+                settings_to_update = params.get("settings", {})
+                if not settings_to_update:
+                    return CommandResult(
+                        success=True,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=None,
+                        values=[],
+                    )
+
+                logger.info(f"[COMMAND_EXECUTOR] Updating {len(settings_to_update)} settings: {list(settings_to_update.keys())}")
+
+                # Get protocol and register map
+                protocol_id = device_state.protocol_id
+                from ..devices.adapter_factory import AdapterFactory
+                from ..config import get_device_server_settings
+                from ..protocols.registry import get_protocol_registry
+
+                settings_obj = get_device_server_settings()
+                factory = AdapterFactory(settings=settings_obj)
+                registry = get_protocol_registry()
+                protocol = registry.get(protocol_id)
+
+                if not protocol:
+                    error_msg = f"Protocol '{protocol_id}' not found"
+                    logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=error_msg,
+                    )
+
+                register_map = factory.load_register_map(protocol)
+                if not register_map:
+                    error_msg = "No register map available for this device"
+                    logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=error_msg,
+                    )
+
+                # Build register lookup
+                register_lookup = {r["id"]: r for r in register_map if r.get("id")}
+
+                # Step 1: Read current values for registers being updated
+                logger.info(f"[COMMAND_EXECUTOR] Step 1: Reading current values")
+                current_values = {}
+                for reg_id in settings_to_update.keys():
+                    reg_def = register_lookup.get(reg_id)
+                    if not reg_def:
+                        error_msg = f"Register '{reg_id}' not found in register map"
+                        logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                        return CommandResult(
+                            success=False,
+                            command_type=command_type,
+                            device_id=device_state.device_id,
+                            error=error_msg,
+                        )
+
+                    # Check if writable
+                    if reg_def.get("rw") not in ("RW", "WO"):
+                        error_msg = f"Register '{reg_id}' is read-only"
+                        logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                        return CommandResult(
+                            success=False,
+                            command_type=command_type,
+                            device_id=device_state.device_id,
+                            error=error_msg,
+                        )
+
+                    try:
+                        address = reg_def["addr"]
+                        size = max(1, reg_def.get("size", 1))
+                        scale = reg_def.get("scale", 1.0)
+
+                        values = await adapter._read_holding_regs(address, size)
+                        if values and len(values) > 0:
+                            raw_value = values[0] if size == 1 else values
+                            current_values[reg_id] = raw_value * scale
+                            logger.debug(f"[COMMAND_EXECUTOR] Current value for {reg_id}: {current_values[reg_id]}")
+                    except Exception as e:
+                        logger.warning(f"[COMMAND_EXECUTOR] Could not read current value for {reg_id}: {e}")
+                        current_values[reg_id] = None
+
+                # Step 2: Identify changed registers
+                logger.info(f"[COMMAND_EXECUTOR] Step 2: Identifying changes")
+                changed_registers = {}
+                for reg_id, new_value in settings_to_update.items():
+                    current = current_values.get(reg_id)
+                    if current != new_value:
+                        changed_registers[reg_id] = new_value
+                        logger.info(f"[COMMAND_EXECUTOR] Register {reg_id} changed: {current} → {new_value}")
+
+                if not changed_registers:
+                    logger.info(f"[COMMAND_EXECUTOR] No changes detected")
+                    return CommandResult(
+                        success=True,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=None,
+                        values=list(current_values.values()),
+                    )
+
+                # Step 3: Validate new values
+                logger.info(f"[COMMAND_EXECUTOR] Step 3: Validating new values")
+                from ..registers import get_register_metadata_registry
+                metadata_registry = get_register_metadata_registry()
+
+                # Load metadata if not already loaded
+                if protocol_id not in metadata_registry._metadata:
+                    register_map_path = settings_obj.register_maps_dir / protocol.register_map_file
+                    metadata_registry.load_from_register_map(protocol_id, register_map_path)
+
+                validation_errors = []
+                for reg_id, new_value in changed_registers.items():
+                    is_valid, error_msg = metadata_registry.validate_register_write(
+                        protocol_id, reg_id, new_value
+                    )
+                    if not is_valid:
+                        validation_errors.append(f"{reg_id}: {error_msg}")
+
+                if validation_errors:
+                    error_msg = f"Validation errors: {'; '.join(validation_errors)}"
+                    logger.error(f"[COMMAND_EXECUTOR] {error_msg}")
+                    return CommandResult(
+                        success=False,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=error_msg,
+                    )
+
+                # Step 4: Write changed registers (with rollback on failure)
+                logger.info(f"[COMMAND_EXECUTOR] Step 4: Writing {len(changed_registers)} changed registers")
+                written_registers = []
+                try:
+                    for reg_id, new_value in changed_registers.items():
+                        reg_def = register_lookup[reg_id]
+                        address = reg_def["addr"]
+                        scale = reg_def.get("scale", 1.0)
+
+                        # Unscale value before writing
+                        raw_value = int(new_value / scale)
+
+                        logger.info(f"[COMMAND_EXECUTOR] Writing {reg_id} to register {address}: {new_value} (raw={raw_value})")
+                        await adapter.write_register(address, raw_value)
+                        written_registers.append(reg_id)
+                        logger.debug(f"[COMMAND_EXECUTOR] Successfully wrote {reg_id}")
+
+                except Exception as e:
+                    # Rollback: restore previous values
+                    logger.error(f"[COMMAND_EXECUTOR] Write failed at {reg_id}: {e}")
+                    logger.warning(f"[COMMAND_EXECUTOR] Attempting rollback of {len(written_registers)} registers")
+
+                    for rolled_back_reg_id in written_registers:
+                        try:
+                            reg_def = register_lookup[rolled_back_reg_id]
+                            address = reg_def["addr"]
+                            scale = reg_def.get("scale", 1.0)
+                            original_value = current_values[rolled_back_reg_id]
+                            raw_value = int(original_value / scale)
+
+                            await adapter.write_register(address, raw_value)
+                            logger.info(f"[COMMAND_EXECUTOR] Rolled back {rolled_back_reg_id} to {original_value}")
+                        except Exception as rollback_error:
+                            logger.error(f"[COMMAND_EXECUTOR] Rollback failed for {rolled_back_reg_id}: {rollback_error}")
+
+                    error_msg = f"Write failed, rollback attempted: {str(e)}"
+                    return CommandResult(
+                        success=False,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=error_msg,
+                    )
+
+                # Step 5: Verify writes succeeded
+                logger.info(f"[COMMAND_EXECUTOR] Step 5: Verifying writes")
+                verified_settings = {}
+                for reg_id in written_registers:
+                    reg_def = register_lookup[reg_id]
+                    address = reg_def["addr"]
+                    size = max(1, reg_def.get("size", 1))
+                    scale = reg_def.get("scale", 1.0)
+
+                    try:
+                        values = await adapter._read_holding_regs(address, size)
+                        if values and len(values) > 0:
+                            raw_value = values[0] if size == 1 else values
+                            verified_settings[reg_id] = raw_value * scale
+                    except Exception as e:
+                        logger.warning(f"[COMMAND_EXECUTOR] Could not verify {reg_id}: {e}")
+                        verified_settings[reg_id] = changed_registers[reg_id]  # Assume success
+
+                logger.info(f"[COMMAND_EXECUTOR] ✓ Successfully updated {len(changed_registers)} settings")
+                return CommandResult(
+                    success=True,
+                    command_type=command_type,
+                    device_id=device_state.device_id,
+                    register=None,
+                    value=None,
+                    values=list(verified_settings.values()),
+                    error=None,
+                )
+
             # Validate parameters
             is_valid, error_msg = validate_command_params(cmd_def, params)
             if not is_valid:

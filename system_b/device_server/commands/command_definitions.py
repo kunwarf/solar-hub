@@ -38,7 +38,10 @@ class OperatingMode(int, Enum):
 
 INVERTER_COMMANDS: Dict[str, Dict[str, Any]] = {
     "query_settings": {
-        "operation": "read",  # Special read-only operation
+        "operation": "read_all_configurable",  # Read all RW registers from register map
+        "description": "Query all configurable settings from inverter",
+        "groups": ["battery", "grid", "work_mode", "tou_scheduling", "generator", "auxiliary"],
+        # Legacy registers for backward compatibility (subset of all registers)
         "registers": [
             {"address": 143, "name": "max_export_power_w", "scale": 1},  # Max Export Power (W)
             {"address": 145, "name": "solar_sell", "scale": 1},  # Solar sell (0=disabled, 1=enabled)
@@ -47,7 +50,13 @@ INVERTER_COMMANDS: Dict[str, Dict[str, Any]] = {
             {"address": 109, "name": "battery_max_discharge_current_a", "scale": 1},  # Battery max discharge (A)
             {"address": 102, "name": "battery_capacity_ah", "scale": 1},  # Battery capacity (Ah)
         ],
-        "description": "Query current settings from inverter",
+    },
+    "update_settings": {
+        "operation": "read_modify_write",  # Read current → validate → write changed → verify
+        "param": "settings",  # Dict of register_id: new_value
+        "param_type": "dict",
+        "description": "Update device settings (reads current values, modifies changed, writes changed only)",
+        "supports_rollback": True,  # Rollback on write failure
     },
     "set_power_limit": {
         "register": 40001,
@@ -93,6 +102,18 @@ INVERTER_COMMANDS: Dict[str, Dict[str, Any]] = {
 
 
 BATTERY_COMMANDS: Dict[str, Dict[str, Any]] = {
+    "query_settings": {
+        "operation": "read_all_configurable",
+        "description": "Query all configurable settings from battery",
+        "groups": ["battery", "protection"],
+    },
+    "update_settings": {
+        "operation": "read_modify_write",
+        "param": "settings",
+        "param_type": "dict",
+        "description": "Update battery settings safely",
+        "supports_rollback": True,
+    },
     "set_charge_limit": {
         "register": 40100,
         "size": 1,
@@ -138,6 +159,18 @@ BATTERY_COMMANDS: Dict[str, Dict[str, Any]] = {
 
 
 METER_COMMANDS: Dict[str, Dict[str, Any]] = {
+    "query_settings": {
+        "operation": "read_all_configurable",
+        "description": "Query all configurable settings from meter",
+        "groups": ["specification", "advanced"],
+    },
+    "update_settings": {
+        "operation": "read_modify_write",
+        "param": "settings",
+        "param_type": "dict",
+        "description": "Update meter settings safely",
+        "supports_rollback": True,
+    },
     "reset_energy_counter": {
         "register": 40200,
         "size": 1,
