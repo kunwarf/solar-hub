@@ -73,6 +73,7 @@ class DeviceModel(BaseModel):
 
     # Relationships
     site = relationship('SiteModel', back_populates='devices')
+    settings = relationship('DeviceSettings', back_populates='device', uselist=False)
 
     def to_domain(self) -> Device:
         """Convert ORM model to domain entity."""

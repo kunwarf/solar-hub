@@ -1,12 +1,13 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
-import { Cpu, Battery, Gauge, Save, RotateCcw, ArrowLeft } from "lucide-react";
+import { Cpu, Battery, Gauge, Save, RotateCcw, ArrowLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { devices } from "@/data/mockData";
+import { devicesService, deviceSettingsService } from "@/api";
 import { InverterConfigPage } from "@/components/settings/InverterConfigPage";
 import { MeterConfigPage } from "@/components/settings/MeterConfigPage";
 import { BatteryConfigPage } from "@/components/settings/BatteryConfigPage";
@@ -26,25 +27,88 @@ const typeColors = {
 const DeviceSettingsPage = () => {
   const { deviceId } = useParams<{ deviceId: string }>();
   const navigate = useNavigate();
-  
-  const device = devices.find(d => d.id === deviceId);
+  const queryClient = useQueryClient();
+
+  // Fetch device details
+  const { data: device, isLoading: deviceLoading, error: deviceError } = useQuery({
+    queryKey: ['device', deviceId],
+    queryFn: () => devicesService.getDevice(deviceId!),
+    enabled: !!deviceId,
+  });
+
+  // Fetch device settings
+  const { data: settings, isLoading: settingsLoading } = useQuery({
+    queryKey: ['deviceSettings', deviceId],
+    queryFn: () => deviceSettingsService.getDeviceSettings(deviceId!),
+    enabled: !!deviceId,
+  });
+
+  // Update settings mutation
+  const updateSettingsMutation = useMutation({
+    mutationFn: (newSettings: Record<string, any>) =>
+      deviceSettingsService.updateDeviceSettings(deviceId!, newSettings),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deviceSettings', deviceId] });
+      toast({
+        title: "Settings Saved",
+        description: `Configuration for ${device?.name} has been updated.`,
+      });
+      navigate("/devices");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.detail || "Failed to save settings",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reset settings mutation
+  const resetSettingsMutation = useMutation({
+    mutationFn: () => deviceSettingsService.resetDeviceSettings(deviceId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deviceSettings', deviceId] });
+      toast({
+        title: "Settings Reset",
+        description: "Device settings have been reset to defaults.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.detail || "Failed to reset settings",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleSave = () => {
-    toast({
-      title: "Settings Saved",
-      description: `Configuration for ${device?.name} has been updated.`,
-    });
-    navigate("/devices");
+    if (settings?.settings) {
+      updateSettingsMutation.mutate(settings.settings);
+    }
   };
 
   const handleReset = () => {
-    toast({
-      title: "Settings Reset",
-      description: "Device settings have been reset to defaults.",
-    });
+    if (confirm("Are you sure you want to reset settings to defaults? This cannot be undone.")) {
+      resetSettingsMutation.mutate();
+    }
   };
 
-  if (!device) {
+  // Loading state
+  if (deviceLoading || settingsLoading) {
+    return (
+      <AppLayout>
+        <AppHeader title="Loading..." subtitle="Fetching device configuration" />
+        <div className="p-6 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Error state
+  if (deviceError || !device) {
     return (
       <AppLayout>
         <AppHeader title="Device Not Found" subtitle="The requested device could not be found" />
@@ -58,7 +122,7 @@ const DeviceSettingsPage = () => {
     );
   }
 
-  const Icon = deviceIcons[device.type];
+  const Icon = deviceIcons[device.type as keyof typeof deviceIcons] || Cpu;
 
   return (
     <AppLayout>
@@ -128,12 +192,29 @@ const DeviceSettingsPage = () => {
           transition={{ delay: 0.2 }}
           className="flex flex-col sm:flex-row gap-3"
         >
-          <Button onClick={handleSave} className="flex-1 sm:flex-none gap-2">
-            <Save className="w-4 h-4" />
+          <Button
+            onClick={handleSave}
+            className="flex-1 sm:flex-none gap-2"
+            disabled={updateSettingsMutation.isPending}
+          >
+            {updateSettingsMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
             Save Configuration
           </Button>
-          <Button variant="outline" onClick={handleReset} className="flex-1 sm:flex-none gap-2">
-            <RotateCcw className="w-4 h-4" />
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            className="flex-1 sm:flex-none gap-2"
+            disabled={resetSettingsMutation.isPending}
+          >
+            {resetSettingsMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RotateCcw className="w-4 h-4" />
+            )}
             Reset to Defaults
           </Button>
         </motion.div>

@@ -24,6 +24,8 @@ export type {
   AllWidgetsData,
 } from './dashboard.service';
 export { devicesService } from './devices.service';
+export { deviceSettingsService } from './device-settings.service';
+export type { DeviceSettings, DeviceSettingsUpdate, DeviceSettingsResetResponse } from './device-settings.service';
 export { sitesService } from './sites.service';
 export { billingService } from './billing.service';
 export type { BillingOverview, BillCalculation } from './billing.service';

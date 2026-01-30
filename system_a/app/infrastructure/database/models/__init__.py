@@ -6,6 +6,7 @@ from .user_model import UserModel
 from .organization_model import OrganizationModel, OrganizationMemberModel
 from .site_model import SiteModel
 from .device_model import DeviceModel
+from .device_settings_model import DeviceSettings
 from .alert_model import AlertModel, AlertRuleModel
 from .telemetry_model import (
     TelemetryHourlySummaryModel,
@@ -34,6 +35,7 @@ __all__ = [
     'OrganizationMemberModel',
     'SiteModel',
     'DeviceModel',
+    'DeviceSettings',
     'AlertModel',
     'AlertRuleModel',
     'TelemetryHourlySummaryModel',
