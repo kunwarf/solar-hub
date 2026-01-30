@@ -9,11 +9,43 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.future import select
-from sqlalchemy import update
+from sqlalchemy import update, Column, String, Integer, DateTime, JSON, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import declarative_base
+from datetime import datetime
+from enum import Enum
 
-from ...app.infrastructure.database.models.command_model import CommandModel
-from ...app.domain.entities.command import CommandStatus
 from ..config import DeviceRegistryDBSettings
+
+# Define CommandStatus enum locally to avoid circular imports
+class CommandStatus(str, Enum):
+    """Command execution status."""
+    PENDING = "pending"
+    SENT = "sent"
+    ACKNOWLEDGED = "acknowledged"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
+
+# Define minimal CommandModel locally to avoid cross-package imports
+Base = declarative_base()
+
+class CommandModel(Base):
+    """Minimal command model for database operations."""
+    __tablename__ = "device_commands"
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True)
+    device_id = Column(PGUUID(as_uuid=True), nullable=False)
+    site_id = Column(PGUUID(as_uuid=True), nullable=False)
+    command_type = Column(String(100), nullable=False)
+    command_params = Column(JSON)
+    status = Column(String(50), nullable=False)
+    priority = Column(Integer, default=5)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True))
+    result_data = Column(JSON)
+    error_message = Column(Text)
 
 logger = logging.getLogger(__name__)
 
