@@ -31,6 +31,7 @@ class CommandResult:
     register: Optional[int] = None
     value: Optional[int] = None
     values: Optional[List[int]] = None
+    settings: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     executed_at: datetime = None
 
@@ -47,6 +48,7 @@ class CommandResult:
             "register": self.register,
             "value": self.value,
             "values": self.values,
+            "settings": self.settings,
             "error": self.error,
             "executed_at": self.executed_at.isoformat(),
         }
@@ -334,6 +336,7 @@ class ModbusCommandExecutor:
                         command_type=command_type,
                         device_id=device_state.device_id,
                         values=list(settings.values()),
+                        settings=settings,
                         error=None,
                     )
 
@@ -371,6 +374,7 @@ class ModbusCommandExecutor:
                     command_type=command_type,
                     device_id=device_state.device_id,
                     values=list(settings.values()),
+                    settings=settings,
                     error=None,
                 )
 
@@ -582,6 +586,7 @@ class ModbusCommandExecutor:
                     register=None,
                     value=None,
                     values=list(verified_settings.values()),
+                    settings=verified_settings,
                     error=None,
                 )
 
