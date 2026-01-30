@@ -165,10 +165,14 @@ async def get_latest_telemetry(
     """
     Get latest readings for a device.
     """
+    logger.info(f"[TELEMETRY_LATEST] Getting latest telemetry for device {device_id}, metrics: {metric_names}")
+
     telemetry_repo = TelemetryRepository(session)
     service = TelemetryService(telemetry_repo)
 
     readings = await service.get_latest_telemetry(device_id, metric_names)
+
+    logger.info(f"[TELEMETRY_LATEST] Retrieved {len(readings)} readings for device {device_id}")
 
     return TelemetryLatestResponse(
         device_id=device_id,
