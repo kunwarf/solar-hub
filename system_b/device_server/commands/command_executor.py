@@ -249,6 +249,43 @@ class ModbusCommandExecutor:
 
             logger.info(f"[COMMAND_EXECUTOR] Command definition found: register={cmd_def.get('register')}")
 
+            # Handle read operations (query commands)
+            if cmd_def.get("operation") == "read":
+                logger.info(f"[COMMAND_EXECUTOR] Executing read operation for {command_type}")
+                settings = {}
+
+                for reg_def in cmd_def.get("registers", []):
+                    try:
+                        address = reg_def["address"]
+                        name = reg_def["name"]
+                        scale = reg_def.get("scale", 1)
+
+                        # Read single register
+                        values = await adapter._read_holding_regs(address, 1)
+                        if values and len(values) > 0:
+                            raw_value = values[0]
+                            scaled_value = raw_value * scale
+                            settings[name] = scaled_value
+                            logger.info(
+                                f"[COMMAND_EXECUTOR] Read {name} from register {address}: "
+                                f"raw={raw_value}, scaled={scaled_value}"
+                            )
+                        else:
+                            logger.warning(f"[COMMAND_EXECUTOR] Failed to read register {address}")
+                            settings[name] = None
+                    except Exception as e:
+                        logger.error(f"[COMMAND_EXECUTOR] Error reading register {reg_def['address']}: {e}")
+                        settings[reg_def["name"]] = None
+
+                logger.info(f"[COMMAND_EXECUTOR] ✓ Successfully queried settings: {settings}")
+                return CommandResult(
+                    success=True,
+                    command_type=command_type,
+                    device_id=device_state.device_id,
+                    values=list(settings.values()),
+                    error=None,
+                )
+
             # Validate parameters
             is_valid, error_msg = validate_command_params(cmd_def, params)
             if not is_valid:

@@ -37,6 +37,15 @@ class OperatingMode(int, Enum):
 
 
 INVERTER_COMMANDS: Dict[str, Dict[str, Any]] = {
+    "query_settings": {
+        "operation": "read",  # Special read-only operation
+        "registers": [
+            {"address": 40001, "name": "power_limit", "scale": 0.1},  # Power limit %
+            {"address": 40002, "name": "operating_mode", "scale": 1},  # Operating mode
+            {"address": 40003, "name": "reactive_power", "scale": 0.1},  # Reactive power %
+        ],
+        "description": "Query current settings from inverter",
+    },
     "set_power_limit": {
         "register": 40001,
         "size": 1,
