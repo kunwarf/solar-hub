@@ -320,15 +320,19 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
         }));
 
         // Merge with defaults to handle new widgets
-        const mergedLayout = widgetConfigs.map(config => {
-          const savedItem = apiLayout.find(item => item.id === config.id);
-          return savedItem || {
-            id: config.id,
-            visible: config.defaultVisible,
-            size: config.defaultSize,
-            settings: config.settings || {},
-          };
-        });
+        // IMPORTANT: Start with apiLayout to preserve saved order, then add new widgets
+        const mergedLayout = [
+          ...apiLayout,
+          // Add any new widgets that don't exist in saved layout
+          ...widgetConfigs
+            .filter(config => !apiLayout.find(item => item.id === config.id))
+            .map(config => ({
+              id: config.id,
+              visible: config.defaultVisible,
+              size: config.defaultSize,
+              settings: config.settings || {},
+            }))
+        ];
 
         setLayout(mergedLayout);
         setGridLayoutState(prefs.grid_layout as GridLayout);

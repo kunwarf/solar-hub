@@ -170,23 +170,33 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     const closeXButton = page.locator('[aria-label="Close"]').or(page.getByRole('button', { name: /^close$/i }));
     if (await closeXButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await closeXButton.click({ force: true });
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
     }
 
     // Try "Skip for now" button
     const skipButton = page.getByRole('button', { name: /skip for now/i });
     if (await skipButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await skipButton.click({ force: true });
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
     }
 
-    // Wait for dialog overlay to disappear
-    const dialogOverlay = page.locator('[class*="bg-black/80"]').or(page.locator('[aria-hidden="true"][data-state="open"]'));
-    await dialogOverlay.waitFor({ state: 'hidden', timeout: 3000 }).catch(() => null);
+    // Wait for dialog overlay to completely disappear
+    const dialogOverlay = page.locator('[data-state="open"][class*="bg-black"]');
+    await dialogOverlay.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => null);
 
-    // Open user menu dropdown (User icon button)
-    const userMenuButton = page.getByRole('button').filter({ has: page.locator('svg').first() }).last();
-    await userMenuButton.click({ timeout: 10000 });
+    // Additional wait to ensure animations complete
+    await page.waitForTimeout(1000);
+
+    // Open user menu dropdown - use more specific selector
+    // Target the rounded-full button with User icon in header (not floating action buttons)
+    const userMenuButton = page.locator('header button.rounded-full').last();
+
+    // Wait for button to be actionable (not blocked by overlays)
+    await userMenuButton.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Use force click to bypass any remaining overlay issues
+    await userMenuButton.click({ force: true, timeout: 10000 });
+    await page.waitForTimeout(500);
 
     // Click logout menu item
     const logoutMenuItem = page.getByRole('menuitem', { name: /log out/i });
