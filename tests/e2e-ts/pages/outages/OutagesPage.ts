@@ -50,9 +50,9 @@ export class OutagesPage extends BasePage {
     super(page);
 
     // Main elements
-    this.pageTitle = page.getByRole('heading', { name: /outages|grid.*monitor/i });
+    this.pageTitle = page.getByRole('heading', { name: /^outage management$/i }).first();
     this.gridStatusIndicator = page.getByTestId('grid-status')
-      .or(page.locator('[class*="grid-status"]'));
+      .or(page.getByText(/grid online|grid offline/i));
     this.currentStatusCard = page.getByTestId('current-status-card');
     this.outageHistoryTable = page.getByTestId('outage-history-table')
       .or(page.locator('table'));

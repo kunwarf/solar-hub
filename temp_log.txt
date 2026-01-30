@@ -1,0 +1,34 @@
+INFO:     Will watch for changes in these directories: ['C:\\Users\\kunwa\\PycharmProjects\\solar-hub\\system_a']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [12608] using WatchFiles
+C:\Users\kunwa\AppData\Roaming\Python\Python313\site-packages\pydantic\_internal\_fields.py:198: UserWarning: Field name "register" in "IdentificationConfigSchema" shadows an attribute in parent "BaseModel"
+  warnings.warn(
+C:\Users\kunwa\AppData\Roaming\Python\Python313\site-packages\pydantic\_internal\_fields.py:198: UserWarning: Field name "register" in "SerialNumberConfigSchema" shadows an attribute in parent "BaseModel"
+  warnings.warn(
+INFO:     Started server process [41068]
+INFO:     Waiting for application startup.
+2026-01-29 20:56:29 | INFO     | system_a | Starting Solar Hub Platform v1.0.0
+2026-01-29 20:56:29 | INFO     | system_a | Environment: development
+2026-01-29 20:56:29 | INFO     | system_a | Debug mode: True
+2026-01-29 20:56:29 | INFO     | system_a | CORS allowed origins: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173', 'http://localhost:8080', 'http://127.0.0.1:8080']
+2026-01-29 20:56:29 | INFO     | system_a | Database initialized successfully
+2026-01-29 20:56:29 | INFO     | system_a | Redis connection established
+2026-01-29 20:56:29 | DEBUG    | tzlocal | Looking up time zone info from registry
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-29 20:56:29 | INFO     | app.infrastructure.scheduler.jobs | Registered 3 telemetry sync jobs
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-29 20:56:29 | INFO     | app.infrastructure.scheduler.billing_jobs | Registered 2 billing scheduler jobs
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Added job "Hourly telemetry sync" to job store "default"
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Added job "Daily telemetry rollup" to job store "default"
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Added job "Monthly telemetry rollup" to job store "default"
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Added job "Daily billing computation" to job store "default"
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Added job "Billing cycle settlement check" to job store "default"
+2026-01-29 20:56:29 | INFO     | apscheduler.scheduler | Scheduler started
+2026-01-29 20:56:29 | INFO     | app.infrastructure.scheduler.scheduler | Telemetry sync scheduler started
+2026-01-29 20:56:29 | INFO     | system_a | Telemetry sync scheduler started
+2026-01-29 20:56:29 | DEBUG    | apscheduler.scheduler | Looking for jobs to run
+2026-01-29 20:56:29 | DEBUG    | apscheduler.scheduler | Next wakeup is due at 2026-01-29 21:05:00+05:00 (in 510.546650 seconds)
+INFO:     Application startup complete.

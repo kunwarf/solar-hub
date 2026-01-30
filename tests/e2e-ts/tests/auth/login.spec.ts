@@ -165,12 +165,20 @@ test.describe('Auth - Login', { tag: '@auth' }, () => {
     const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('solar_hub_access_token'));
     expect(tokenBeforeLogout).toBeTruthy();
 
-    // Find and click logout button (try multiple possible locations)
-    const logoutButton = page.getByRole('button', { name: /logout|log out|sign out/i })
-      .or(page.getByRole('menuitem', { name: /logout|log out|sign out/i }))
-      .or(page.getByText(/logout|log out|sign out/i).first());
+    // Dismiss onboarding wizard if present (it blocks interactions)
+    const closeButton = page.getByRole('button', { name: /close|skip/i });
+    if (await closeButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await closeButton.click();
+      await page.waitForTimeout(500);
+    }
 
-    await logoutButton.click({ timeout: 10000 });
+    // Open user menu dropdown (User icon button)
+    const userMenuButton = page.getByRole('button').filter({ has: page.locator('svg').first() }).last();
+    await userMenuButton.click({ timeout: 10000 });
+
+    // Click logout menu item
+    const logoutMenuItem = page.getByRole('menuitem', { name: /log out/i });
+    await logoutMenuItem.click({ timeout: 10000 });
 
     // Wait for redirect to login page
     await expect(page).toHaveURL(/.*auth/, { timeout: 10000 });

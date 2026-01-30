@@ -46,11 +46,12 @@ export class DeviceListPage extends BasePage {
     this.filterDropdown = page.getByTestId('filter-dropdown')
       .or(page.getByRole('button', { name: /filter/i }));
 
-    // Device list
+    // Device list (grid layout, not table)
     this.deviceTable = page.getByTestId('device-table')
       .or(page.locator('table'));
+    // Device cards are identified by their headings (h3 with device names)
     this.deviceCards = page.getByTestId('device-card')
-      .or(page.locator('[class*="device-card"]'));
+      .or(page.locator('h3').filter({ hasText: /inverter|battery|meter|solar|device/i }).locator('..'));
 
     // Table headers
     this.nameHeader = page.getByRole('columnheader', { name: /name/i });
@@ -314,14 +315,19 @@ export class DeviceListPage extends BasePage {
       // Ignore if error toast doesn't exist
     });
 
-    // Wait for page to be loaded (check for key elements with longer timeout)
+    // Wait for page to be loaded
     await this.page.waitForLoadState('domcontentloaded');
 
-    // Should show devices or empty state (more forgiving check)
+    // Check for content that indicates the page loaded successfully
     const hasContent = await Promise.race([
-      this.deviceTable.first().isVisible({ timeout: 15000 }).catch(() => false),
-      this.deviceCards.first().isVisible({ timeout: 15000 }).catch(() => false),
+      // Look for the device count text
+      this.page.getByText(/showing \d+ of \d+ devices?/i).isVisible({ timeout: 15000 }).catch(() => false),
+      // Look for device headings (device names)
+      this.page.locator('h3').first().isVisible({ timeout: 15000 }).catch(() => false),
+      // Look for empty state
       this.noDevicesMessage.isVisible({ timeout: 15000 }).catch(() => false),
+      // Look for "No Devices" in EmptyState component
+      this.page.getByText(/no devices/i).isVisible({ timeout: 15000 }).catch(() => false),
     ]);
 
     expect(hasContent).toBe(true);

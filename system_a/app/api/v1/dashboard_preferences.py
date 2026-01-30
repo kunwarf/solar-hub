@@ -90,65 +90,89 @@ async def update_dashboard_preferences(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
     """Update current user's dashboard preferences."""
-    # Get existing preferences or create new
-    prefs = await uow.dashboard_preferences.get_by_user_id(current_user.id)
+    try:
+        logger.info(f"[DASHBOARD_PREFS] Starting update for user {current_user.id}")
+        logger.info(f"[DASHBOARD_PREFS] Request data: preset={request.layout_preset}, grid={request.grid_layout}, widgets={len(request.widget_layout) if request.widget_layout else 0}")
 
-    if not prefs:
-        # Create new preferences
-        prefs = DashboardPreferences(
-            user_id=current_user.id,
-            layout_preset=request.layout_preset or "standard",
-            grid_layout=GridLayout(request.grid_layout) if request.grid_layout else GridLayout.LIST,
+        # Get existing preferences or create new
+        logger.info(f"[DASHBOARD_PREFS] Fetching existing preferences for user {current_user.id}")
+        prefs = await uow.dashboard_preferences.get_by_user_id(current_user.id)
+        logger.info(f"[DASHBOARD_PREFS] Existing preferences found: {prefs is not None}")
+
+        if not prefs:
+            # Create new preferences
+            logger.info(f"[DASHBOARD_PREFS] Creating NEW preferences for user {current_user.id}")
+            prefs = DashboardPreferences(
+                user_id=current_user.id,
+                layout_preset=request.layout_preset or "standard",
+                grid_layout=GridLayout(request.grid_layout) if request.grid_layout else GridLayout.LIST,
+                widget_layout=[
+                    WidgetConfig(
+                        id=w.id,
+                        visible=w.visible,
+                        size=WidgetSize(w.size),
+                        settings=w.settings,
+                    )
+                    for w in (request.widget_layout or [])
+                ],
+            )
+            logger.info(f"[DASHBOARD_PREFS] Created new prefs: preset={prefs.layout_preset}, widgets={len(prefs.widget_layout)}")
+        else:
+            # Update existing preferences
+            logger.info(f"[DASHBOARD_PREFS] Updating EXISTING preferences for user {current_user.id}")
+            if request.layout_preset is not None:
+                logger.info(f"[DASHBOARD_PREFS] Updating preset to: {request.layout_preset}")
+                prefs.update_preset(request.layout_preset)
+
+            if request.grid_layout is not None:
+                logger.info(f"[DASHBOARD_PREFS] Updating grid_layout to: {request.grid_layout}")
+                prefs.update_grid_layout(GridLayout(request.grid_layout))
+
+            if request.widget_layout is not None:
+                logger.info(f"[DASHBOARD_PREFS] Updating widget_layout with {len(request.widget_layout)} widgets")
+                widget_configs = [
+                    WidgetConfig(
+                        id=w.id,
+                        visible=w.visible,
+                        size=WidgetSize(w.size),
+                        settings=w.settings,
+                    )
+                    for w in request.widget_layout
+                ]
+                prefs.update_widget_layout(widget_configs)
+                logger.info(f"[DASHBOARD_PREFS] Widget layout updated successfully")
+
+        # Upsert (insert or update)
+        logger.info(f"[DASHBOARD_PREFS] Calling upsert for user {current_user.id}")
+        saved_prefs = await uow.dashboard_preferences.upsert(prefs)
+        logger.info(f"[DASHBOARD_PREFS] Upsert completed, saved_prefs id: {saved_prefs.id if hasattr(saved_prefs, 'id') else 'NO_ID'}")
+
+        logger.info(f"[DASHBOARD_PREFS] Calling commit()")
+        await uow.commit()
+        logger.info(f"[DASHBOARD_PREFS] Commit completed successfully")
+
+        response_data = DashboardPreferencesResponse(
+            user_id=saved_prefs.user_id,
+            layout_preset=saved_prefs.layout_preset,
+            grid_layout=saved_prefs.grid_layout.value,
             widget_layout=[
-                WidgetConfig(
-                    id=w.id,
-                    visible=w.visible,
-                    size=WidgetSize(w.size),
-                    settings=w.settings,
-                )
-                for w in (request.widget_layout or [])
+                {
+                    "id": w.id,
+                    "visible": w.visible,
+                    "size": w.size.value,
+                    "settings": w.settings,
+                }
+                for w in saved_prefs.widget_layout
             ],
+            created_at=saved_prefs.created_at,
+            updated_at=saved_prefs.updated_at,
         )
-    else:
-        # Update existing preferences
-        if request.layout_preset is not None:
-            prefs.update_preset(request.layout_preset)
+        logger.info(f"[DASHBOARD_PREFS] Returning response with {len(response_data.widget_layout)} widgets")
+        return response_data
 
-        if request.grid_layout is not None:
-            prefs.update_grid_layout(GridLayout(request.grid_layout))
-
-        if request.widget_layout is not None:
-            widget_configs = [
-                WidgetConfig(
-                    id=w.id,
-                    visible=w.visible,
-                    size=WidgetSize(w.size),
-                    settings=w.settings,
-                )
-                for w in request.widget_layout
-            ]
-            prefs.update_widget_layout(widget_configs)
-
-    # Upsert (insert or update)
-    saved_prefs = await uow.dashboard_preferences.upsert(prefs)
-    await uow.commit()
-
-    return DashboardPreferencesResponse(
-        user_id=saved_prefs.user_id,
-        layout_preset=saved_prefs.layout_preset,
-        grid_layout=saved_prefs.grid_layout.value,
-        widget_layout=[
-            {
-                "id": w.id,
-                "visible": w.visible,
-                "size": w.size.value,
-                "settings": w.settings,
-            }
-            for w in saved_prefs.widget_layout
-        ],
-        created_at=saved_prefs.created_at,
-        updated_at=saved_prefs.updated_at,
-    )
+    except Exception as e:
+        logger.error(f"[DASHBOARD_PREFS] ERROR in update_dashboard_preferences: {str(e)}", exc_info=True)
+        raise
 
 
 @router.get(

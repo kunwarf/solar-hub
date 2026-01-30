@@ -2,6 +2,7 @@
 SQLAlchemy Unit of Work implementation.
 """
 from typing import List, Optional
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -16,6 +17,8 @@ from .repositories.dashboard_repository import (
     SQLAlchemyDashboardPreferencesRepository,
     SQLAlchemyCustomPresetRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SQLAlchemyUnitOfWork(UnitOfWork):
@@ -129,7 +132,11 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
     async def commit(self) -> None:
         """Commit current transaction."""
         if self._session:
+            logger.info("[UOW_COMMIT] Committing transaction")
             await self._session.commit()
+            logger.info("[UOW_COMMIT] Transaction committed successfully")
+        else:
+            logger.warning("[UOW_COMMIT] No session to commit!")
 
     async def rollback(self) -> None:
         """Rollback current transaction."""

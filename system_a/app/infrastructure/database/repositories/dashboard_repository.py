@@ -3,6 +3,7 @@ SQLAlchemy implementation of Dashboard repositories.
 """
 from typing import List, Optional
 from uuid import UUID
+import logging
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,8 @@ from ....application.interfaces.repositories import (
 )
 from ....domain.entities.dashboard import DashboardPreferences, CustomPreset
 from ..models.dashboard_model import DashboardPreferencesModel, CustomPresetModel
+
+logger = logging.getLogger(__name__)
 
 
 class SQLAlchemyDashboardPreferencesRepository(DashboardPreferencesRepository):
@@ -61,11 +64,16 @@ class SQLAlchemyDashboardPreferencesRepository(DashboardPreferencesRepository):
         """Insert or update dashboard preferences for a user."""
         from datetime import datetime, timezone
 
+        logger.info(f"[REPO_UPSERT] Starting upsert for user {entity.user_id}")
+        logger.info(f"[REPO_UPSERT] Entity data: preset={entity.layout_preset}, grid={entity.grid_layout}, widgets={len(entity.widget_layout)}")
+
         # Use PostgreSQL's INSERT ... ON CONFLICT for upsert
         widget_layout_json = [w.to_dict() for w in entity.widget_layout]
+        logger.info(f"[REPO_UPSERT] Converted {len(widget_layout_json)} widgets to JSON")
 
         # Use current time if updated_at is None
         updated_at = entity.updated_at if entity.updated_at else datetime.now(timezone.utc)
+        logger.info(f"[REPO_UPSERT] Using updated_at: {updated_at}")
 
         stmt = insert(DashboardPreferencesModel).values(
             user_id=entity.user_id,
@@ -86,10 +94,19 @@ class SQLAlchemyDashboardPreferencesRepository(DashboardPreferencesRepository):
             }
         ).returning(DashboardPreferencesModel)
 
+        logger.info(f"[REPO_UPSERT] Executing INSERT ON CONFLICT statement")
         result = await self._session.execute(stmt)
+        logger.info(f"[REPO_UPSERT] Statement executed, fetching result")
+
         model = result.scalar_one()
+        logger.info(f"[REPO_UPSERT] Got model from result: {model.user_id if model else 'None'}")
+
         await self._session.flush()
-        return model.to_domain()
+        logger.info(f"[REPO_UPSERT] Session flushed")
+
+        domain_entity = model.to_domain()
+        logger.info(f"[REPO_UPSERT] Converted to domain entity, returning")
+        return domain_entity
 
     async def delete(self, id: UUID) -> bool:
         """Delete dashboard preferences by user ID."""
