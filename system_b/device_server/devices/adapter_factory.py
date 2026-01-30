@@ -4,6 +4,7 @@ Adapter factory for creating device adapters.
 Creates appropriate adapter instances based on protocol definitions,
 with TCP connection wrapping for data logger communication.
 """
+import asyncio
 import importlib
 import json
 import logging
@@ -54,6 +55,9 @@ class TCPModbusAdapter:
         # Transaction tracking
         self._transaction_id = 0
 
+        # Lock for serializing Modbus operations (prevents concurrent access)
+        self._modbus_lock = asyncio.Lock()
+
     def _next_transaction_id(self) -> int:
         """Get next Modbus transaction ID."""
         self._transaction_id = (self._transaction_id + 1) & 0xFFFF
@@ -79,52 +83,53 @@ class TCPModbusAdapter:
         """
         import struct
 
-        transaction_id = self._next_transaction_id()
+        async with self._modbus_lock:
+            transaction_id = self._next_transaction_id()
 
-        # Build Modbus TCP request
-        # MBAP header: Transaction ID (2) | Protocol ID (2) | Length (2) | Unit ID (1)
-        # PDU: Function (1) | Start Address (2) | Quantity (2)
-        pdu = struct.pack(">BHH", 0x03, addr, count)
-        mbap = struct.pack(
-            ">HHHB",
-            transaction_id,
-            0,  # Protocol ID
-            len(pdu) + 1,
-            self.unit_id,
-        )
+            # Build Modbus TCP request
+            # MBAP header: Transaction ID (2) | Protocol ID (2) | Length (2) | Unit ID (1)
+            # PDU: Function (1) | Start Address (2) | Quantity (2)
+            pdu = struct.pack(">BHH", 0x03, addr, count)
+            mbap = struct.pack(
+                ">HHHB",
+                transaction_id,
+                0,  # Protocol ID
+                len(pdu) + 1,
+                self.unit_id,
+            )
 
-        request = mbap + pdu
+            request = mbap + pdu
 
-        # Send and receive
-        await self.connection.write(request, timeout=self.timeout)
+            # Send and receive
+            await self.connection.write(request, timeout=self.timeout)
 
-        # Read response header
-        header = await self.connection.read(9, timeout=self.timeout)
+            # Read response header
+            header = await self.connection.read(9, timeout=self.timeout)
 
-        # Parse MBAP
-        resp_trans_id, _, length, resp_unit_id = struct.unpack(">HHHB", header[:7])
+            # Parse MBAP
+            resp_trans_id, _, length, resp_unit_id = struct.unpack(">HHHB", header[:7])
 
-        if resp_trans_id != transaction_id:
-            raise ValueError(f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}")
+            if resp_trans_id != transaction_id:
+                raise ValueError(f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}")
 
-        # Check function code
-        function_code = header[7]
-        if function_code & 0x80:
-            # Exception response
-            raise ValueError(f"Modbus exception: {header[8]}")
+            # Check function code
+            function_code = header[7]
+            if function_code & 0x80:
+                # Exception response
+                raise ValueError(f"Modbus exception: {header[8]}")
 
-        # Read data
-        byte_count = header[8]
-        data = await self.connection.read(byte_count, timeout=self.timeout)
+            # Read data
+            byte_count = header[8]
+            data = await self.connection.read(byte_count, timeout=self.timeout)
 
-        # Parse registers
-        registers = []
-        for i in range(0, len(data), 2):
-            if i + 1 < len(data):
-                value = struct.unpack(">H", data[i:i + 2])[0]
-                registers.append(value)
+            # Parse registers
+            registers = []
+            for i in range(0, len(data), 2):
+                if i + 1 < len(data):
+                    value = struct.unpack(">H", data[i:i + 2])[0]
+                    registers.append(value)
 
-        return registers
+            return registers
 
     async def _write_holding_u16(self, addr: int, value: int) -> None:
         """
@@ -136,36 +141,37 @@ class TCPModbusAdapter:
         """
         import struct
 
-        logger.info(f"[SERVER->DEVICE] WRITE SINGLE addr={addr}, value={value}")
-        transaction_id = self._next_transaction_id()
+        async with self._modbus_lock:
+            logger.info(f"[SERVER->DEVICE] WRITE SINGLE addr={addr}, value={value}")
+            transaction_id = self._next_transaction_id()
 
-        # Function code 0x06: Write Single Register
-        pdu = struct.pack(">BHH", 0x06, addr, value)
-        mbap = struct.pack(
-            ">HHHB",
-            transaction_id,
-            0,
-            len(pdu) + 1,
-            self.unit_id,
-        )
+            # Function code 0x06: Write Single Register
+            pdu = struct.pack(">BHH", 0x06, addr, value)
+            mbap = struct.pack(
+                ">HHHB",
+                transaction_id,
+                0,
+                len(pdu) + 1,
+                self.unit_id,
+            )
 
-        request = mbap + pdu
+            request = mbap + pdu
 
-        await self.connection.write(request, timeout=self.timeout)
+            await self.connection.write(request, timeout=self.timeout)
 
-        # Read response (should echo back)
-        response = await self.connection.read(12, timeout=self.timeout)
+            # Read response (should echo back)
+            response = await self.connection.read(12, timeout=self.timeout)
 
-        # Verify response
-        resp_trans_id = struct.unpack(">H", response[:2])[0]
-        if resp_trans_id != transaction_id:
-            raise ValueError(f"Transaction ID mismatch")
+            # Verify response
+            resp_trans_id = struct.unpack(">H", response[:2])[0]
+            if resp_trans_id != transaction_id:
+                raise ValueError(f"Transaction ID mismatch")
 
-        function_code = response[7]
-        if function_code & 0x80:
-            raise ValueError(f"Modbus exception: {response[8]}")
+            function_code = response[7]
+            if function_code & 0x80:
+                raise ValueError(f"Modbus exception: {response[8]}")
 
-        logger.info(f"[SERVER<-DEVICE] WRITE SINGLE response: OK")
+            logger.info(f"[SERVER<-DEVICE] WRITE SINGLE response: OK")
 
     async def _write_holding_u16_list(
         self,
@@ -181,40 +187,41 @@ class TCPModbusAdapter:
         """
         import struct
 
-        logger.info(f"[SERVER->DEVICE] WRITE MULTIPLE addr={addr}, values={values}")
-        transaction_id = self._next_transaction_id()
+        async with self._modbus_lock:
+            logger.info(f"[SERVER->DEVICE] WRITE MULTIPLE addr={addr}, values={values}")
+            transaction_id = self._next_transaction_id()
 
-        # Function code 0x10: Write Multiple Registers
-        byte_count = len(values) * 2
-        pdu = struct.pack(">BHHB", 0x10, addr, len(values), byte_count)
+            # Function code 0x10: Write Multiple Registers
+            byte_count = len(values) * 2
+            pdu = struct.pack(">BHHB", 0x10, addr, len(values), byte_count)
 
-        for value in values:
-            pdu += struct.pack(">H", value)
+            for value in values:
+                pdu += struct.pack(">H", value)
 
-        mbap = struct.pack(
-            ">HHHB",
-            transaction_id,
-            0,
-            len(pdu) + 1,
-            self.unit_id,
-        )
+            mbap = struct.pack(
+                ">HHHB",
+                transaction_id,
+                0,
+                len(pdu) + 1,
+                self.unit_id,
+            )
 
-        request = mbap + pdu
+            request = mbap + pdu
 
-        await self.connection.write(request, timeout=self.timeout)
+            await self.connection.write(request, timeout=self.timeout)
 
-        # Read response
-        response = await self.connection.read(12, timeout=self.timeout)
+            # Read response
+            response = await self.connection.read(12, timeout=self.timeout)
 
-        resp_trans_id = struct.unpack(">H", response[:2])[0]
-        if resp_trans_id != transaction_id:
-            raise ValueError(f"Transaction ID mismatch")
+            resp_trans_id = struct.unpack(">H", response[:2])[0]
+            if resp_trans_id != transaction_id:
+                raise ValueError(f"Transaction ID mismatch")
 
-        function_code = response[7]
-        if function_code & 0x80:
-            raise ValueError(f"Modbus exception: {response[8]}")
+            function_code = response[7]
+            if function_code & 0x80:
+                raise ValueError(f"Modbus exception: {response[8]}")
 
-        logger.info(f"[SERVER<-DEVICE] WRITE MULTIPLE response: OK")
+            logger.info(f"[SERVER<-DEVICE] WRITE MULTIPLE response: OK")
 
     async def write_register(self, address: int, value: int) -> None:
         """
@@ -257,6 +264,9 @@ class TCPModbusAdapter:
             Dictionary of register ID to decoded value.
         """
         values: Dict[str, Any] = {}
+
+        # Note: _read_holding_regs already uses the lock, so multiple reads
+        # during polling are serialized automatically
 
         for reg in self.regs:
             reg_id = reg.get("id")
