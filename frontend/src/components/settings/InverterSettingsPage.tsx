@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -32,8 +32,15 @@ import {
   X,
   Plus,
   Trash2,
+  Loader2,
+  RefreshCw,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { deviceCommandsService } from "@/api/services/device-commands.service";
+import { mapSettingsToRegisters, mapRegistersToSettings } from "@/lib/register-field-mapping";
+import { loadDeviceSettings, saveDeviceSettings, updateSettingsFromDevice } from "@/lib/device-settings-storage";
+import { toast } from "@/hooks/use-toast";
 
 interface SettingRowProps {
   label: string;
@@ -308,7 +315,21 @@ const TOUTimeline = ({ windows }: { windows: TOUWindowData[] }) => {
   );
 };
 
-export function InverterSettingsPage() {
+interface InverterSettingsPageProps {
+  deviceId: string;
+}
+
+export function InverterSettingsPage({ deviceId }: InverterSettingsPageProps) {
+  // Loading and error states
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Original settings from device (for change detection)
+  const [originalSettings, setOriginalSettings] = useState<Record<string, any>>({});
+
+  // Current settings (edited by user)
   const [touWindows, setTouWindows] = useState<TOUWindowData[]>([
     { mode: "auto", startTime: "00:00", endTime: "07:00", power: 100, targetSoc: 50, enabled: true },
     { mode: "auto", startTime: "07:00", endTime: "09:00", power: 1000, targetSoc: 50, enabled: true },
@@ -320,10 +341,19 @@ export function InverterSettingsPage() {
 
   const [gridSettings, setGridSettings] = useState({
     peakShavingEnabled: false,
+    maxExportPower: 13000,
+    solarSellEnabled: true,
+    solarPriority: "load-first", // "battery-first" or "load-first"
   });
 
   const [specification, setSpecification] = useState({
     parallelMode: false,
+  });
+
+  const [batterySettings, setbatterySettings] = useState({
+    batteryCapacity: 1010,
+    maxChargeCurrent: 75,
+    maxDischargeCurrent: 100,
   });
 
   const [workMode, setWorkMode] = useState({
@@ -354,6 +384,198 @@ export function InverterSettingsPage() {
     generatorPeakShaving: false,
   });
 
+  // Load settings from device on mount
+  useEffect(() => {
+    loadSettingsFromDevice();
+  }, [deviceId]);
+
+  // Track changes
+  useEffect(() => {
+    if (Object.keys(originalSettings).length > 0) {
+      // Compare current state with original
+      const changed = JSON.stringify(getCurrentSettings()) !== JSON.stringify(originalSettings);
+      setHasChanges(changed);
+    }
+  }, [gridSettings, batterySettings, workMode, workModeDetail, auxiliarySettings, touWindows]);
+
+  const getCurrentSettings = () => {
+    return {
+      ...gridSettings,
+      ...batterySettings,
+      ...workMode,
+      ...workModeDetail,
+      ...auxiliarySettings,
+      // TOU windows would need separate handling
+    };
+  };
+
+  const loadSettingsFromDevice = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Try to load from cache first
+      const cached = loadDeviceSettings(deviceId);
+      if (cached && !cached.isStale) {
+        applySettingsToState(cached.settings);
+        setOriginalSettings(cached.settings);
+        setIsLoading(false);
+
+        // Still query device in background to update cache
+        queryDeviceInBackground();
+        return;
+      }
+
+      // Query device
+      await queryDevice();
+    } catch (err: any) {
+      console.error("Failed to load settings:", err);
+      setError(err.message || "Failed to load device settings");
+
+      // Try cache as fallback
+      const cached = loadDeviceSettings(deviceId);
+      if (cached) {
+        applySettingsToState(cached.settings);
+        setOriginalSettings(cached.settings);
+        toast({
+          title: "Using Cached Settings",
+          description: "Could not reach device, showing cached settings",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const queryDevice = async () => {
+    const response = await deviceCommandsService.querySettings(deviceId);
+
+    // Poll for completion
+    const result = await deviceCommandsService.waitForCommand(
+      deviceId,
+      response.command_id,
+      30000
+    );
+
+    if (result.status === 'completed' && result.result?.settings) {
+      const settings = result.result.settings;
+
+      // Save to cache
+      updateSettingsFromDevice(deviceId, 'inverter', settings);
+
+      // Apply to UI state
+      applySettingsToState(settings);
+      setOriginalSettings(settings);
+    } else {
+      throw new Error(result.error || "Failed to query settings");
+    }
+  };
+
+  const queryDeviceInBackground = async () => {
+    try {
+      await queryDevice();
+    } catch (err) {
+      // Silent fail for background update
+      console.warn("Background settings update failed:", err);
+    }
+  };
+
+  const applySettingsToState = (settings: Record<string, any>) => {
+    // Map register values to UI state
+    // This is a simplified version - you'd map all fields properly
+    if (settings.max_export_power_w !== undefined) {
+      setGridSettings(prev => ({ ...prev, maxExportPower: settings.max_export_power_w }));
+    }
+    if (settings.solar_sell !== undefined) {
+      setGridSettings(prev => ({ ...prev, solarSellEnabled: settings.solar_sell === 1 }));
+    }
+    if (settings.solar_priority !== undefined) {
+      setGridSettings(prev => ({
+        ...prev,
+        solarPriority: settings.solar_priority === 0 ? "battery-first" : "load-first"
+      }));
+    }
+    if (settings.battery_capacity_ah !== undefined) {
+      setbatterySettings(prev => ({ ...prev, batteryCapacity: settings.battery_capacity_ah }));
+    }
+    if (settings.battery_max_charge_current_a !== undefined) {
+      setbatterySettings(prev => ({ ...prev, maxChargeCurrent: settings.battery_max_charge_current_a }));
+    }
+    if (settings.battery_max_discharge_current_a !== undefined) {
+      setbatterySettings(prev => ({ ...prev, maxDischargeCurrent: settings.battery_max_discharge_current_a }));
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Get changed fields
+      const currentSettings = getCurrentSettings();
+      const changedFields: Record<string, any> = {};
+
+      for (const [key, value] of Object.entries(currentSettings)) {
+        if (originalSettings[key] !== value) {
+          changedFields[key] = value;
+        }
+      }
+
+      if (Object.keys(changedFields).length === 0) {
+        toast({ title: "No changes to save" });
+        return;
+      }
+
+      // Map UI fields to register IDs
+      const registerUpdates = mapSettingsToRegisters('inverter', changedFields);
+
+      // Send update command
+      const response = await deviceCommandsService.updateSettings(
+        deviceId,
+        registerUpdates,
+        true
+      );
+
+      // Poll for completion
+      const result = await deviceCommandsService.waitForCommand(
+        deviceId,
+        response.command_id,
+        60000 // 60 second timeout for writes
+      );
+
+      if (result.status === 'completed') {
+        // Update cache
+        if (result.result?.settings) {
+          updateSettingsFromDevice(deviceId, 'inverter', result.result.settings);
+          setOriginalSettings(getCurrentSettings());
+        }
+
+        setHasChanges(false);
+        toast({
+          title: "Settings Updated",
+          description: `Successfully updated ${Object.keys(changedFields).length} settings`,
+        });
+      } else {
+        throw new Error(result.error || "Update failed");
+      }
+    } catch (err: any) {
+      console.error("Failed to save settings:", err);
+      setError(err.message || "Failed to save settings");
+      toast({
+        title: "Save Failed",
+        description: err.message || "Could not update device settings",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    loadSettingsFromDevice();
+  };
+
   const updateTOUWindow = (index: number, data: TOUWindowData) => {
     const newWindows = [...touWindows];
     newWindows[index] = data;
@@ -372,22 +594,104 @@ export function InverterSettingsPage() {
     ]);
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+        <p className="text-sm text-muted-foreground">Loading device settings...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && Object.keys(originalSettings).length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="text-destructive mb-4">Failed to load settings</div>
+        <p className="text-sm text-muted-foreground mb-4">{error}</p>
+        <Button onClick={handleRefresh} variant="outline">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <Tabs defaultValue="system" className="w-full">
-      <TabsList className="grid w-full grid-cols-3 mb-6">
-        <TabsTrigger value="system" className="gap-2">
-          <Cpu className="w-4 h-4 hidden sm:block" />
-          System
-        </TabsTrigger>
-        <TabsTrigger value="power" className="gap-2">
-          <Power className="w-4 h-4 hidden sm:block" />
-          Power
-        </TabsTrigger>
-        <TabsTrigger value="scheduling" className="gap-2">
-          <Clock className="w-4 h-4 hidden sm:block" />
-          Scheduling
-        </TabsTrigger>
-      </TabsList>
+    <div className="space-y-4">
+      {/* Header with Save/Refresh buttons */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Inverter Settings</h2>
+          <p className="text-sm text-muted-foreground">
+            Configure your inverter parameters
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+            disabled={isLoading || isSaving}
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button
+            onClick={handleSave}
+            size="sm"
+            disabled={!hasChanges || isSaving}
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Warning if using cached data */}
+      {error && (
+        <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
+          <p className="text-sm text-warning">
+            ⚠️ Device offline - showing cached settings from{" "}
+            {new Date(loadDeviceSettings(deviceId)?.lastQueriedAt || "").toLocaleString()}
+          </p>
+        </div>
+      )}
+
+      {/* Changes indicator */}
+      {hasChanges && (
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
+          <p className="text-sm text-primary">
+            💡 You have unsaved changes. Click "Save Changes" to apply them to the device.
+          </p>
+        </div>
+      )}
+
+      <Tabs defaultValue="system" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="system" className="gap-2">
+            <Cpu className="w-4 h-4 hidden sm:block" />
+            System
+          </TabsTrigger>
+          <TabsTrigger value="power" className="gap-2">
+            <Power className="w-4 h-4 hidden sm:block" />
+            Power
+          </TabsTrigger>
+          <TabsTrigger value="scheduling" className="gap-2">
+            <Clock className="w-4 h-4 hidden sm:block" />
+            Scheduling
+          </TabsTrigger>
+        </TabsList>
 
       {/* SYSTEM TAB */}
       <TabsContent value="system" className="space-y-4">
@@ -453,11 +757,29 @@ export function InverterSettingsPage() {
             </AccordionTrigger>
             <AccordionContent className="pb-4">
               <SettingRow label="Battery Type" value="Lithium Battery" editable />
-              <SettingRow label="Battery Capacity" value="450" unit="Ah" editable />
+              <SettingRow
+                label="Battery Capacity"
+                value={batterySettings.batteryCapacity}
+                unit="Ah"
+                editable
+                onEdit={(v) => setbatterySettings({...batterySettings, batteryCapacity: parseInt(v)})}
+              />
               <SettingRow label="Battery Operation" value="State of Charge" editable />
               <div className="border-t border-border/50 my-3" />
-              <SettingRow label="Max Discharge Current" value="93" unit="A" editable />
-              <SettingRow label="Max Charge Current" value="56" unit="A" editable />
+              <SettingRow
+                label="Max Discharge Current"
+                value={batterySettings.maxDischargeCurrent}
+                unit="A"
+                editable
+                onEdit={(v) => setbatterySettings({...batterySettings, maxDischargeCurrent: parseInt(v)})}
+              />
+              <SettingRow
+                label="Max Charge Current"
+                value={batterySettings.maxChargeCurrent}
+                unit="A"
+                editable
+                onEdit={(v) => setbatterySettings({...batterySettings, maxChargeCurrent: parseInt(v)})}
+              />
               <SettingRow label="Max Grid Charge Current" value="19" unit="A" editable />
               <SettingRow label="Max Generator Charge Current" value="0" unit="A" editable />
               <SettingRow label="Max Grid Charger Power" value="1037" unit="W" editable />
