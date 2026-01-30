@@ -40,9 +40,12 @@ INVERTER_COMMANDS: Dict[str, Dict[str, Any]] = {
     "query_settings": {
         "operation": "read",  # Special read-only operation
         "registers": [
-            {"address": 40001, "name": "power_limit", "scale": 0.1},  # Power limit %
-            {"address": 40002, "name": "operating_mode", "scale": 1},  # Operating mode
-            {"address": 40003, "name": "reactive_power", "scale": 0.1},  # Reactive power %
+            {"address": 143, "name": "max_export_power_w", "scale": 1},  # Max Export Power (W)
+            {"address": 145, "name": "solar_sell", "scale": 1},  # Solar sell (0=disabled, 1=enabled)
+            {"address": 141, "name": "solar_priority", "scale": 1},  # 0=Battery first, 1=Load first
+            {"address": 108, "name": "battery_max_charge_current_a", "scale": 1},  # Battery max charge (A)
+            {"address": 109, "name": "battery_max_discharge_current_a", "scale": 1},  # Battery max discharge (A)
+            {"address": 102, "name": "battery_capacity_ah", "scale": 1},  # Battery capacity (Ah)
         ],
         "description": "Query current settings from inverter",
     },
