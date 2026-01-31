@@ -105,9 +105,12 @@ export function useDeviceSettings(
     setError(null);
 
     try {
+      console.log('[useDeviceSettings] Starting query for device:', deviceId);
       const response = await deviceCommandsService.querySettings(deviceId);
+      console.log('[useDeviceSettings] Command created:', response.command_id, 'status:', response.status);
 
       // Poll command status until complete
+      console.log('[useDeviceSettings] Polling for command completion...');
       const status = await deviceCommandsService.waitForCommand(
         deviceId,
         response.command_id,
@@ -115,8 +118,16 @@ export function useDeviceSettings(
         2000  // 2s poll interval
       );
 
+      console.log('[useDeviceSettings] Command completed with status:', status.status);
+      console.log('[useDeviceSettings] Has result?', !!status.result);
+      console.log('[useDeviceSettings] Has settings?', !!status.result?.settings);
+      if (status.result?.settings) {
+        console.log('[useDeviceSettings] Settings keys:', Object.keys(status.result.settings).length);
+      }
+
       if (status.status === 'completed' && status.result?.settings) {
         const deviceSettings = status.result.settings;
+        console.log('[useDeviceSettings] SUCCESS! Got settings:', Object.keys(deviceSettings).slice(0, 10));
 
         // Update localStorage cache
         updateSettingsFromDevice(deviceId, deviceType, deviceSettings);
@@ -131,13 +142,18 @@ export function useDeviceSettings(
         setUsingFallback(false);
         setLastSyncedAt(new Date().toISOString());
         setError(null);
+        console.log('[useDeviceSettings] State updated successfully');
       } else if (status.status === 'failed') {
+        console.error('[useDeviceSettings] Command failed:', status.error);
         throw new Error(status.error || 'Device query failed');
       } else {
+        console.error('[useDeviceSettings] Command timed out or invalid status:', status.status);
         throw new Error('Device query timed out');
       }
     } catch (err) {
-      console.error('Failed to query device settings:', err);
+      console.error('[useDeviceSettings] CATCH BLOCK - Error occurred:', err);
+      console.error('[useDeviceSettings] Error type:', err instanceof Error ? err.constructor.name : typeof err);
+      console.error('[useDeviceSettings] Error message:', err instanceof Error ? err.message : String(err));
       setError(err as Error);
       setIsStale(true);
       setIsDeviceOffline(true);
@@ -146,9 +162,12 @@ export function useDeviceSettings(
       markSettingsAsStale(deviceId);
 
       // FALLBACK: Try loading from database
+      console.log('[useDeviceSettings] Attempting database fallback...');
       const fallbackLoaded = await loadFromDatabase();
       if (!fallbackLoaded) {
-        console.warn('No fallback settings available in database');
+        console.warn('[useDeviceSettings] No fallback settings available in database');
+      } else {
+        console.log('[useDeviceSettings] Loaded from database fallback');
       }
     } finally {
       if (isMountedRef.current) {
