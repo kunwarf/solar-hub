@@ -129,7 +129,7 @@ const DeviceSettingsPageHybrid = () => {
     );
   }
 
-  const Icon = deviceIcons[device.type as keyof typeof deviceIcons] || Cpu;
+  const Icon = deviceIcons[device.device_type as keyof typeof deviceIcons] || Cpu;
 
   return (
     <AppLayout>
@@ -200,11 +200,11 @@ const DeviceSettingsPageHybrid = () => {
           <div className="flex items-center gap-4">
             <div className={cn(
               "w-12 h-12 rounded-xl flex items-center justify-center",
-              device.type === "inverter" && "bg-solar/20",
-              device.type === "battery" && "bg-battery/20",
-              device.type === "meter" && "bg-grid/20"
+              device.device_type === "inverter" && "bg-solar/20",
+              device.device_type === "battery" && "bg-battery/20",
+              device.device_type === "meter" && "bg-grid/20"
             )}>
-              <Icon className={cn("w-6 h-6", typeColors[device.type as keyof typeof typeColors])} />
+              <Icon className={cn("w-6 h-6", typeColors[device.device_type as keyof typeof typeColors])} />
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -258,24 +258,24 @@ const DeviceSettingsPageHybrid = () => {
             transition={{ delay: 0.1 }}
           >
             {(() => {
-              console.log('[DeviceSettingsHybrid] Inside settings conditional, device.type:', device.type);
+              console.log('[DeviceSettingsHybrid] Inside settings conditional, device.device_type:', device.device_type);
               return null;
             })()}
-            {device.type === "inverter" && (
+            {device.device_type === "inverter" && (
               <InverterConfigPage
                 deviceId={device.id}
                 deviceName={device.name}
                 settings={settings}
               />
             )}
-            {device.type === "battery" && (
+            {device.device_type === "battery" && (
               <BatteryConfigPage
                 deviceId={device.id}
                 deviceName={device.name}
                 settings={settings}
               />
             )}
-            {device.type === "meter" && (
+            {device.device_type === "meter" && (
               <MeterConfigPage
                 deviceId={device.id}
                 deviceName={device.name}

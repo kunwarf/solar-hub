@@ -100,6 +100,49 @@ test.describe('Investigate Device Settings Page', () => {
     console.log('Has refresh button:', hasRefreshButton);
     console.log('Has save button:', hasSaveButton);
 
+    // Check for React errors
+    const reactErrors = consoleLogs.filter(log =>
+      log.includes('Error') ||
+      log.includes('Warning') ||
+      log.includes('Failed')
+    );
+    if (reactErrors.length > 0) {
+      console.log('\n=== React Errors/Warnings ===');
+      reactErrors.forEach(log => console.log(log));
+    }
+
+    // Examine the actual DOM structure
+    console.log('\n=== DOM Structure Analysis ===');
+
+    // Check what's actually in the page
+    const bodyText = await page.locator('body').textContent();
+    console.log('Page contains "Configuration Content":', bodyText?.includes('Configuration Content'));
+    console.log('Page contains tab names:', {
+      hasGeneral: bodyText?.includes('General'),
+      hasBattery: bodyText?.includes('Battery'),
+      hasWorkMode: bodyText?.includes('Work Mode'),
+      hasAdapter: bodyText?.includes('Adapter'),
+    });
+
+    // Check for specific elements
+    const tabsCount = await page.locator('[role="tab"], [class*="tab"]').count();
+    const inputsCount = await page.locator('input, select, textarea').count();
+    const formsCount = await page.locator('form, [class*="form"]').count();
+
+    console.log('DOM elements:', {
+      tabs: tabsCount,
+      inputs: inputsCount,
+      forms: formsCount,
+    });
+
+    // Check if motion.div is rendering
+    const motionDivs = await page.locator('[class*="motion"], [style*="opacity"]').count();
+    console.log('Motion divs found:', motionDivs);
+
+    // Get the HTML structure of the main content area
+    const mainContent = await page.locator('[class*="p-6"]').last().innerHTML().catch(() => 'Could not get HTML');
+    console.log('Main content area HTML (first 500 chars):', mainContent.slice(0, 500));
+
     // Take screenshot
     await page.screenshot({
       path: 'tests/e2e-ts/screenshots/settings-page-investigation.png',
