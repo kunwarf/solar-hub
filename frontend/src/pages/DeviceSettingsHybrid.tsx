@@ -52,7 +52,7 @@ const DeviceSettingsPageHybrid = () => {
     queryDevice,
   } = useDeviceSettings({
     deviceId: deviceId!,
-    deviceType: device?.type || 'unknown',
+    deviceType: device?.device_type || 'unknown',
     enabled: !!device,
     pollInterval: 30000, // 30s
   });

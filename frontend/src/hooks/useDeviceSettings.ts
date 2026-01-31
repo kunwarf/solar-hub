@@ -268,7 +268,8 @@ export function useDeviceSettings(
         queryDevice();
       }
     }, pollInterval);
-  }, [enabled, pollInterval, queryDevice]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, pollInterval]);
 
   /**
    * Stop background polling
@@ -281,26 +282,25 @@ export function useDeviceSettings(
   }, []);
 
   /**
-   * Reset initialization flag when deviceId changes
-   */
-  useEffect(() => {
-    initializedRef.current = false;
-  }, [deviceId]);
-
-  /**
    * Initial load and polling setup (HYBRID MODE)
    */
   useEffect(() => {
     isMountedRef.current = true;
 
+    // Always set up cleanup, even if we return early
+    const cleanup = () => {
+      isMountedRef.current = false;
+      stopPolling();
+    };
+
     if (!enabled) {
       setIsLoading(false);
-      return;
+      return cleanup;
     }
 
     // Only initialize once per deviceId
     if (initializedRef.current) {
-      return;
+      return cleanup;
     }
 
     initializedRef.current = true;
@@ -336,10 +336,7 @@ export function useDeviceSettings(
     // Start background polling
     startPolling();
 
-    return () => {
-      isMountedRef.current = false;
-      stopPolling();
-    };
+    return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId, enabled]);
 
