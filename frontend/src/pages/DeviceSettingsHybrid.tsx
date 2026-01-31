@@ -54,7 +54,7 @@ const DeviceSettingsPageHybrid = () => {
     deviceId: deviceId!,
     deviceType: device?.device_type || 'unknown',
     enabled: !!device,
-    pollInterval: 30000, // 30s
+    pollInterval: 0, // Disable polling - only query on manual refresh
   });
 
   const handleSave = async () => {
