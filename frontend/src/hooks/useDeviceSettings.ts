@@ -69,6 +69,7 @@ export function useDeviceSettings(
   const queryClient = useQueryClient();
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+  const initializedRef = useRef(false);
 
   /**
    * Load settings from localStorage
@@ -280,6 +281,13 @@ export function useDeviceSettings(
   }, []);
 
   /**
+   * Reset initialization flag when deviceId changes
+   */
+  useEffect(() => {
+    initializedRef.current = false;
+  }, [deviceId]);
+
+  /**
    * Initial load and polling setup (HYBRID MODE)
    */
   useEffect(() => {
@@ -289,6 +297,13 @@ export function useDeviceSettings(
       setIsLoading(false);
       return;
     }
+
+    // Only initialize once per deviceId
+    if (initializedRef.current) {
+      return;
+    }
+
+    initializedRef.current = true;
 
     const initialize = async () => {
       // 1. Try localStorage first (instant)
@@ -325,14 +340,17 @@ export function useDeviceSettings(
       isMountedRef.current = false;
       stopPolling();
     };
-  }, [deviceId, enabled, loadCachedSettings, loadFromDatabase, queryDevice, startPolling, stopPolling]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId, enabled]);
 
   /**
    * Handle page visibility changes
    */
   useEffect(() => {
+    if (!enabled) return;
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && enabled) {
+      if (document.visibilityState === 'visible') {
         // Page became visible, query device immediately
         queryDevice();
       }
@@ -343,7 +361,8 @@ export function useDeviceSettings(
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, queryDevice]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
   /**
    * Multi-tab synchronization with BroadcastChannel
@@ -363,7 +382,8 @@ export function useDeviceSettings(
     return () => {
       channel.close();
     };
-  }, [deviceId, enabled, loadCachedSettings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId, enabled]);
 
   return {
     settings,
