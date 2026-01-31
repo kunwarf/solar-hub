@@ -36,6 +36,7 @@ interface MeterConfig {
 interface MeterConfigPageProps {
   deviceId?: string;
   deviceName?: string;
+  settings?: Record<string, any>;
 }
 
 // Mock available USB serial ports
@@ -48,7 +49,9 @@ const availableSerialPorts = [
   { value: "COM3", label: "COM3 (Windows)" },
 ];
 
-export function MeterConfigPage({ deviceId, deviceName }: MeterConfigPageProps) {
+export function MeterConfigPage({ deviceId, deviceName, settings }: MeterConfigPageProps) {
+  // TODO: Use settings prop to initialize config from actual device data
+  console.log('[MeterConfigPage] Settings:', settings ? Object.keys(settings).length + ' keys' : 'none');
   const [config, setConfig] = useState<MeterConfig>({
     id: deviceId || "grid_meter_1",
     name: deviceName || "IAMMeter",

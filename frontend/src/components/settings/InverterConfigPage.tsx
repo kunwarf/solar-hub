@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,10 +19,11 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { 
+import {
   Cpu, Plus, Trash2, Sun, Shield, Settings2, Plug, Power, Clock, Info, Zap, Battery, Edit3, Check, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { mapApiSettingsToConfig, mapApiSettingsToTOUWindows, type InverterConfig, type TOUWindowData } from "@/lib/settings-mapper";
 
 // ============== Reusable Components ==============
 
@@ -403,85 +404,111 @@ const AVAILABLE_USB_PORTS = [
 interface InverterConfigPageProps {
   deviceId?: string;
   deviceName?: string;
+  settings?: Record<string, any>;
 }
 
-export function InverterConfigPage({ deviceId, deviceName }: InverterConfigPageProps) {
-  const [config, setConfig] = useState<InverterConfig>({
-    id: deviceId || "powdrive2",
-    name: deviceName || "Powdrive",
-    array_id: "array1",
-    adapter: {
-      type: "powdrive",
-      transport: "rtu",
-      unit_id: 1,
-      serial_port: "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_CVCLe12CJ06-if00-port0",
-      baudrate: 9600,
-      parity: "N",
-      stopbits: 1,
-      bytesize: 8,
-      register_map_file: "register_maps/powdrive_registers.json",
-      host: "192.168.1.100",
-      port: 502,
-    },
-    safety: {
-      max_batt_voltage_v: 52,
-      max_charge_a: 100,
-      max_discharge_a: 100,
-    },
-    solar: [
-      { pv_dc_kw: 15.4, tilt_deg: 28, azimuth_deg: 180, perf_ratio: 0.82, albedo: 0.2 },
-    ],
-    specification: {
-      driver: "powdrive",
-      serialNumber: "2406130030",
-      protocolVersion: 260,
-      maxAcOutputPower: 356935.3,
-      mpptConnections: 3,
-      parallelMode: false,
-      modbusNumber: 1,
-    },
-    gridSettings: {
-      voltageHigh: 26.5,
-      voltageLow: 0,
-      frequency: 50.42,
-      frequencyHigh: 0.52,
-      frequencyLow: 0.48,
-      peakShavingEnabled: false,
-    },
-    batteryConfig: {
-      type: "Lithium Battery",
-      capacity: 450,
-      operation: "State of Charge",
-      maxDischargeCurrent: 93,
-      maxChargeCurrent: 56,
-      maxGridChargeCurrent: 19,
-      maxGeneratorChargeCurrent: 0,
-      maxGridChargerPower: 1037,
-      maxChargerPower: 3859,
-      maxDischargerPower: 5000,
-    },
-    workMode: {
-      remoteSwitch: true,
-      gridCharge: false,
-      generatorCharge: false,
-      forceGeneratorOn: false,
-      outputShutdownCapacity: 10,
-      stopBatteryDischargeCapacity: 35,
-      startBatteryDischargeCapacity: 40,
-      startGridChargeCapacity: 50,
-      offGridMode: true,
-      offGridStartupBatteryCapacity: 40,
-    },
+export function InverterConfigPage({ deviceId, deviceName, settings }: InverterConfigPageProps) {
+  // Initialize config from actual device settings or use defaults
+  const [config, setConfig] = useState<InverterConfig>(() => {
+    if (settings && Object.keys(settings).length > 0) {
+      console.log('[InverterConfigPage] Initializing from device settings:', Object.keys(settings).length, 'settings');
+      return mapApiSettingsToConfig(settings, deviceId, deviceName);
+    }
+    console.log('[InverterConfigPage] Using default config (no settings provided)');
+    // Default config as fallback
+    return {
+      id: deviceId || "powdrive2",
+      name: deviceName || "Powdrive",
+      array_id: "array1",
+      adapter: {
+        type: "powdrive",
+        transport: "rtu",
+        unit_id: 1,
+        serial_port: "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_CVCLe12CJ06-if00-port0",
+        baudrate: 9600,
+        parity: "N",
+        stopbits: 1,
+        bytesize: 8,
+        register_map_file: "register_maps/powdrive_registers.json",
+        host: "192.168.1.100",
+        port: 502,
+      },
+      safety: {
+        max_batt_voltage_v: 52,
+        max_charge_a: 100,
+        max_discharge_a: 100,
+      },
+      solar: [
+        { pv_dc_kw: 15.4, tilt_deg: 28, azimuth_deg: 180, perf_ratio: 0.82, albedo: 0.2 },
+      ],
+      specification: {
+        driver: "powdrive",
+        serialNumber: "2406130030",
+        protocolVersion: 260,
+        maxAcOutputPower: 13000,
+        mpptConnections: 3,
+        parallelMode: false,
+        modbusNumber: 1,
+      },
+      gridSettings: {
+        voltageHigh: 26.5,
+        voltageLow: 0,
+        frequency: 50.42,
+        frequencyHigh: 0.52,
+        frequencyLow: 0.48,
+        peakShavingEnabled: false,
+      },
+      batteryConfig: {
+        type: "Lithium Battery",
+        capacity: 450,
+        operation: "State of Charge",
+        maxDischargeCurrent: 93,
+        maxChargeCurrent: 56,
+        maxGridChargeCurrent: 19,
+        maxGeneratorChargeCurrent: 0,
+        maxGridChargerPower: 1037,
+        maxChargerPower: 3859,
+        maxDischargerPower: 5000,
+      },
+      workMode: {
+        remoteSwitch: true,
+        gridCharge: false,
+        generatorCharge: false,
+        forceGeneratorOn: false,
+        outputShutdownCapacity: 10,
+        stopBatteryDischargeCapacity: 35,
+        startBatteryDischargeCapacity: 40,
+        startGridChargeCapacity: 50,
+        offGridMode: true,
+        offGridStartupBatteryCapacity: 40,
+      },
+    };
   });
 
-  const [touWindows, setTouWindows] = useState<TOUWindowData[]>([
-    { mode: "auto", startTime: "00:00", endTime: "07:00", power: 100, targetSoc: 50, enabled: true },
-    { mode: "auto", startTime: "07:00", endTime: "09:00", power: 1000, targetSoc: 50, enabled: true },
-    { mode: "charge", startTime: "09:00", endTime: "15:00", power: 3000, targetSoc: 98, enabled: true },
-    { mode: "auto", startTime: "15:00", endTime: "17:00", power: 1120, targetSoc: 98, enabled: true },
-    { mode: "discharge", startTime: "17:00", endTime: "23:00", power: 2400, targetSoc: 50, enabled: true },
-    { mode: "auto", startTime: "23:00", endTime: "00:00", power: 1000, targetSoc: 50, enabled: true },
-  ]);
+  const [touWindows, setTouWindows] = useState<TOUWindowData[]>(() => {
+    if (settings && Object.keys(settings).length > 0) {
+      console.log('[InverterConfigPage] Initializing TOU windows from device settings');
+      return mapApiSettingsToTOUWindows(settings);
+    }
+    console.log('[InverterConfigPage] Using default TOU windows');
+    return [
+      { mode: "auto", startTime: "00:00", endTime: "07:00", power: 100, targetSoc: 50, enabled: true },
+      { mode: "auto", startTime: "07:00", endTime: "09:00", power: 1000, targetSoc: 50, enabled: true },
+      { mode: "charge", startTime: "09:00", endTime: "15:00", power: 3000, targetSoc: 98, enabled: true },
+      { mode: "auto", startTime: "15:00", endTime: "17:00", power: 1120, targetSoc: 98, enabled: true },
+      { mode: "discharge", startTime: "17:00", endTime: "23:00", power: 2400, targetSoc: 50, enabled: true },
+      { mode: "auto", startTime: "23:00", endTime: "00:00", power: 1000, targetSoc: 50, enabled: true },
+    ];
+  });
+
+  // Update config when settings change
+  useEffect(() => {
+    if (settings && Object.keys(settings).length > 0) {
+      console.log('[InverterConfigPage] Settings updated, refreshing config');
+      setConfig(mapApiSettingsToConfig(settings, deviceId, deviceName));
+      setTouWindows(mapApiSettingsToTOUWindows(settings));
+    }
+  }, [settings, deviceId, deviceName]);
 
   const updateAdapter = (key: keyof InverterConfig["adapter"], value: string | number) => {
     setConfig(prev => ({ ...prev, adapter: { ...prev.adapter, [key]: value } }));

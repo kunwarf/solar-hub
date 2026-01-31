@@ -249,13 +249,25 @@ const DeviceSettingsPageHybrid = () => {
             transition={{ delay: 0.1 }}
           >
             {device.type === "inverter" && (
-              <InverterConfigPage deviceId={device.id} deviceName={device.name} />
+              <InverterConfigPage
+                deviceId={device.id}
+                deviceName={device.name}
+                settings={settings}
+              />
             )}
             {device.type === "battery" && (
-              <BatteryConfigPage deviceId={device.id} deviceName={device.name} />
+              <BatteryConfigPage
+                deviceId={device.id}
+                deviceName={device.name}
+                settings={settings}
+              />
             )}
             {device.type === "meter" && (
-              <MeterConfigPage deviceId={device.id} deviceName={device.name} />
+              <MeterConfigPage
+                deviceId={device.id}
+                deviceName={device.name}
+                settings={settings}
+              />
             )}
           </motion.div>
         )}

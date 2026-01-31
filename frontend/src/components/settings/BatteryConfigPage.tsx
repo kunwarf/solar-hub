@@ -40,6 +40,7 @@ interface BatteryConfig {
 interface BatteryConfigPageProps {
   deviceId?: string;
   deviceName?: string;
+  settings?: Record<string, any>;
 }
 
 // Mock available USB serial ports
@@ -52,7 +53,9 @@ const availableSerialPorts = [
   { value: "COM3", label: "COM3 (Windows)" },
 ];
 
-export function BatteryConfigPage({ deviceId, deviceName }: BatteryConfigPageProps) {
+export function BatteryConfigPage({ deviceId, deviceName, settings }: BatteryConfigPageProps) {
+  // TODO: Use settings prop to initialize config from actual device data
+  console.log('[BatteryConfigPage] Settings:', settings ? Object.keys(settings).length + ' keys' : 'none');
   const [config, setConfig] = useState<BatteryConfig>({
     id: deviceId || "battery1",
     name: deviceName || "Pylontech Battery Bank",
