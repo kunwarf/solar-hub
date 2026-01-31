@@ -125,26 +125,34 @@ async def query_device_settings(
     system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ) -> QuerySettingsResponse:
     """Query current settings from the physical device."""
-    logger.info(
-        "[query-settings] Request from user=%s, device_id=%s, setting_keys=%s",
-        current_user.email,
-        device_id,
-        request.setting_keys,
-    )
+    logger.info("=" * 100)
+    logger.info("[query-settings] ===== QUERY SETTINGS API CALL START =====")
+    logger.info("[query-settings] User: %s", current_user.email)
+    logger.info("[query-settings] Device ID: %s", device_id)
+    logger.info("[query-settings] Setting keys: %s", request.setting_keys or "ALL")
+    logger.info("=" * 100)
 
     await check_device_access(device_id, current_user, uow)
 
     # Get device to find site_id
     device = await uow.devices.get_by_id(device_id)
-    logger.info(
-        "[query-settings] Device found: serial=%s, site_id=%s",
-        device.serial_number,
-        device.site_id,
-    )
+    logger.info("[query-settings] Device found:")
+    logger.info("[query-settings]   - Name: %s", device.name)
+    logger.info("[query-settings]   - Serial: %s", device.serial_number)
+    logger.info("[query-settings]   - Site ID: %s", device.site_id)
 
     try:
         # Send query command to device via System B
-        logger.info("[query-settings] Calling System B send_command API...")
+        logger.info("-" * 100)
+        logger.info("[query-settings] STEP 1: Sending command to System B")
+        logger.info("[query-settings] Endpoint: POST /api/v1/commands/")
+        logger.info("[query-settings] Payload:")
+        logger.info("[query-settings]   - device_id: %s", device_id)
+        logger.info("[query-settings]   - site_id: %s", device.site_id)
+        logger.info("[query-settings]   - command_type: query_settings")
+        logger.info("[query-settings]   - priority: 7")
+        logger.info("[query-settings]   - expires_in: 5 minutes")
+
         command_response = await system_b_client.send_command(
             device_id=device_id,
             site_id=device.site_id,
@@ -152,31 +160,66 @@ async def query_device_settings(
             command_params={
                 "setting_keys": request.setting_keys,
             } if request.setting_keys else None,
-            device_serial=device.serial_number,  # Pass serial for direct lookup in System B
-            priority=7,  # Higher priority for settings queries
-            expires_in_minutes=5,  # Short expiry for real-time queries
-        )
-        logger.info(
-            "[query-settings] System B response received: command_id=%s, status=%s",
-            command_response.get("id"),
-            command_response.get("status"),
+            device_serial=device.serial_number,
+            priority=7,
+            expires_in_minutes=5,
         )
 
+        logger.info("-" * 100)
+        logger.info("[query-settings] STEP 2: System B Response Received")
+        logger.info("[query-settings] Response type: %s", type(command_response))
+        logger.info("[query-settings] Response keys: %s", list(command_response.keys()) if isinstance(command_response, dict) else "N/A")
+        logger.info("[query-settings] Command ID: %s", command_response.get("id"))
+        logger.info("[query-settings] Status: %s", command_response.get("status"))
+        logger.info("[query-settings] Has 'result' key: %s", "result" in command_response)
+
+        if command_response.get("result"):
+            logger.info("[query-settings] Result exists:")
+            result = command_response.get("result", {})
+            logger.info("[query-settings]   - Result type: %s", type(result))
+            logger.info("[query-settings]   - Result keys: %s", list(result.keys()) if isinstance(result, dict) else "N/A")
+            logger.info("[query-settings]   - Has 'settings': %s", "settings" in result)
+            if result.get("settings"):
+                logger.info("[query-settings]   - Settings count: %d", len(result.get("settings", {})))
+                logger.info("[query-settings]   - First 5 setting keys: %s", list(result.get("settings", {}).keys())[:5])
+        else:
+            logger.info("[query-settings] Result is None or empty (expected for 'pending' status)")
+
+        logger.info("-" * 100)
+        logger.info("[query-settings] STEP 3: Building Response")
         response = QuerySettingsResponse(
             command_id=command_response.get("id", ""),
             status=command_response.get("status", "pending"),
             settings=command_response.get("result", {}).get("settings") if command_response.get("result") else None,
             message="Settings query command sent to device",
         )
-        logger.info("[query-settings] Returning response to frontend")
+
+        logger.info("[query-settings] Response to frontend:")
+        logger.info("[query-settings]   - command_id: %s", response.command_id)
+        logger.info("[query-settings]   - status: %s", response.status)
+        logger.info("[query-settings]   - has settings: %s", response.settings is not None)
+        if response.settings:
+            logger.info("[query-settings]   - settings count: %d", len(response.settings))
+        logger.info("[query-settings]   - message: %s", response.message)
+
+        logger.info("-" * 100)
+        logger.info("[query-settings] IMPORTANT ARCHITECTURAL NOTES:")
+        logger.info("[query-settings] 1. System A does NOT store command or result locally")
+        logger.info("[query-settings] 2. System B owns the command and its result")
+        logger.info("[query-settings] 3. Frontend MUST poll GET /commands/{command_id}/status")
+        logger.info("[query-settings] 4. System A will proxy the status request to System B")
+        logger.info("=" * 100)
+        logger.info("[query-settings] ===== QUERY SETTINGS API CALL END =====")
+        logger.info("=" * 100)
+
         return response
 
     except SystemBClientError as e:
-        logger.error(
-            "[query-settings] System B error: status_code=%s, message=%s",
-            e.status_code,
-            str(e),
-        )
+        logger.error("=" * 100)
+        logger.error("[query-settings] ERROR: System B client failure")
+        logger.error("[query-settings] Status code: %s", e.status_code)
+        logger.error("[query-settings] Error message: %s", str(e))
+        logger.error("=" * 100)
         raise HTTPException(
             status_code=e.status_code or status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to query device settings: {str(e)}",
@@ -247,25 +290,49 @@ async def get_command_status(
     system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ) -> CommandStatusResponse:
     """Get the status of a command."""
-    logger.info(
-        "[command-status] Request from user=%s, device_id=%s, command_id=%s",
-        current_user.email,
-        device_id,
-        command_id,
-    )
+    logger.info("=" * 100)
+    logger.info("[command-status] ===== GET COMMAND STATUS API CALL START =====")
+    logger.info("[command-status] User: %s", current_user.email)
+    logger.info("[command-status] Device ID: %s", device_id)
+    logger.info("[command-status] Command ID: %s", command_id)
+    logger.info("=" * 100)
 
     await check_device_access(device_id, current_user, uow)
 
     try:
         # Get command status from System B
-        logger.info("[command-status] Calling System B get_command_status API...")
+        logger.info("-" * 100)
+        logger.info("[command-status] STEP 1: Querying System B for command status")
+        logger.info("[command-status] Endpoint: GET /api/v1/commands/%s", command_id)
+
         command_status = await system_b_client.get_command_status(command_id)
-        logger.info(
-            "[command-status] System B response: status=%s, has_result=%s, has_error=%s",
-            command_status.get("status"),
-            bool(command_status.get("result")),
-            bool(command_status.get("error_message")),
-        )
+
+        logger.info("-" * 100)
+        logger.info("[command-status] STEP 2: System B Response Received")
+        logger.info("[command-status] Response type: %s", type(command_status))
+        logger.info("[command-status] Response keys: %s", list(command_status.keys()) if isinstance(command_status, dict) else "N/A")
+        logger.info("[command-status] Status: %s", command_status.get("status"))
+        logger.info("[command-status] Progress: %s", command_status.get("progress"))
+        logger.info("[command-status] Has error_message: %s", bool(command_status.get("error_message")))
+        logger.info("[command-status] Has result: %s", bool(command_status.get("result")))
+
+        if command_status.get("result"):
+            result = command_status.get("result", {})
+            logger.info("[command-status] Result details:")
+            logger.info("[command-status]   - Result type: %s", type(result))
+            logger.info("[command-status]   - Result keys: %s", list(result.keys()) if isinstance(result, dict) else "N/A")
+            logger.info("[command-status]   - Has 'settings': %s", "settings" in result)
+            if result.get("settings"):
+                logger.info("[command-status]   - Settings type: %s", type(result.get("settings")))
+                logger.info("[command-status]   - Settings count: %d", len(result.get("settings", {})))
+                logger.info("[command-status]   - First 5 settings: %s", list(result.get("settings", {}).keys())[:5])
+            logger.info("[command-status]   - Has 'success': %s (value: %s)", "success" in result, result.get("success"))
+            logger.info("[command-status]   - Has 'error': %s (value: %s)", "error" in result, result.get("error"))
+        else:
+            logger.info("[command-status] Result is None/empty (command may still be pending)")
+
+        logger.info("-" * 100)
+        logger.info("[command-status] STEP 3: Building Response for Frontend")
 
         response = CommandStatusResponse(
             command_id=str(command_id),
@@ -276,15 +343,46 @@ async def get_command_status(
             created_at=command_status.get("created_at", ""),
             updated_at=command_status.get("updated_at"),
         )
-        logger.info("[command-status] Returning response to frontend")
+
+        logger.info("[command-status] Response to frontend:")
+        logger.info("[command-status]   - command_id: %s", response.command_id)
+        logger.info("[command-status]   - status: %s", response.status)
+        logger.info("[command-status]   - progress: %s", response.progress)
+        logger.info("[command-status]   - has result: %s", response.result is not None)
+        if response.result:
+            logger.info("[command-status]   - result type: %s", type(response.result))
+            if isinstance(response.result, dict):
+                logger.info("[command-status]   - result keys: %s", list(response.result.keys()))
+                if response.result.get("settings"):
+                    logger.info("[command-status]   - SETTINGS FOUND: %d settings", len(response.result.get("settings", {})))
+        logger.info("[command-status]   - has error: %s", response.error is not None)
+        logger.info("[command-status]   - created_at: %s", response.created_at)
+        logger.info("[command-status]   - updated_at: %s", response.updated_at)
+
+        logger.info("-" * 100)
+        logger.info("[command-status] CRITICAL CHECK:")
+        if response.status == "completed" and response.result and response.result.get("settings"):
+            logger.info("[command-status] ✅ SUCCESS: Command completed with settings data!")
+            logger.info("[command-status] Frontend should receive %d settings", len(response.result.get("settings", {})))
+        elif response.status == "completed" and not response.result:
+            logger.error("[command-status] ⚠️  WARNING: Command completed but result is empty!")
+        elif response.status == "pending":
+            logger.info("[command-status] ⏳ Command still pending, frontend will poll again")
+        elif response.status == "failed":
+            logger.error("[command-status] ❌ Command failed: %s", response.error)
+
+        logger.info("=" * 100)
+        logger.info("[command-status] ===== GET COMMAND STATUS API CALL END =====")
+        logger.info("=" * 100)
+
         return response
 
     except SystemBClientError as e:
-        logger.error(
-            "[command-status] System B error: status_code=%s, message=%s",
-            e.status_code,
-            str(e),
-        )
+        logger.error("=" * 100)
+        logger.error("[command-status] ERROR: System B client failure")
+        logger.error("[command-status] Status code: %s", e.status_code)
+        logger.error("[command-status] Error message: %s", str(e))
+        logger.error("=" * 100)
         if e.status_code == 404:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
