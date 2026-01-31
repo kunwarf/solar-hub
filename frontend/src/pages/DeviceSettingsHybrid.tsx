@@ -242,12 +242,25 @@ const DeviceSettingsPageHybrid = () => {
         </motion.div>
 
         {/* Configuration Content */}
+        {(() => {
+          console.log('[DeviceSettingsHybrid] Rendering check:', {
+            hasSettings: !!settings,
+            settingsKeys: settings ? Object.keys(settings).length : 0,
+            deviceType: device?.type,
+            deviceId: device?.id,
+          });
+          return null;
+        })()}
         {settings && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
+            {(() => {
+              console.log('[DeviceSettingsHybrid] Inside settings conditional, device.type:', device.type);
+              return null;
+            })()}
             {device.type === "inverter" && (
               <InverterConfigPage
                 deviceId={device.id}
