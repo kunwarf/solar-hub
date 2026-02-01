@@ -467,30 +467,88 @@ class TelemetryRepository:
             for row in result
         ]
 
+    def _select_aggregate_table(
+        self,
+        start_time: datetime,
+        end_time: datetime
+    ) -> Tuple[str, str]:
+        """
+        Select the most appropriate table and bucket interval based on time range.
+
+        Strategy:
+        - Last 90 days: telemetry_raw (highest resolution)
+        - Last 1 year: telemetry_hourly
+        - Last 3 years: telemetry_daily
+        - 3-5 years: telemetry_monthly
+        - 5+ years: telemetry_yearly
+
+        Returns:
+            Tuple of (table_name, recommended_bucket_interval)
+        """
+        time_range = end_time - start_time
+
+        if time_range <= timedelta(days=90):
+            # Recent data - use raw table
+            if time_range <= timedelta(hours=24):
+                return ("telemetry_raw", "5 minutes")
+            elif time_range <= timedelta(days=7):
+                return ("telemetry_raw", "1 hour")
+            else:
+                return ("telemetry_raw", "1 hour")
+
+        elif time_range <= timedelta(days=365):
+            # Last year - use hourly aggregate
+            if time_range <= timedelta(days=30):
+                return ("telemetry_hourly", "1 hour")
+            else:
+                return ("telemetry_hourly", "1 day")
+
+        elif time_range <= timedelta(days=1095):  # 3 years
+            # Multi-year - use daily aggregate
+            return ("telemetry_daily", "1 day")
+
+        elif time_range <= timedelta(days=1825):  # 5 years
+            # Historical - use monthly aggregate
+            return ("telemetry_monthly", "1 month")
+
+        else:
+            # Very long range - use yearly aggregate
+            return ("telemetry_yearly", "1 year")
+
     async def get_site_energy_chart(
         self,
         site_id: UUID,
         start_time: datetime,
         end_time: datetime,
-        bucket_interval: str = "1 hour",
+        bucket_interval: str = "auto",
     ) -> List[Dict[str, Any]]:
         """
         Get comprehensive energy chart data for a site.
 
-        Aggregates all energy-related metrics for all devices at a site
-        into time buckets with calculated efficiency and self-sufficiency.
+        Automatically selects the best data source (raw, hourly, daily, monthly, yearly)
+        based on the time range for optimal performance.
 
         Args:
             site_id: Site UUID.
             start_time: Start of time range.
             end_time: End of time range.
-            bucket_interval: PostgreSQL interval string (e.g., '1 hour', '1 day').
+            bucket_interval: PostgreSQL interval string or "auto" for automatic selection.
 
         Returns:
             List of dicts with timestamp and all energy metrics.
         """
-        # Parse interval to seconds for calculation
-        # Common intervals: "1 hour" = 3600s, "1 day" = 86400s, "5 minutes" = 300s
+        # Auto-select best table and bucket interval
+        if bucket_interval == "auto":
+            table_name, bucket_interval = self._select_aggregate_table(start_time, end_time)
+            logger.debug(
+                f"Auto-selected {table_name} with {bucket_interval} bucket "
+                f"for range {start_time} to {end_time}"
+            )
+        else:
+            # Use specified interval with raw table
+            table_name = "telemetry_raw"
+
+        # Parse interval to seconds for energy calculations
         interval_seconds = 3600  # Default to 1 hour
         if "hour" in bucket_interval:
             hours = int(bucket_interval.split()[0]) if bucket_interval.split()[0].isdigit() else 1
@@ -501,56 +559,146 @@ class TelemetryRepository:
         elif "minute" in bucket_interval:
             minutes = int(bucket_interval.split()[0]) if bucket_interval.split()[0].isdigit() else 1
             interval_seconds = minutes * 60
+        elif "month" in bucket_interval:
+            interval_seconds = 30 * 86400  # Approximate
+        elif "year" in bucket_interval:
+            interval_seconds = 365 * 86400  # Approximate
 
-        query = text(f"""
-            WITH device_data AS (
-                SELECT
-                    time_bucket(INTERVAL '{bucket_interval}', dt.time) AS bucket,
-                    dt.data,
-                    dt.device_id
-                FROM device_telemetry dt
-                JOIN device_registry dr ON dt.device_id = dr.device_id
-                WHERE dr.site_id = :site_id
-                  AND dt.time >= :start_time
-                  AND dt.time < :end_time
-            ),
-            energy_data AS (
+        # Build query based on table type
+        if table_name != "telemetry_raw":
+            # Using aggregate table (hourly, daily, monthly, yearly)
+            query = text(f"""
+                WITH power_data AS (
+                    SELECT
+                        bucket,
+                        metric_name,
+                        AVG(avg_value) AS avg_value
+                    FROM {table_name}
+                    WHERE site_id = :site_id
+                      AND bucket >= :start_time
+                      AND bucket < :end_time
+                      AND metric_name IN (
+                          'pv_total_w', 'grid_w', 'load_w', 'battery_w',
+                          'pv_energy_today_kwh', 'load_energy_today_kwh',
+                          'grid_import_energy_today_kwh', 'grid_export_energy_today_kwh',
+                          'battery_charge_energy_today_kwh', 'battery_discharge_energy_today_kwh',
+                          'inverter_temp_c'
+                      )
+                    GROUP BY bucket, metric_name
+                )
                 SELECT
                     bucket,
-                    -- Extract power metrics from JSONB (instantaneous watts)
-                    AVG((data->'power'->>'pv_total_w')::float) AS avg_pv_w,
-                    AVG((data->'power'->>'load_w')::float) AS avg_load_w,
-                    AVG((data->'power'->>'grid_w')::float) AS avg_grid_w,
-                    AVG((data->'power'->>'battery_w')::float) AS avg_battery_w,
+                    -- Convert instantaneous power (W) to energy (kWh)
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'pv_total_w' THEN avg_value END)
+                        * :interval_seconds / 3600000.0,
+                        0
+                    ) AS pv_kwh,
 
-                    -- Extract energy metrics from JSONB (kWh)
-                    AVG((data->'energy_today'->>'pv_kwh')::float) AS pv_energy_today,
-                    AVG((data->'energy_today'->>'load_kwh')::float) AS load_energy_today,
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'load_w' THEN avg_value END)
+                        * :interval_seconds / 3600000.0,
+                        0
+                    ) AS load_kwh,
 
-                    -- Extract temperature
-                    AVG((data->'temperatures'->>'inverter_c')::float) AS avg_temp_c,
+                    -- Use daily energy totals if available
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'grid_import_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS grid_import_kwh,
 
-                    -- Extract raw energy values if available
-                    AVG((data->'raw'->>'grid_import_energy_today_kwh')::float) AS grid_import_today,
-                    AVG((data->'raw'->>'grid_export_energy_today_kwh')::float) AS grid_export_today,
-                    AVG((data->'raw'->>'battery_charge_energy_today_kwh')::float) AS battery_charge_today,
-                    AVG((data->'raw'->>'battery_discharge_energy_today_kwh')::float) AS battery_discharge_today
-                FROM device_data
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'grid_export_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS grid_export_kwh,
+
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'battery_charge_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS battery_charge_kwh,
+
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'battery_discharge_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS battery_discharge_kwh,
+
+                    -- Temperature
+                    AVG(CASE WHEN metric_name = 'inverter_temp_c'
+                        THEN avg_value END) AS temperature_c
+                FROM power_data
                 GROUP BY bucket
-            )
-            SELECT
-                bucket,
-                -- Convert power (W) to energy (kWh) for the interval
-                COALESCE(avg_pv_w * :interval_seconds / 3600000.0, 0) AS pv_kwh,
-                COALESCE(avg_load_w * :interval_seconds / 3600000.0, 0) AS load_kwh,
-                COALESCE(grid_import_today, 0) AS grid_import_kwh,
-                COALESCE(grid_export_today, 0) AS grid_export_kwh,
-                COALESCE(battery_charge_today, 0) AS battery_charge_kwh,
-                COALESCE(battery_discharge_today, 0) AS battery_discharge_kwh,
-                COALESCE(avg_temp_c, 0) AS temperature_c
-            FROM energy_data
-            ORDER BY bucket
-        """)
+                ORDER BY bucket
+            """)
+        else:
+            # Using raw telemetry_raw table
+            query = text(f"""
+                WITH power_data AS (
+                    SELECT
+                        time_bucket(INTERVAL '{bucket_interval}', time) AS bucket,
+                        metric_name,
+                        AVG(metric_value) AS avg_value
+                    FROM telemetry_raw
+                    WHERE site_id = :site_id
+                      AND time >= :start_time
+                      AND time < :end_time
+                      AND metric_name IN (
+                          'pv_total_w', 'grid_w', 'load_w', 'battery_w',
+                          'pv_energy_today_kwh', 'load_energy_today_kwh',
+                          'grid_import_energy_today_kwh', 'grid_export_energy_today_kwh',
+                          'battery_charge_energy_today_kwh', 'battery_discharge_energy_today_kwh',
+                          'inverter_temp_c'
+                      )
+                    GROUP BY bucket, metric_name
+                )
+                SELECT
+                    bucket,
+                    -- Convert instantaneous power (W) to energy (kWh)
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'pv_total_w' THEN avg_value END)
+                        * :interval_seconds / 3600000.0,
+                        0
+                    ) AS pv_kwh,
+
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'load_w' THEN avg_value END)
+                        * :interval_seconds / 3600000.0,
+                        0
+                    ) AS load_kwh,
+
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'grid_import_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS grid_import_kwh,
+
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'grid_export_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS grid_export_kwh,
+
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'battery_charge_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS battery_charge_kwh,
+
+                    COALESCE(
+                        AVG(CASE WHEN metric_name = 'battery_discharge_energy_today_kwh'
+                            THEN avg_value END),
+                        0
+                    ) AS battery_discharge_kwh,
+
+                    AVG(CASE WHEN metric_name = 'inverter_temp_c'
+                        THEN avg_value END) AS temperature_c
+                FROM power_data
+                GROUP BY bucket
+                ORDER BY bucket
+            """)
 
         result = await self._session.execute(
             query,

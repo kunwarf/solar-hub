@@ -28,28 +28,40 @@ System B uses **TimescaleDB 2.x** (PostgreSQL extension) for high-performance ti
                     │   (Device auth & connection)     │
                     └──────────────────────────────────┘
                                     │
+                                    ▼
+                    ┌──────────────────────────────────┐
+                    │     Telemetry Parser             │
+                    │  (JSON → Normalized Metrics)     │
+                    └──────────────────────────────────┘
+                                    │
             ┌───────────────────────┼───────────────────────┐
-            ▼                       ▼                       ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│  telemetry_raw   │    │  device_events   │    │ device_commands  │
-│   (Hypertable)   │    │   (Hypertable)   │    │     (Table)      │
-│ 1-hour chunks    │    │  1-day chunks    │    │                  │
-└──────────────────┘    └──────────────────┘    └──────────────────┘
-         │
-         │ Continuous Aggregates
+            ▼                       │                       ▼
+┌──────────────────┐                │            ┌──────────────────┐
+│  telemetry_raw   │                │            │device_telemetry  │
+│  (Hypertable)    │                │            │  (Audit Trail)   │
+│ Normalized       │                │            │   JSON Storage   │
+│ Metrics Storage  │                │            │   (7 days)       │
+└──────────────────┘                │            └──────────────────┘
+         │                          │
+         │ Continuous               ▼
+         │ Aggregates    ┌──────────────────┐
+         │               │  device_events   │
+         │               │  (Hypertable)    │
+         │               └──────────────────┘
          ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│   ┌────────────┐    ┌────────────┐    ┌────────────┐            │
-│   │telemetry   │    │telemetry   │    │telemetry   │            │
-│   │  _5min     │───▶│  _hourly   │───▶│  _daily    │            │
-│   │ (7 days)   │    │ (90 days)  │    │ (5 years)  │            │
-│   └────────────┘    └────────────┘    └────────────┘            │
-│                                                                  │
-│   Real-time         Daily charts      Monthly/Yearly             │
-│   dashboard                           reports                    │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                     CONTINUOUS AGGREGATES                             │
+│                                                                       │
+│   ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐    │
+│   │telemetry   │─▶│telemetry   │─▶│telemetry   │─▶│telemetry   │    │
+│   │  _hourly   │  │  _daily    │  │  _monthly  │  │  _yearly   │    │
+│   │ (1 year)   │  │ (3 years)  │  │ (5 years)  │  │ (forever)  │    │
+│   └────────────┘  └────────────┘  └────────────┘  └────────────┘    │
+│                                                                       │
+│  Intraday         Daily/Weekly     Monthly         Long-term          │
+│  charts           charts            reports         trends            │
+│                                                                       │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Tables Summary
@@ -57,14 +69,16 @@ System B uses **TimescaleDB 2.x** (PostgreSQL extension) for high-performance ti
 | Table | Type | Description | Retention |
 |-------|------|-------------|-----------|
 | `device_registry` | Regular | Device connection & auth info | Permanent |
-| `telemetry_raw` | Hypertable | Raw telemetry readings | 90 days |
+| `telemetry_raw` | Hypertable | Normalized telemetry metrics | 90 days (compressed after 7) |
+| `device_telemetry` | Hypertable | Full JSON audit trail | 7 days |
 | `device_events` | Hypertable | Device events & errors | 1 year |
 | `device_commands` | Regular | Command queue for devices | Permanent |
 | `metric_definitions` | Regular | Standard metric definitions | Permanent |
 | `ingestion_batches` | Regular | Ingestion tracking | Permanent |
-| `telemetry_5min` | Continuous Aggregate | 5-minute aggregates | 7 days |
-| `telemetry_hourly` | Continuous Aggregate | Hourly aggregates | 90 days |
-| `telemetry_daily` | Continuous Aggregate | Daily aggregates | 5 years |
+| `telemetry_hourly` | Continuous Aggregate | Hourly aggregates | 1 year |
+| `telemetry_daily` | Continuous Aggregate | Daily aggregates | 3 years |
+| `telemetry_monthly` | Continuous Aggregate | Monthly aggregates | 5 years |
+| `telemetry_yearly` | Continuous Aggregate | Yearly aggregates | Forever |
 
 ## Hypertables
 
@@ -107,39 +121,148 @@ Captures significant device events for monitoring.
 | `connection` | Connection/disconnection |
 | `command` | Command sent/completed |
 
+### device_telemetry
+
+Optional audit trail storing full JSON telemetry for debugging and compliance.
+
+**Chunk Interval:** 1 day
+**Retention:** 7 days
+
+**Columns:**
+| Column | Type | Description |
+|--------|------|-------------|
+| `time` | TIMESTAMPTZ | Timestamp of reading |
+| `device_id` | UUID | Device identifier |
+| `serial_number` | TEXT | Device serial number |
+| `protocol_id` | TEXT | Protocol used (modbus, mqtt, etc) |
+| `device_type` | TEXT | Device type (deye_hybrid, etc) |
+| `data` | JSONB | Full JSON telemetry payload |
+| `poll_duration_ms` | FLOAT | Time taken to poll device |
+
+**Use case:** Short-term audit trail, debugging, raw data recovery
+
+## Dual Write Architecture
+
+The telemetry ingestion system uses a **dual write** strategy to optimize both real-time performance and long-term analytics:
+
+### Write Path
+```
+Device JSON → Telemetry Parser → ┬→ telemetry_raw (normalized metrics)
+                                  └→ device_telemetry (full JSON, optional)
+                                  └→ Redis (real-time pub/sub)
+```
+
+### Telemetry Parser
+
+Converts device-specific JSON into normalized metrics:
+
+**Example - Deye Hybrid Inverter:**
+```json
+{
+  "power": {"pv_total_w": 2500.0, "load_w": 1800.0},
+  "battery": {"soc_pct": 75.0},
+  "energy_today": {"pv_kwh": 15.5}
+}
+```
+
+↓ Parsed into normalized metrics ↓
+
+| time | device_id | metric_name | metric_value | unit | source |
+|------|-----------|-------------|--------------|------|--------|
+| 2024-01-15 12:30 | uuid-123 | pv_total_w | 2500.0 | W | power |
+| 2024-01-15 12:30 | uuid-123 | load_w | 1800.0 | W | power |
+| 2024-01-15 12:30 | uuid-123 | battery_soc_pct | 75.0 | % | battery |
+| 2024-01-15 12:30 | uuid-123 | pv_energy_today_kwh | 15.5 | kWh | energy |
+
+**Benefits:**
+- **telemetry_raw**: Optimized for TimescaleDB aggregations and time-series queries
+- **device_telemetry**: Preserves original data for debugging (7-day retention)
+- **Redis**: Real-time dashboard updates without database queries
+
+### Supported Parsers
+
+| Device Type | Parser | Metrics Extracted |
+|-------------|--------|-------------------|
+| `deye_hybrid` | DeyeHybridParser | ~50 metrics (power, battery, energy, grid, temp) |
+
+*More parsers can be added by extending the TelemetryParser base class*
+
 ## Continuous Aggregates
 
-TimescaleDB automatically maintains these pre-computed aggregations:
+TimescaleDB automatically maintains these pre-computed aggregations in a hierarchical structure. The repository automatically selects the best table based on query time range.
 
-### telemetry_5min
-**Use case:** Real-time dashboards, live charts
+### Auto-Selection Logic
 
-| Metric | Description |
-|--------|-------------|
-| `avg_value` | Average of values in 5-min bucket |
-| `min_value` | Minimum value |
-| `max_value` | Maximum value |
-| `last_value` | Last recorded value |
-| `sample_count` | Number of readings |
-| `good_count` | Readings with 'good' quality |
-
-**Refresh:** Every 5 minutes
+| Time Range | Table Used | Bucket Interval | Query Optimization |
+|------------|------------|-----------------|-------------------|
+| Last 24 hours | `telemetry_raw` | 5 minutes - 1 hour | Highest resolution |
+| Last 90 days | `telemetry_raw` | 1 hour | Recent detailed data |
+| Last 1 year | `telemetry_hourly` | 1 hour - 1 day | Intraday analysis |
+| Last 3 years | `telemetry_daily` | 1 day | Daily trends |
+| Last 5 years | `telemetry_monthly` | 1 month | Monthly summaries |
+| 5+ years | `telemetry_yearly` | 1 year | Long-term trends |
 
 ### telemetry_hourly
-**Use case:** Daily charts, intraday analysis
+**Use case:** Intraday analysis, daily/weekly charts
+**Retention:** 1 year
+**Refresh Policy:** Every hour
 
-Additional metrics:
+Aggregated metrics:
 | Metric | Description |
 |--------|-------------|
-| `first_value` | First value in bucket |
-| `delta_value` | last_value - first_value (for cumulative metrics) |
-
-**Refresh:** Every hour
+| `avg_value` | Average of values in 1-hour bucket |
+| `min_value` | Minimum value |
+| `max_value` | Maximum value |
+| `stddev_value` | Standard deviation |
+| `sample_count` | Number of raw readings |
+| `good_samples` | Readings with 'good' quality |
+| `total_energy` | Sum of energy metrics (kWh) |
 
 ### telemetry_daily
-**Use case:** Monthly/yearly reports, long-term trends
+**Use case:** Daily/weekly/monthly reports
+**Retention:** 3 years
+**Refresh Policy:** Daily at 1 AM
 
-**Refresh:** Once per day
+Aggregated from hourly:
+| Metric | Description |
+|--------|-------------|
+| `avg_value` | Average of hourly averages |
+| `min_value` | Minimum from hourly minimums |
+| `max_value` | Maximum from hourly maximums |
+| `daily_energy` | Sum of hourly energy totals |
+| `total_samples` | Sum of hourly sample counts |
+| `good_samples` | Sum of hourly good samples |
+| `availability_pct` | (good_samples / total_samples) × 100 |
+
+### telemetry_monthly
+**Use case:** Monthly/quarterly/yearly reports
+**Retention:** 5 years
+**Refresh Policy:** Daily
+
+Aggregated from daily:
+| Metric | Description |
+|--------|-------------|
+| `avg_value` | Average of daily averages |
+| `min_value` | Minimum from daily minimums |
+| `max_value` | Maximum from daily maximums |
+| `monthly_energy` | Sum of daily energy totals |
+| `availability_pct` | Monthly availability percentage |
+| `days_with_data` | Count of days with telemetry |
+
+### telemetry_yearly
+**Use case:** Multi-year trends, lifetime statistics
+**Retention:** Forever
+**Refresh Policy:** Weekly
+
+Aggregated from monthly:
+| Metric | Description |
+|--------|-------------|
+| `avg_value` | Average of monthly averages |
+| `min_value` | Minimum from monthly minimums |
+| `max_value` | Maximum from monthly maximums |
+| `yearly_energy` | Sum of monthly energy totals |
+| `availability_pct` | Yearly availability percentage |
+| `months_with_data` | Count of months with telemetry |
 
 ## Standard Metrics
 
@@ -212,26 +335,50 @@ The `metric_definitions` table defines 50+ standard metrics:
 
 ## Retention Policies
 
-Automatic data lifecycle management:
+Automatic data lifecycle management with hierarchical aggregation for 5-year retention:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DATA RETENTION TIMELINE                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  telemetry_5min    ├────────┤                   (7 days)        │
-│                                                                  │
-│  telemetry_raw     ├──────────────────────────┤ (90 days)       │
-│  telemetry_hourly  ├──────────────────────────┤ (90 days)       │
-│                                                                  │
-│  device_events     ├────────────────────────────────────┤       │
-│                                                     (1 year)     │
-│                                                                  │
-│  telemetry_daily   ├────────────────────────────────────────────┤
-│                                                        (5 years) │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      DATA RETENTION TIMELINE                              │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  device_telemetry  ├──┤                             (7 days, audit)      │
+│                                                                           │
+│  telemetry_raw     ├──────────────────────────┤    (90 days, compressed) │
+│                                                                           │
+│  telemetry_hourly  ├─────────────────────────────────────┤  (1 year)     │
+│                                                                           │
+│  telemetry_daily   ├────────────────────────────────────────────────────┤
+│                                                                (3 years)  │
+│                                                                           │
+│  telemetry_monthly ├───────────────────────────────────────────────────────┤
+│                                                                  (5 years) │
+│                                                                           │
+│  telemetry_yearly  ├──────────────────────────────────────────────────────▶
+│                                                             (forever)     │
+│                                                                           │
+│  device_events     ├────────────────────────────────┤         (1 year)   │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Storage Efficiency
+
+The tiered retention strategy provides 97% storage reduction compared to keeping all raw data for 5 years:
+
+| Strategy | 5-Year Storage | Notes |
+|----------|----------------|-------|
+| Raw data only | ~1.8 TB | Uncompressed, all samples |
+| Raw + Compression | ~180 GB | 10x compression ratio |
+| **Tiered aggregates** | **~50 GB** | 90 days raw + aggregates |
+
+**Benefits:**
+- Full-resolution data for recent queries (90 days)
+- Hourly resolution for the last year
+- Daily resolution for 3 years
+- Monthly summaries for 5 years
+- Yearly trends forever
+- 97% less storage than keeping 5 years of raw data
 
 ## Compression
 
@@ -248,7 +395,33 @@ Compression significantly reduces storage for older data:
 
 ## Query Patterns
 
-### Real-time Dashboard (Last 5 minutes)
+### Auto-Selection Query (Recommended)
+
+The repository automatically selects the optimal table based on time range:
+
+```python
+# Python using repository
+from app.infrastructure.database.repositories.telemetry_repository import TelemetryRepository
+
+# Automatically uses the best table
+energy_data = await telemetry_repo.get_site_energy_chart(
+    site_id=site_id,
+    start_time=start,
+    end_time=end,
+    bucket_interval="auto"  # Automatically selects best bucket size
+)
+```
+
+**What happens:**
+- Last 24 hours → Uses `telemetry_raw` with 5-minute buckets
+- Last 7 days → Uses `telemetry_raw` with 1-hour buckets
+- Last 90 days → Uses `telemetry_raw` with 1-hour buckets
+- Last 1 year → Uses `telemetry_hourly` with 1-day buckets
+- Last 3 years → Uses `telemetry_daily` with 1-day buckets
+- Last 5 years → Uses `telemetry_monthly` with 1-month buckets
+- 5+ years → Uses `telemetry_yearly` with 1-year buckets
+
+### Real-time Dashboard (Raw Data)
 ```sql
 SELECT device_id, metric_name, metric_value, time
 FROM telemetry_raw
@@ -257,33 +430,40 @@ WHERE site_id = :site_id
 ORDER BY time DESC;
 ```
 
-### Daily Power Chart (24 hours)
+### Daily Power Chart (Hourly Aggregate)
 ```sql
 SELECT bucket, device_id, avg_value
 FROM telemetry_hourly
 WHERE site_id = :site_id
-  AND metric_name = 'power_ac'
+  AND metric_name = 'pv_total_w'
   AND bucket > NOW() - INTERVAL '24 hours'
 ORDER BY bucket;
 ```
 
-### Monthly Energy Summary
+### Monthly Energy Summary (Daily Aggregate)
 ```sql
 SELECT
-    date_trunc('day', bucket) AS day,
-    SUM(delta_value) AS energy_kwh
+    time_bucket('1 day', bucket) AS day,
+    SUM(daily_energy) AS energy_kwh
 FROM telemetry_daily
 WHERE site_id = :site_id
-  AND metric_name = 'energy_total'
+  AND metric_name LIKE '%energy%'
   AND bucket > NOW() - INTERVAL '30 days'
 GROUP BY 1
 ORDER BY 1;
 ```
 
-### Current Power by Site
+### Yearly Trend (Monthly Aggregate)
 ```sql
-SELECT * FROM v_site_current_power
-WHERE site_id = :site_id;
+SELECT
+    bucket AS month,
+    avg_value,
+    monthly_energy
+FROM telemetry_monthly
+WHERE site_id = :site_id
+  AND metric_name = 'pv_total_w'
+  AND bucket >= DATE_TRUNC('year', NOW()) - INTERVAL '5 years'
+ORDER BY bucket;
 ```
 
 ## Tags Usage

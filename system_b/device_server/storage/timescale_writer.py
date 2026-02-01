@@ -3,6 +3,10 @@ TimescaleDB writer for telemetry storage.
 
 Writes telemetry data to TimescaleDB hypertables with
 batching and async support.
+
+Updated to support dual write:
+1. Normalized metrics → telemetry_raw (for aggregations)
+2. Full JSON → device_telemetry (optional audit trail)
 """
 import asyncio
 import json
@@ -17,6 +21,7 @@ except ImportError:
     asyncpg = None
 
 from ..config import DeviceServerSettings, get_device_server_settings
+from ..telemetry import DeyeHybridParser, TelemetryMetric
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +53,9 @@ class TimescaleWriter:
         self._batch: List[Dict[str, Any]] = []
         self._batch_lock = asyncio.Lock()
         self._flush_task: Optional[asyncio.Task] = None
+
+        # Telemetry parser for normalized storage
+        self.parser = DeyeHybridParser()
 
     async def connect(self) -> None:
         """Connect to TimescaleDB."""
@@ -121,7 +129,8 @@ class TimescaleWriter:
                     protocol_id TEXT NOT NULL,
                     device_type TEXT NOT NULL,
                     data JSONB NOT NULL,
-                    poll_duration_ms FLOAT
+                    poll_duration_ms FLOAT,
+                    PRIMARY KEY (time, device_id)
                 );
             """)
 
@@ -218,7 +227,13 @@ class TimescaleWriter:
             await self._flush_batch()
 
     async def _flush_batch(self) -> None:
-        """Flush current batch to database (must hold lock)."""
+        """
+        Flush current batch to database with dual write.
+
+        Writes to:
+        1. telemetry_raw: Normalized metrics for TimescaleDB aggregations
+        2. device_telemetry: Optional full JSON for audit (7-day retention)
+        """
         if not self._batch or not self._pool:
             return
 
@@ -227,13 +242,82 @@ class TimescaleWriter:
 
         try:
             async with self._pool.acquire() as conn:
-                # Prepare insert statement
+                # =====================================================
+                # Write 1: Normalized metrics to telemetry_raw
+                # =====================================================
+                # Get site_id for each device from registry
+                device_ids = list(set(r["device_id"] for r in batch))
+                device_site_map = {}
+
+                if device_ids:
+                    site_rows = await conn.fetch(
+                        """
+                        SELECT device_id, site_id
+                        FROM device_registry
+                        WHERE device_id = ANY($1::uuid[])
+                        """,
+                        device_ids
+                    )
+                    device_site_map = {row['device_id']: row['site_id'] for row in site_rows}
+
+                # Parse each record and collect all metrics
+                all_metrics: List[TelemetryMetric] = []
+                for record in batch:
+                    site_id = device_site_map.get(record["device_id"])
+                    if not site_id:
+                        logger.warning(
+                            f"No site_id found for device {record['device_id']}, "
+                            f"skipping normalized write"
+                        )
+                        continue
+
+                    # Parse telemetry into normalized metrics
+                    try:
+                        metrics = self.parser.parse(
+                            telemetry_data=record["data"],
+                            device_id=record["device_id"],
+                            site_id=site_id,
+                            timestamp=record["time"]
+                        )
+                        all_metrics.extend(metrics)
+                    except Exception as e:
+                        logger.error(
+                            f"Error parsing telemetry for device {record['device_id']}: {e}"
+                        )
+                        continue
+
+                # Batch insert normalized metrics
+                if all_metrics:
+                    await conn.executemany(
+                        """
+                        INSERT INTO telemetry_raw
+                        (time, device_id, metric_name, site_id, metric_value,
+                         metric_value_str, quality, unit, source, tags)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                        ON CONFLICT (time, device_id, metric_name) DO UPDATE SET
+                            metric_value = EXCLUDED.metric_value,
+                            quality = EXCLUDED.quality
+                        """,
+                        [m.to_db_tuple() for m in all_metrics]
+                    )
+                    logger.debug(
+                        f"Wrote {len(all_metrics)} normalized metrics "
+                        f"from {len(batch)} telemetry records"
+                    )
+
+                # =====================================================
+                # Write 2: Full JSON to device_telemetry (optional)
+                # =====================================================
+                # Keep for 7-day audit trail
                 await conn.executemany(
                     """
                     INSERT INTO device_telemetry
                     (time, device_id, serial_number, protocol_id,
                      device_type, data, poll_duration_ms)
                     VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT (time, device_id) DO UPDATE SET
+                        data = EXCLUDED.data,
+                        poll_duration_ms = EXCLUDED.poll_duration_ms
                     """,
                     [
                         (
@@ -249,10 +333,10 @@ class TimescaleWriter:
                     ],
                 )
 
-            logger.debug(f"Flushed {len(batch)} telemetry records")
+            logger.debug(f"Flushed {len(batch)} telemetry records (dual write complete)")
 
         except Exception as e:
-            logger.error(f"Error flushing batch: {e}")
+            logger.error(f"Error flushing batch: {e}", exc_info=True)
             # Put records back in batch for retry
             self._batch.extend(batch)
 
