@@ -300,9 +300,14 @@ class TimescaleWriter:
                         """,
                         [m.to_db_tuple() for m in all_metrics]
                     )
-                    logger.debug(
+                    logger.info(
                         f"Wrote {len(all_metrics)} normalized metrics "
-                        f"from {len(batch)} telemetry records"
+                        f"from {len(batch)} telemetry records to telemetry_raw"
+                    )
+                else:
+                    logger.warning(
+                        f"No metrics extracted from {len(batch)} telemetry records - "
+                        f"check JSON structure or parser compatibility"
                     )
 
                 # =====================================================
@@ -333,7 +338,7 @@ class TimescaleWriter:
                     ],
                 )
 
-            logger.debug(f"Flushed {len(batch)} telemetry records (dual write complete)")
+            logger.info(f"Flushed {len(batch)} telemetry records (dual write complete)")
 
         except Exception as e:
             logger.error(f"Error flushing batch: {e}", exc_info=True)
