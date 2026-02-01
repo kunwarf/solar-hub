@@ -86,12 +86,21 @@ async def migrate_device_ids(
         logger.info(f"Found data logger:")
         logger.info(f"  Device ID: {data_logger_id}")
         logger.info(f"  Serial: {data_logger_serial}")
-        logger.info(f"  Metadata: {metadata}")
 
         # Extract inverter serial from metadata if available
         inverter_serial = None
-        if metadata and 'inverter_serial' in metadata:
-            inverter_serial = metadata['inverter_serial']
+        if metadata:
+            # Metadata can be a dict or an array of dicts
+            if isinstance(metadata, dict) and 'inverter_serial' in metadata:
+                inverter_serial = metadata['inverter_serial']
+            elif isinstance(metadata, list):
+                # Find first non-null element with inverter_serial
+                for item in metadata:
+                    if item and isinstance(item, dict) and 'inverter_serial' in item:
+                        inverter_serial = item['inverter_serial']
+                        break
+
+        if inverter_serial:
             logger.info(f"  Inverter Serial (from metadata): {inverter_serial}")
 
         # Step 2: Check current state of device_telemetry
