@@ -198,6 +198,9 @@ class EnergyChartPoint(BaseModel):
     load_kwh: float = 0
     grid_import_kwh: float = 0
     grid_export_kwh: float = 0
+    efficiency_pct: Optional[float] = None
+    self_sufficiency_pct: Optional[float] = None
+    temperature_c: Optional[float] = None
 
 
 class EnergyChartResponse(BaseModel):
@@ -999,6 +1002,9 @@ async def get_energy_chart(
                 load_kwh=h.energy_consumed_kwh,
                 grid_import_kwh=h.energy_imported_kwh,
                 grid_export_kwh=h.energy_exported_kwh,
+                efficiency_pct=h.efficiency_pct,
+                self_sufficiency_pct=h.self_sufficiency_pct,
+                temperature_c=h.avg_temperature_c,
             ))
     elif period == "week":
         start_date = (now - timedelta(days=7)).date()
@@ -1006,11 +1012,14 @@ async def get_energy_chart(
         daily = await telemetry_repo.get_daily_summaries(site_info.site_id, start_date, end_date)
         for d in daily:
             data_points.append(EnergyChartPoint(
-                timestamp=d.date.isoformat(),
+                timestamp=d.summary_date.isoformat(),
                 pv_kwh=d.energy_generated_kwh,
                 load_kwh=d.energy_consumed_kwh,
                 grid_import_kwh=d.energy_imported_kwh,
                 grid_export_kwh=d.energy_exported_kwh,
+                efficiency_pct=d.efficiency_pct,
+                self_sufficiency_pct=d.self_sufficiency_pct,
+                temperature_c=d.avg_temperature_c,
             ))
     elif period == "month":
         start_date = (now - timedelta(days=30)).date()
@@ -1018,11 +1027,14 @@ async def get_energy_chart(
         daily = await telemetry_repo.get_daily_summaries(site_info.site_id, start_date, end_date)
         for d in daily:
             data_points.append(EnergyChartPoint(
-                timestamp=d.date.isoformat(),
+                timestamp=d.summary_date.isoformat(),
                 pv_kwh=d.energy_generated_kwh,
                 load_kwh=d.energy_consumed_kwh,
                 grid_import_kwh=d.energy_imported_kwh,
                 grid_export_kwh=d.energy_exported_kwh,
+                efficiency_pct=d.efficiency_pct,
+                self_sufficiency_pct=d.self_sufficiency_pct,
+                temperature_c=d.avg_temperature_c,
             ))
 
     # Fallback to current Redis data if summary tables are empty

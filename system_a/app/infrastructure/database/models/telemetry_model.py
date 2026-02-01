@@ -91,9 +91,11 @@ class TelemetryHourlySummaryModel(Base):
     sample_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     data_quality_percent: Mapped[float] = mapped_column(Float, default=100.0, nullable=False)
 
-    # Calculated
+    # Calculated metrics
     performance_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     capacity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    efficiency_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    self_sufficiency_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Audit
     created_at: Mapped[datetime] = mapped_column(
@@ -175,6 +177,8 @@ class TelemetryDailySummaryModel(Base):
     performance_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     capacity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     specific_yield_kwh_kwp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    efficiency_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    self_sufficiency_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Environmental impact
     co2_avoided_kg: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
@@ -257,6 +261,8 @@ class TelemetryMonthlySummaryModel(Base):
     performance_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     capacity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     specific_yield_kwh_kwp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    efficiency_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    self_sufficiency_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Expected vs actual
     expected_generation_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
