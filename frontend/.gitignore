@@ -33,3 +33,4 @@ bun.lockb
 *.njsproj
 *.sln
 *.sw?
+test-results/
