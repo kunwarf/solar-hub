@@ -19,6 +19,7 @@ from .billing_daily import router as billing_daily_router
 from .protocol_definitions import router as protocol_definitions_router
 from .discovery import router as discovery_router
 from .performance_metrics import router as performance_metrics_router
+from .telemetry_sync import router as telemetry_sync_router
 
 # Create main v1 router
 api_router = APIRouter(prefix="/v1")
@@ -40,5 +41,6 @@ api_router.include_router(billing_daily_router)
 api_router.include_router(protocol_definitions_router)
 api_router.include_router(discovery_router)
 api_router.include_router(performance_metrics_router)
+api_router.include_router(telemetry_sync_router)
 
 __all__ = ['api_router']
