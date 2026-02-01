@@ -21,7 +21,7 @@ except ImportError:
     asyncpg = None
 
 from ..config import DeviceServerSettings, get_device_server_settings
-from ..telemetry import DeyeHybridParser, TelemetryMetric
+from ..telemetry import DeyeHybridParser, PowdriveParser, TelemetryMetric, TelemetryParser
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,13 @@ class TimescaleWriter:
         self._batch_lock = asyncio.Lock()
         self._flush_task: Optional[asyncio.Task] = None
 
-        # Telemetry parser for normalized storage
-        self.parser = DeyeHybridParser()
+        # Telemetry parsers for normalized storage
+        self.parsers = {
+            'deye_hybrid': DeyeHybridParser(),
+            'powdrive': PowdriveParser(),
+        }
+        # Default parser for backwards compatibility
+        self.default_parser = self.parsers['powdrive']
 
     async def connect(self) -> None:
         """Connect to TimescaleDB."""
@@ -226,6 +231,45 @@ class TimescaleWriter:
         async with self._batch_lock:
             await self._flush_batch()
 
+    def _detect_parser(self, record: Dict[str, Any]) -> TelemetryParser:
+        """
+        Detect which parser to use based on protocol_id or JSON structure.
+
+        Args:
+            record: Telemetry record with 'data', 'protocol_id', etc.
+
+        Returns:
+            Appropriate parser instance
+        """
+        # Method 1: Use protocol_id if available
+        protocol_id = record.get("protocol_id", "").lower()
+        if "deye" in protocol_id:
+            return self.parsers['deye_hybrid']
+        elif "powdrive" in protocol_id:
+            return self.parsers['powdrive']
+
+        # Method 2: Auto-detect based on JSON structure
+        telemetry_data = record.get("data", {})
+
+        # Deye format has nested sections (power, battery, energy_today, etc.)
+        deye_sections = {'power', 'battery', 'energy_today', 'temperatures', 'grid'}
+        if any(section in telemetry_data for section in deye_sections):
+            logger.debug(f"Detected Deye format for device {record.get('device_id')}")
+            return self.parsers['deye_hybrid']
+
+        # Powdrive format has flat structure with specific fields
+        powdrive_fields = {'pv1_power_w', 'battery_power_w', 'grid_power_w', 'load_power_w'}
+        if any(field in telemetry_data for field in powdrive_fields):
+            logger.debug(f"Detected Powdrive format for device {record.get('device_id')}")
+            return self.parsers['powdrive']
+
+        # Default to powdrive parser (most common)
+        logger.warning(
+            f"Could not detect telemetry format for device {record.get('device_id')}, "
+            f"using default Powdrive parser"
+        )
+        return self.default_parser
+
     async def _flush_batch(self) -> None:
         """
         Flush current batch to database with dual write.
@@ -271,9 +315,12 @@ class TimescaleWriter:
                         )
                         continue
 
+                    # Detect which parser to use based on protocol or JSON structure
+                    parser = self._detect_parser(record)
+
                     # Parse telemetry into normalized metrics
                     try:
-                        metrics = self.parser.parse(
+                        metrics = parser.parse(
                             telemetry_data=record["data"],
                             device_id=record["device_id"],
                             site_id=site_id,
@@ -282,7 +329,8 @@ class TimescaleWriter:
                         all_metrics.extend(metrics)
                     except Exception as e:
                         logger.error(
-                            f"Error parsing telemetry for device {record['device_id']}: {e}"
+                            f"Error parsing telemetry for device {record['device_id']}: {e}",
+                            exc_info=True
                         )
                         continue
 
