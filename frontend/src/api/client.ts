@@ -142,6 +142,7 @@ apiClient.interceptors.response.use(
       }
 
       try {
+        console.log('[API Client] Refreshing access token...');
         const response = await axios.post<TokenPair>(
           `${API_CONFIG.baseUrl}${API_ENDPOINTS.auth.refresh}`,
           { refresh_token: refreshToken }
@@ -150,6 +151,7 @@ apiClient.interceptors.response.use(
         const newTokens = response.data;
         tokenStorage.setTokens(newTokens);
         processQueue(null, newTokens.access_token);
+        console.log('[API Client] Token refresh successful, retrying original request');
 
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${newTokens.access_token}`;
@@ -157,6 +159,7 @@ apiClient.interceptors.response.use(
 
         return apiClient(originalRequest);
       } catch (refreshError) {
+        console.error('[API Client] Token refresh failed:', refreshError);
         processQueue(refreshError as Error, null);
         tokenStorage.clearTokens();
         // Only redirect if not already on auth page to prevent reload loop

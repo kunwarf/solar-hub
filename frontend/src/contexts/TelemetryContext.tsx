@@ -161,10 +161,16 @@ export const TelemetryProvider = ({
         return;
       }
     } catch (error: any) {
-      // Check for 401 Unauthorized - stop polling
-      if (error?.response?.status === 401 || error?.status === 401) {
-        console.warn('[Telemetry] Authentication error, stopping polling');
-        setAuthError(true);
+      // Check for 401 Unauthorized - token refresh might be in progress
+      if (error?.response?.status === 401 || error?.status === 401 || error?.error === 'UNAUTHORIZED') {
+        // Don't immediately stop polling - the token refresh logic in apiClient will handle this
+        // Only stop if we get repeated 401s
+        console.warn('[Telemetry] Authentication error (token may be refreshing)');
+        fetchCountRef.current += 1;
+        if (fetchCountRef.current > 3) {
+          console.warn('[Telemetry] Multiple auth errors, stopping polling');
+          setAuthError(true);
+        }
         return;
       }
       console.warn('[Telemetry] Failed to fetch power flow:', error);
@@ -181,10 +187,14 @@ export const TelemetryProvider = ({
       setAuthError(false);
       fetchCountRef.current = 0;
     } catch (error: any) {
-      // Check for 401 Unauthorized - stop polling
-      if (error?.response?.status === 401 || error?.status === 401) {
-        console.warn('[Telemetry] Authentication error, stopping polling');
-        setAuthError(true);
+      // Check for 401 Unauthorized - token refresh might be in progress
+      if (error?.response?.status === 401 || error?.status === 401 || error?.error === 'UNAUTHORIZED') {
+        console.warn('[Telemetry] Authentication error on legacy API (token may be refreshing)');
+        fetchCountRef.current += 1;
+        if (fetchCountRef.current > 3) {
+          console.warn('[Telemetry] Multiple auth errors, stopping polling');
+          setAuthError(true);
+        }
         return;
       }
       console.warn('[Telemetry] Failed to fetch from legacy API:', error);

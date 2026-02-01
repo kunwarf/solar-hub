@@ -133,9 +133,18 @@ export function UserRoleProvider({ children }: { children: ReactNode }) {
     }
   }, [authUser]);
 
-  // Fetch users list from API
+  // Fetch users list from API (only if user has manage_users permission)
   useEffect(() => {
     const fetchUsers = async () => {
+      // Only fetch users if current user has permission to manage users
+      if (!currentUser) return;
+
+      const hasManageUsersPermission = rolePermissions[currentUser.role].includes('manage_users');
+      if (!hasManageUsersPermission) {
+        console.log('[UserRoleContext] User does not have manage_users permission, skipping users fetch');
+        return;
+      }
+
       try {
         const response = await usersService.listUsers();
         setUsers(response.items.map(mapApiUserToLocal));
