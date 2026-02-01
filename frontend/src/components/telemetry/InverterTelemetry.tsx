@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Sun, Battery, Home, Zap, Activity, Thermometer, Gauge, TrendingUp } from "lucide-react";
+import { Sun, Battery, Home, Zap, Activity, Thermometer, Gauge, TrendingUp, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   LineChart,
@@ -12,6 +12,8 @@ import {
   AreaChart,
   Area,
 } from "recharts";
+import { useTelemetryData } from "@/hooks/useTelemetryData";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface DeviceTelemetry {
   serial_number: string;
@@ -28,6 +30,7 @@ interface InverterTelemetryProps {
   device: {
     id: string;
     name: string;
+    serialNumber: string;
     metrics: { label: string; value: string; unit: string }[];
   };
   telemetry?: DeviceTelemetry | null;
@@ -49,8 +52,6 @@ const generateHistoricalData = () => {
     };
   });
 };
-
-const historicalData = generateHistoricalData();
 
 const PowerFlowCard = ({ 
   icon: Icon, 
@@ -97,37 +98,7 @@ const PowerFlowCard = ({
   </motion.div>
 );
 
-// Mock solar array data - typically each inverter has multiple MPPT inputs
-const solarArrays = [
-  {
-    id: "mppt-1",
-    name: "Array 1 (East Roof)",
-    power: 2.85,
-    voltage: 385.2,
-    current: 7.4,
-    status: "optimal" as const,
-    panels: 12,
-  },
-  {
-    id: "mppt-2",
-    name: "Array 2 (West Roof)",
-    power: 3.12,
-    voltage: 392.8,
-    current: 7.95,
-    status: "optimal" as const,
-    panels: 14,
-  },
-  {
-    id: "mppt-3",
-    name: "Array 3 (South Facing)",
-    power: 2.43,
-    voltage: 378.5,
-    current: 6.42,
-    status: "shaded" as const,
-    panels: 10,
-  },
-];
-
+// MPPT channel status styling
 const arrayStatusStyles = {
   optimal: { bg: "bg-success/20", text: "text-success", label: "Optimal" },
   shaded: { bg: "bg-warning/20", text: "text-warning", label: "Partial Shade" },
@@ -136,6 +107,22 @@ const arrayStatusStyles = {
 };
 
 const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
+  // Fetch extended telemetry data with real-time updates
+  const {
+    metrics: extendedMetrics,
+    mpptChannels,
+    historicalData,
+    isLoading,
+    usingFallback,
+    error,
+  } = useTelemetryData({
+    deviceId: device.id,
+    serialNumber: device.serialNumber,
+    pollingInterval: 5000,
+    enableHistorical: true,
+    enableMPPT: true,
+  });
+
   // Use real telemetry data when available, with fallback display values
   const solarPower = telemetry?.pv_power_w !== undefined ? telemetry.pv_power_w / 1000 : 0;
   const gridPower = telemetry?.grid_power_w !== undefined ? telemetry.grid_power_w / 1000 : 0;
@@ -154,12 +141,12 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
     gridPower: Math.abs(gridPower),
     isGridExporting: isGridExporting,
     isCharging: isCharging,
-    // These values would come from extended telemetry if available
-    dcVoltage: 580,
-    acVoltage: 238,
-    frequency: 50.02,
-    efficiency: 97.2,
-    temperature: 42,
+    // Use extended metrics when available, fallback to defaults
+    dcVoltage: extendedMetrics?.dc_voltage_v || 580,
+    acVoltage: extendedMetrics?.ac_voltage_v || 238,
+    frequency: extendedMetrics?.ac_frequency_hz || 50.02,
+    efficiency: extendedMetrics?.efficiency_pct || 97.2,
+    temperature: extendedMetrics?.temperature_c || 42,
   };
 
   return (
@@ -212,25 +199,38 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         </div>
       </motion.div>
 
-      {/* Solar Array Telemetry */}
+      {/* Solar Array Telemetry - Real MPPT Data */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
         className="glass-card p-3 sm:p-5"
       >
+        {usingFallback && (
+          <Alert className="mb-4 bg-warning/10 border-warning/30">
+            <AlertCircle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-xs text-warning">
+              Using simulated MPPT data - real-time data unavailable
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
           <div>
-            <h3 className="text-base sm:text-lg font-semibold text-foreground">Solar Arrays</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-foreground">
+              Solar Arrays {usingFallback && <span className="text-xs text-muted-foreground">(Simulated)</span>}
+            </h3>
             <p className="text-xs sm:text-sm text-muted-foreground">MPPT channel monitoring</p>
           </div>
           <div className="text-xs sm:text-sm text-muted-foreground">
-            Total: <span className="font-mono font-bold text-solar">{solarArrays.reduce((sum, arr) => sum + arr.power, 0).toFixed(2)} kW</span>
+            Total: <span className="font-mono font-bold text-solar">
+              {(mpptChannels.reduce((sum, arr) => sum + arr.power_w, 0) / 1000).toFixed(2)} kW
+            </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {solarArrays.map((array, index) => {
+          {mpptChannels.map((array, index) => {
             const statusStyle = arrayStatusStyles[array.status];
             return (
               <motion.div
@@ -247,7 +247,7 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
                     </div>
                     <div className="min-w-0">
                       <h4 className="font-medium text-xs sm:text-sm text-foreground truncate">{array.name}</h4>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">{array.panels} panels</p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground">{array.panel_count || 0} panels</p>
                     </div>
                   </div>
                   <span className={cn("text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full shrink-0", statusStyle.bg, statusStyle.text)}>
@@ -261,7 +261,7 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
                       <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-solar" />
                       <span className="text-[8px] sm:text-[10px] uppercase text-muted-foreground">Power</span>
                     </div>
-                    <p className="text-sm sm:text-lg font-mono font-bold text-solar">{array.power.toFixed(2)}</p>
+                    <p className="text-sm sm:text-lg font-mono font-bold text-solar">{(array.power_w / 1000).toFixed(2)}</p>
                     <p className="text-[8px] sm:text-[10px] text-muted-foreground">kW</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-1.5 sm:p-2.5 text-center">
@@ -269,7 +269,7 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
                       <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-primary" />
                       <span className="text-[8px] sm:text-[10px] uppercase text-muted-foreground">Volt</span>
                     </div>
-                    <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{array.voltage.toFixed(0)}</p>
+                    <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{array.voltage_v.toFixed(0)}</p>
                     <p className="text-[8px] sm:text-[10px] text-muted-foreground">V</p>
                   </div>
                   <div className="bg-background/50 rounded-lg p-1.5 sm:p-2.5 text-center">
@@ -277,7 +277,7 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
                       <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-battery" />
                       <span className="text-[8px] sm:text-[10px] uppercase text-muted-foreground">Amp</span>
                     </div>
-                    <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{array.current.toFixed(1)}</p>
+                    <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{array.current_a.toFixed(1)}</p>
                     <p className="text-[8px] sm:text-[10px] text-muted-foreground">A</p>
                   </div>
                 </div>
@@ -345,16 +345,27 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         </div>
       </motion.div>
 
-      {/* Historical Power Chart */}
+      {/* Historical Power Chart - Real Data */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
         className="glass-card p-3 sm:p-5"
       >
+        {usingFallback && (
+          <Alert className="mb-4 bg-warning/10 border-warning/30">
+            <AlertCircle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-xs text-warning">
+              Using simulated historical data - real-time data unavailable
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
           <div>
-            <h3 className="text-base sm:text-lg font-semibold text-foreground">Power History</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-foreground">
+              Power History {usingFallback && <span className="text-xs text-muted-foreground">(Simulated)</span>}
+            </h3>
             <p className="text-xs sm:text-sm text-muted-foreground">24-hour trend</p>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
@@ -375,7 +386,14 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         
         <div className="h-[180px] sm:h-[250px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={historicalData}>
+            <AreaChart data={historicalData.length > 0 ? historicalData.map(point => ({
+              time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              solarPower: point.solar_power_kw,
+              loadPower: point.load_power_kw,
+              batteryPower: point.battery_power_kw,
+              efficiency: point.efficiency_pct,
+              temperature: point.temperature_c,
+            })) : generateHistoricalData()}>
               <defs>
                 <linearGradient id="solarGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(var(--solar))" stopOpacity={0.3} />
@@ -437,21 +455,36 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         </div>
       </motion.div>
 
-      {/* Efficiency & Temperature History */}
+      {/* Efficiency & Temperature History - Real Data */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
         className="glass-card p-3 sm:p-5"
       >
+        {usingFallback && (
+          <Alert className="mb-4 bg-warning/10 border-warning/30">
+            <AlertCircle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-xs text-warning">
+              Using simulated efficiency data - real-time data unavailable
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="mb-3 sm:mb-4">
-          <h3 className="text-base sm:text-lg font-semibold text-foreground">Efficiency & Temp</h3>
+          <h3 className="text-base sm:text-lg font-semibold text-foreground">
+            Efficiency & Temp {usingFallback && <span className="text-xs text-muted-foreground">(Simulated)</span>}
+          </h3>
           <p className="text-xs sm:text-sm text-muted-foreground">24-hour performance</p>
         </div>
         
         <div className="h-[150px] sm:h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={historicalData}>
+            <LineChart data={historicalData.length > 0 ? historicalData.map(point => ({
+              time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              efficiency: point.efficiency_pct || 95,
+              temperature: point.temperature_c || 40,
+            })) : generateHistoricalData()}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
               <XAxis 
                 dataKey="time" 

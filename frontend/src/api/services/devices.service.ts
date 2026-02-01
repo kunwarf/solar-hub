@@ -155,6 +155,26 @@ class DevicesService {
     }
   }
 
+  /**
+   * Get extended device telemetry (MPPT channels, detailed metrics)
+   * Note: This is a placeholder for when the backend endpoint is ready
+   * Currently falls back to extracting data from existing metrics
+   */
+  async getExtendedTelemetry(deviceId: string): Promise<any> {
+    try {
+      // Try the extended endpoint first (when available)
+      // const response = await apiClient.get(`/devices/${deviceId}/telemetry/extended`);
+      // return response.data;
+
+      // Fallback: Use existing metrics endpoint
+      const metrics = await this.getDeviceMetrics(deviceId);
+      return metrics;
+    } catch (error) {
+      console.warn('Failed to fetch extended telemetry:', error);
+      return null;
+    }
+  }
+
   // ============================================================================
   // Device Claiming Methods (via System A auth endpoints)
   // ============================================================================

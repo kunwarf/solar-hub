@@ -5,6 +5,9 @@
  * These types ensure type safety between frontend and backend.
  */
 
+// Export enhanced telemetry types
+export * from './types/telemetry';
+
 // ============================================================================
 // Enums
 // ============================================================================
