@@ -489,6 +489,19 @@ class TelemetryRepository:
         Returns:
             List of dicts with timestamp and all energy metrics.
         """
+        # Parse interval to seconds for calculation
+        # Common intervals: "1 hour" = 3600s, "1 day" = 86400s, "5 minutes" = 300s
+        interval_seconds = 3600  # Default to 1 hour
+        if "hour" in bucket_interval:
+            hours = int(bucket_interval.split()[0]) if bucket_interval.split()[0].isdigit() else 1
+            interval_seconds = hours * 3600
+        elif "day" in bucket_interval:
+            days = int(bucket_interval.split()[0]) if bucket_interval.split()[0].isdigit() else 1
+            interval_seconds = days * 86400
+        elif "minute" in bucket_interval:
+            minutes = int(bucket_interval.split()[0]) if bucket_interval.split()[0].isdigit() else 1
+            interval_seconds = minutes * 60
+
         query = text("""
             WITH energy_data AS (
                 SELECT
@@ -515,10 +528,10 @@ class TelemetryRepository:
                 bucket,
                 -- Energy metrics (sum for cumulative, avg for instantaneous power converted to energy)
                 COALESCE(SUM(CASE WHEN metric_name = 'energy_generated_kwh' THEN total_value END), 0) +
-                COALESCE(AVG(CASE WHEN metric_name = 'pv_power_w' THEN avg_value END) * EXTRACT(EPOCH FROM :interval::interval) / 3600000, 0) AS pv_kwh,
+                COALESCE(AVG(CASE WHEN metric_name = 'pv_power_w' THEN avg_value END) * :interval_seconds / 3600000.0, 0) AS pv_kwh,
 
                 COALESCE(SUM(CASE WHEN metric_name = 'energy_consumed_kwh' THEN total_value END), 0) +
-                COALESCE(AVG(CASE WHEN metric_name = 'load_power_w' THEN avg_value END) * EXTRACT(EPOCH FROM :interval::interval) / 3600000, 0) AS load_kwh,
+                COALESCE(AVG(CASE WHEN metric_name = 'load_power_w' THEN avg_value END) * :interval_seconds / 3600000.0, 0) AS load_kwh,
 
                 COALESCE(SUM(CASE WHEN metric_name = 'grid_import_kwh' THEN total_value END), 0) AS grid_import_kwh,
 
@@ -539,6 +552,7 @@ class TelemetryRepository:
             query,
             {
                 "interval": bucket_interval,
+                "interval_seconds": interval_seconds,
                 "site_id": str(site_id),
                 "start_time": start_time,
                 "end_time": end_time,
