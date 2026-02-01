@@ -35,6 +35,9 @@ const DeviceSettingsPageHybrid = () => {
     queryKey: ['device', deviceId],
     queryFn: () => devicesService.getDevice(deviceId!),
     enabled: !!deviceId,
+    refetchOnWindowFocus: false, // Disable auto-refetch on window focus
+    refetchOnMount: false, // Disable refetch on component mount
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
 
   // Use hybrid device settings hook
@@ -242,25 +245,12 @@ const DeviceSettingsPageHybrid = () => {
         </motion.div>
 
         {/* Configuration Content */}
-        {(() => {
-          console.log('[DeviceSettingsHybrid] Rendering check:', {
-            hasSettings: !!settings,
-            settingsKeys: settings ? Object.keys(settings).length : 0,
-            deviceType: device?.type,
-            deviceId: device?.id,
-          });
-          return null;
-        })()}
         {settings && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            {(() => {
-              console.log('[DeviceSettingsHybrid] Inside settings conditional, device.device_type:', device.device_type);
-              return null;
-            })()}
             {device.device_type === "inverter" && (
               <InverterConfigPage
                 deviceId={device.id}

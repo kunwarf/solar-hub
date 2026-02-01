@@ -342,45 +342,49 @@ export function useDeviceSettings(
 
   /**
    * Handle page visibility changes
+   * DISABLED: Automatic query on visibility change was causing unwanted refreshes
+   * User can manually refresh using the "Refresh from Device" button
    */
-  useEffect(() => {
-    if (!enabled) return;
+  // useEffect(() => {
+  //   if (!enabled) return;
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Page became visible, query device immediately
-        queryDevice();
-      }
-    };
+  //   const handleVisibilityChange = () => {
+  //     if (document.visibilityState === 'visible') {
+  //       // Page became visible, query device immediately
+  //       queryDevice();
+  //     }
+  //   };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+  //   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
+  //   return () => {
+  //     document.removeEventListener('visibilitychange', handleVisibilityChange);
+  //   };
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [enabled]);
 
   /**
    * Multi-tab synchronization with BroadcastChannel
+   * DISABLED: Was causing unwanted refreshes when multiple tabs were open
+   * User can manually refresh if needed
    */
-  useEffect(() => {
-    if (!enabled || typeof BroadcastChannel === 'undefined') return;
+  // useEffect(() => {
+  //   if (!enabled || typeof BroadcastChannel === 'undefined') return;
 
-    const channel = new BroadcastChannel(`device_settings_${deviceId}`);
+  //   const channel = new BroadcastChannel(`device_settings_${deviceId}`);
 
-    channel.onmessage = (event) => {
-      if (event.data.type === 'settings_updated') {
-        // Another tab updated settings, reload from localStorage
-        loadCachedSettings();
-      }
-    };
+  //   channel.onmessage = (event) => {
+  //     if (event.data.type === 'settings_updated') {
+  //       // Another tab updated settings, reload from localStorage
+  //       loadCachedSettings();
+  //     }
+  //   };
 
-    return () => {
-      channel.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId, enabled]);
+  //   return () => {
+  //     channel.close();
+  //   };
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [deviceId, enabled]);
 
   return {
     settings,
