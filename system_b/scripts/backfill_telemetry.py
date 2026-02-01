@@ -291,9 +291,17 @@ async def backfill_telemetry(
 
             logger.info(f"Processing {len(batch)} records...")
 
+            # Log first record for debugging
+            if batch:
+                first_record = batch[0]
+                logger.debug(f"First record: time={first_record['time']}, device_id={first_record['device_id']}, data type={type(first_record['data'])}")
+                if first_record['data']:
+                    sample_keys = list(first_record['data'].keys())[:5] if isinstance(first_record['data'], dict) else []
+                    logger.debug(f"Sample data keys: {sample_keys}")
+
             # Parse each record
             all_metrics = []
-            for record in batch:
+            for idx, record in enumerate(batch):
                 device_id = record['device_id']
                 site_id = device_site_map.get(device_id)
 
@@ -312,6 +320,9 @@ async def backfill_telemetry(
                         site_id=site_id,
                         timestamp=record['time']
                     )
+
+                    if idx == 0:  # Log first record's parsing result
+                        logger.info(f"First record parsed: {len(metrics)} metrics extracted")
 
                     all_metrics.extend(metrics)
 
