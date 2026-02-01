@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'add_performance_metrics'
-down_revision: Union[str, None] = None  # Update this with the actual previous revision
+down_revision: Union[str, None] = 'dcf3f785fbc8'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
