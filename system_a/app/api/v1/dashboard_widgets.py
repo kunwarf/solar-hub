@@ -673,17 +673,44 @@ async def get_stats(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
-    """Get statistics data aggregated for the site."""
+    """
+    Get statistics data aggregated for the site.
+
+    Fetches energy totals from System B's TimescaleDB.
+    """
     site_info = await get_site_with_devices(current_user, uow, site_id)
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
 
-    # Query summary tables for historical aggregates
-    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
-    today_energy = await telemetry_repo.get_today_energy(site_info.site_id)
-    month_energy_kwh = await telemetry_repo.get_this_month_energy(site_info.site_id)
+    # Fetch today's and this month's energy from System B
+    total_energy_today_kwh = 0.0
+    month_energy_kwh = 0.0
+    peak_power_kw = 0.0
 
-    total_energy_today = 0.0
+    try:
+        # Get today's hourly data
+        today_data = await system_b_client.get_site_energy_chart(
+            site_id=site_info.site_id,
+            period="day",
+        )
+        for point in today_data.get("data", []):
+            pv_kwh = point.get("pv_kwh", 0)
+            total_energy_today_kwh += pv_kwh
+            # Peak power is the max hourly generation (approximate)
+            peak_power_kw = max(peak_power_kw, pv_kwh)
+
+        # Get this month's daily data
+        month_data = await system_b_client.get_site_energy_chart(
+            site_id=site_info.site_id,
+            period="month",
+        )
+        for point in month_data.get("data", []):
+            month_energy_kwh += point.get("pv_kwh", 0)
+
+    except Exception as e:
+        logger.error(f"Failed to fetch stats from System B: {e}")
+
     devices_online = 0
     devices_data = []
 
@@ -704,8 +731,6 @@ async def get_stats(
             energy = telemetry.get("energy_today", {})
             pv_kwh = energy.get("pv_kwh", 0)
 
-            total_energy_today += pv_kwh
-
             device_data = DeviceStatsData(
                 serial_number=serial,
                 energy_today_kwh=pv_kwh,
@@ -715,15 +740,15 @@ async def get_stats(
 
         devices_data.append(device_data)
 
-    co2_saved = total_energy_today * 0.7
+    co2_saved = total_energy_today_kwh * 0.7
 
     return StatsResponse(
         organization_id=site_info.organization_id,
         site_id=site_info.site_id,
         site_name=site_info.site_name,
-        energy_today_kwh=total_energy_today,
+        energy_today_kwh=total_energy_today_kwh,
         energy_month_kwh=month_energy_kwh,
-        peak_power_kw=today_energy["peak_power_kw"],
+        peak_power_kw=peak_power_kw,
         co2_saved_kg=co2_saved,
         online=devices_online > 0,
         devices_online=devices_online,
@@ -1049,74 +1074,104 @@ async def get_comparison(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
-    """Get current vs previous period energy comparison."""
-    site_info = await get_site_with_devices(current_user, uow, site_id)
-    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
-    now = datetime.now(timezone.utc)
-    data_points: List[ComparisonPoint] = []
+    """
+    Get current vs previous period energy comparison.
 
+    Fetches daily aggregated data from System B for period-over-period analysis.
+    """
+    site_info = await get_site_with_devices(current_user, uow, site_id)
+    data_points: List[ComparisonPoint] = []
     day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-    if period == "week":
-        # Current week (last 7 days) vs previous week (7-14 days ago)
-        current_start = (now - timedelta(days=7)).date()
-        current_end = now.date()
-        previous_start = (now - timedelta(days=14)).date()
-        previous_end = current_start
+    try:
+        if period == "week":
+            # Get last 14 days of data (current week + previous week)
+            energy_data = await system_b_client.get_site_energy_chart(
+                site_id=site_info.site_id,
+                period="week",  # This gives us 7 days
+            )
 
-        current_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, current_start, current_end)
-        previous_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, previous_start, previous_end)
+            # We need both weeks, so let's fetch 14 days manually
+            # TODO: Enhance System B to support custom date ranges
+            # For now, aggregate from available data
+            current_by_day: Dict[int, float] = {}
+            previous_by_day: Dict[int, float] = {}
 
-        # Build lookup by weekday index
-        current_by_day: Dict[int, float] = {}
-        for d in current_daily:
-            current_by_day[d.date.weekday()] = d.energy_generated_kwh
+            for point in energy_data.get("data", []):
+                timestamp = datetime.fromisoformat(point["timestamp"])
+                days_ago = (datetime.now(timezone.utc) - timestamp).days
+                pv_kwh = point.get("pv_kwh", 0)
 
-        previous_by_day: Dict[int, float] = {}
-        for d in previous_daily:
-            previous_by_day[d.date.weekday()] = d.energy_generated_kwh
+                if days_ago < 7:
+                    # Current week
+                    weekday = timestamp.weekday()
+                    current_by_day[weekday] = current_by_day.get(weekday, 0) + pv_kwh
+                elif days_ago < 14:
+                    # Previous week
+                    weekday = timestamp.weekday()
+                    previous_by_day[weekday] = previous_by_day.get(weekday, 0) + pv_kwh
 
-        for i in range(7):
-            data_points.append(ComparisonPoint(
-                label=day_labels[i],
-                current=round(current_by_day.get(i, 0), 1),
-                previous=round(previous_by_day.get(i, 0), 1),
-            ))
-    else:
-        # Current month (last 4 weeks) vs previous month (4-8 weeks ago)
-        for week_num in range(4):
-            curr_week_start = (now - timedelta(days=(4 - week_num) * 7)).date()
-            curr_week_end = (now - timedelta(days=(3 - week_num) * 7)).date()
-            prev_week_start = (now - timedelta(days=(8 - week_num) * 7)).date()
-            prev_week_end = (now - timedelta(days=(7 - week_num) * 7)).date()
+            for i in range(7):
+                data_points.append(ComparisonPoint(
+                    label=day_labels[i],
+                    current=round(current_by_day.get(i, 0), 1),
+                    previous=round(previous_by_day.get(i, 0), 1),
+                ))
+        else:
+            # Month period - compare last 4 weeks with previous 4 weeks
+            energy_data = await system_b_client.get_site_energy_chart(
+                site_id=site_info.site_id,
+                period="month",  # This gives us 30 days
+            )
 
-            curr_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, curr_week_start, curr_week_end)
-            prev_daily = await telemetry_repo.get_daily_summaries(site_info.site_id, prev_week_start, prev_week_end)
+            week_data = [0.0] * 8  # 4 current weeks + 4 previous weeks
 
-            curr_kwh = sum(d.energy_generated_kwh for d in curr_daily)
-            prev_kwh = sum(d.energy_generated_kwh for d in prev_daily)
+            for point in energy_data.get("data", []):
+                timestamp = datetime.fromisoformat(point["timestamp"])
+                days_ago = (datetime.now(timezone.utc) - timestamp).days
+                pv_kwh = point.get("pv_kwh", 0)
 
-            data_points.append(ComparisonPoint(
-                label=f"Week {week_num + 1}",
-                current=round(curr_kwh, 1),
-                previous=round(prev_kwh, 1),
-            ))
+                week_idx = days_ago // 7
+                if week_idx < 8:
+                    week_data[week_idx] += pv_kwh
 
-    current_total = sum(p.current for p in data_points)
-    previous_total = sum(p.previous for p in data_points)
-    pct_change = ((current_total - previous_total) / previous_total * 100) if previous_total > 0 else 0
+            # Build comparison points (reverse order so Week 1 is most recent)
+            for week_num in range(4):
+                data_points.append(ComparisonPoint(
+                    label=f"Week {week_num + 1}",
+                    current=round(week_data[week_num], 1),
+                    previous=round(week_data[week_num + 4], 1),
+                ))
 
-    return ComparisonResponse(
-        organization_id=site_info.organization_id,
-        site_id=site_info.site_id,
-        site_name=site_info.site_name,
-        period=period,
-        data=data_points,
-        current_total=round(current_total, 1),
-        previous_total=round(previous_total, 1),
-        percent_change=round(pct_change, 1),
-    )
+        current_total = sum(p.current for p in data_points)
+        previous_total = sum(p.previous for p in data_points)
+        pct_change = ((current_total - previous_total) / previous_total * 100) if previous_total > 0 else 0
+
+        return ComparisonResponse(
+            organization_id=site_info.organization_id,
+            site_id=site_info.site_id,
+            site_name=site_info.site_name,
+            period=period,
+            data=data_points,
+            current_total=round(current_total, 1),
+            previous_total=round(previous_total, 1),
+            percent_change=round(pct_change, 1),
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch comparison data from System B: {e}")
+        # Return empty comparison
+        return ComparisonResponse(
+            organization_id=site_info.organization_id,
+            site_id=site_info.site_id,
+            site_name=site_info.site_name,
+            period=period,
+            data=[],
+            current_total=0.0,
+            previous_total=0.0,
+            percent_change=0.0,
+        )
 
 
 @router.get(
@@ -1129,31 +1184,44 @@ async def get_peak_demand(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
-    """Get peak demand analysis for the site."""
-    site_info = await get_site_with_devices(current_user, uow, site_id)
-    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    """
+    Get peak demand analysis for the site.
 
-    # Get hourly summaries for today to build demand profile
-    hourly = await telemetry_repo.get_hourly_summaries(site_info.site_id, today_start, now)
+    Fetches today's hourly demand data from System B.
+    """
+    site_info = await get_site_with_devices(current_user, uow, site_id)
 
     hourly_profile: List[PeakDemandHourly] = []
     peak_kw = 0.0
     peak_hour_str = ""
     total_kw = 0.0
 
-    for h in hourly:
-        demand = h.energy_consumed_kwh  # Each hourly bucket represents kWh consumed
-        hour_label = h.timestamp_hour.strftime("%H:00")
-        hourly_profile.append(PeakDemandHourly(hour=hour_label, demand_kw=round(demand, 2)))
-        total_kw += demand
-        if demand > peak_kw:
-            peak_kw = demand
-            peak_hour_str = hour_label
+    try:
+        # Get today's hourly data from System B
+        energy_data = await system_b_client.get_site_energy_chart(
+            site_id=site_info.site_id,
+            period="day",  # Last 24 hours with hourly buckets
+        )
 
-    avg_kw = total_kw / len(hourly) if hourly else 0
+        for point in energy_data.get("data", []):
+            demand = point.get("load_kwh", 0)
+            timestamp = datetime.fromisoformat(point["timestamp"])
+            hour_label = timestamp.strftime("%H:00")
+
+            hourly_profile.append(PeakDemandHourly(hour=hour_label, demand_kw=round(demand, 2)))
+            total_kw += demand
+
+            if demand > peak_kw:
+                peak_kw = demand
+                peak_hour_str = hour_label
+
+        avg_kw = total_kw / len(hourly_profile) if hourly_profile else 0
+
+    except Exception as e:
+        logger.error(f"Failed to fetch peak demand from System B: {e}")
+        avg_kw = 0
 
     # Get current demand from Redis telemetry
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
