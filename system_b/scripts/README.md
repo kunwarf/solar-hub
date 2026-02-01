@@ -2,7 +2,51 @@
 
 Utility scripts for System B (Device Server & TimescaleDB).
 
+## migrate_device_telemetry_ids.py
+
+**⚠️ Run this FIRST before backfill_telemetry.py**
+
+Updates historical `device_telemetry` records to use the data logger's stable device_id instead of transient inverter device_ids.
+
+### Why This Is Needed
+
+When inverters reconnect, they get new device_ids each time. Historical telemetry was written with these transient device_ids, which don't exist in `device_registry` (and thus have no `site_id`). The backfill script needs a valid `site_id` to work.
+
+This script migrates all historical records to use the **data logger's device_id**, which is stable and has a `site_id` in the registry.
+
+### Usage
+
+```bash
+# Dry run to preview changes
+python3 migrate_device_telemetry_ids.py \
+  --db-host 127.0.0.1 \
+  --db-port 5432 \
+  --db-name solar_hub_telemetry \
+  --db-user solarhub_telemetry \
+  --db-password 'your_password' \
+  --dry-run
+
+# Apply migration
+python3 migrate_device_telemetry_ids.py \
+  --db-host 127.0.0.1 \
+  --db-port 5432 \
+  --db-name solar_hub_telemetry \
+  --db-user solarhub_telemetry \
+  --db-password 'your_password'
+```
+
+### What It Does
+
+1. Finds the data logger device_id from `device_registry` (serial: SH01IN9A423V4CU0)
+2. Analyzes current `device_telemetry` records by device_id
+3. Updates all records to use the data logger's device_id
+4. Verifies the migration
+
+After this, all telemetry records will have the same device_id that has a `site_id` in the registry.
+
 ## backfill_telemetry.py
+
+**⚠️ Run migrate_device_telemetry_ids.py FIRST**
 
 Backfills historical telemetry data from `device_telemetry` (JSON) into `telemetry_raw` (normalized metrics).
 
