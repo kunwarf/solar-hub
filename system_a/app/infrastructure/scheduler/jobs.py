@@ -1,8 +1,8 @@
 """
-Scheduled telemetry sync jobs.
+Scheduled jobs.
 
-Jobs run at configured intervals to sync data from System B
-into System A's summary tables.
+DEPRECATED: Telemetry sync jobs are disabled - System A now queries System B directly.
+Only billing jobs remain active.
 """
 import logging
 
@@ -14,31 +14,32 @@ logger = logging.getLogger(__name__)
 
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
     """Register all scheduled jobs with the scheduler."""
-    # Telemetry sync jobs
-    scheduler.add_job(
-        sync_hourly_job,
-        CronTrigger(minute=5),
-        id="sync_hourly",
-        name="Hourly telemetry sync",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        sync_daily_job,
-        CronTrigger(hour=0, minute=15),
-        id="sync_daily",
-        name="Daily telemetry rollup",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        sync_monthly_job,
-        CronTrigger(day=1, hour=1, minute=0),
-        id="sync_monthly",
-        name="Monthly telemetry rollup",
-        replace_existing=True,
-    )
-    logger.info("Registered 3 telemetry sync jobs")
+    # DEPRECATED: Telemetry sync jobs disabled - we now query System B directly
+    # No longer syncing data to System A summary tables
+    # scheduler.add_job(
+    #     sync_hourly_job,
+    #     CronTrigger(minute=5),
+    #     id="sync_hourly",
+    #     name="Hourly telemetry sync",
+    #     replace_existing=True,
+    # )
+    # scheduler.add_job(
+    #     sync_daily_job,
+    #     CronTrigger(hour=0, minute=15),
+    #     id="sync_daily",
+    #     name="Daily telemetry rollup",
+    #     replace_existing=True,
+    # )
+    # scheduler.add_job(
+    #     sync_monthly_job,
+    #     CronTrigger(day=1, hour=1, minute=0),
+    #     id="sync_monthly",
+    #     name="Monthly telemetry rollup",
+    #     replace_existing=True,
+    # )
+    logger.info("Telemetry sync jobs disabled (querying System B directly)")
 
-    # Billing jobs
+    # Billing jobs (still active)
     from .billing_jobs import register_billing_jobs
     register_billing_jobs(scheduler)
 

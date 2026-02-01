@@ -53,12 +53,17 @@ class SystemAClient:
             return
 
         system_a = self.settings.system_a
+        headers = {
+            "Content-Type": "application/json",
+        }
+
+        # Add API key for service-to-service authentication
+        if system_a.api_key:
+            headers["X-API-Key"] = system_a.api_key
+
         self._client = httpx.AsyncClient(
             base_url=system_a.base_url,
-            headers={
-                "Authorization": f"Bearer {system_a.api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             timeout=system_a.timeout,
         )
         logger.info(f"System A client initialized: {system_a.base_url}")

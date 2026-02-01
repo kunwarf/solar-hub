@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from ..dependencies import (
     get_current_user,
     get_unit_of_work,
+    verify_service_api_key,
 )
 from ..schemas.site_schemas import (
     AddressSchema,
@@ -296,6 +297,34 @@ async def list_sites(
         page_size=page_size,
         pages=pages,
     )
+
+
+@router.get(
+    "/by-address",
+    responses={200: {"description": "Site found or not found"}, 401: {"model": ErrorResponse}},
+)
+async def get_site_by_address(
+    address: str = Query(..., description="Device remote address (IP:port)"),
+    _api_key_valid: bool = Depends(verify_service_api_key),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """
+    Get site ID for a device based on its remote address.
+
+    This endpoint is used by System B's device server to auto-assign
+    devices to sites based on IP address or other criteria.
+
+    Requires API key authentication (X-API-Key header).
+    """
+    # TODO: Implement actual address-to-site mapping logic
+    # For now, return None (no site found)
+    # In the future, this could:
+    # 1. Parse IP address from the address string
+    # 2. Check if there's a mapping table for IP ranges to sites
+    # 3. Use geo-IP lookup to find location
+    # 4. Match against site geo_location
+
+    return {"site_id": None}
 
 
 @router.get(

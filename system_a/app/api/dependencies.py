@@ -1,10 +1,10 @@
 """
 FastAPI dependency injection providers.
 """
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Union
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Header, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ..application.services.auth_service import AuthService
@@ -255,6 +255,87 @@ async def get_current_verified_user(
             detail="Email verification required",
         )
     return current_user
+
+
+async def verify_service_api_key(
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> bool:
+    """
+    Verify service-to-service API key from header.
+
+    Used by System B and other backend services to authenticate.
+    Returns True if valid API key provided.
+
+    Raises HTTPException if API key is invalid or missing.
+    """
+    if not x_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    # Get expected API key from settings
+    expected_api_key = settings.system_b.api_key
+
+    if not expected_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API key authentication not configured",
+        )
+
+    if x_api_key != expected_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    return True
+
+
+async def get_current_user_or_service(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    jwt_handler: JWTHandler = Depends(get_jwt_handler),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> Union[User, str]:
+    """
+    Authenticate via either JWT token (for users) or API key (for services).
+
+    Returns:
+        - User entity if authenticated via JWT
+        - "service" string if authenticated via API key
+
+    Raises HTTPException if neither authentication method is valid.
+    """
+    # Try API key first
+    if x_api_key:
+        expected_api_key = settings.system_b.api_key
+        if expected_api_key and x_api_key == expected_api_key:
+            return "service"
+
+    # Try JWT token
+    if credentials:
+        token = credentials.credentials
+        payload = jwt_handler.verify_token(token)
+
+        if payload and payload.type == "access":
+            try:
+                user_id = UUID(payload.sub)
+                user = await uow.users.get_by_id(user_id)
+
+                if user and user.status not in (UserStatus.SUSPENDED, UserStatus.DEACTIVATED):
+                    return user
+            except ValueError:
+                pass
+
+    # Neither authentication method worked
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing authentication",
+        headers={"WWW-Authenticate": "Bearer, ApiKey"},
+    )
 
 
 class RoleChecker:
