@@ -78,77 +78,83 @@ class TelemetryMetric:
         )
 
 
-class DeyeHybridParser:
+class PowdriveParser:
     """
-    Simplified Deye Hybrid inverter parser for backfilling.
-    (Mirrors the parser in device_server/telemetry/deye_parser.py)
+    Simplified Powdrive inverter parser for backfilling.
+    (Mirrors the parser in device_server/telemetry/powdrive_parser.py)
     """
 
-    # Metric mappings: (json_section, json_field) -> (metric_name, unit, category)
+    # Metric mappings: json_field -> (metric_name, unit, category)
     METRIC_MAPPINGS = [
+        # PV Power Metrics
+        ('pv1_power_w', ('pv1_power_w', 'W', 'power')),
+        ('pv2_power_w', ('pv2_power_w', 'W', 'power')),
+        ('pv3_power_w', ('pv3_power_w', 'W', 'power')),
+        ('pv4_power_w', ('pv4_power_w', 'W', 'power')),
+
         # Power Metrics
-        (('power', 'pv1_w'), ('pv1_power_w', 'W', 'power')),
-        (('power', 'pv2_w'), ('pv2_power_w', 'W', 'power')),
-        (('power', 'pv_total_w'), ('pv_total_w', 'W', 'power')),
-        (('power', 'grid_w'), ('grid_w', 'W', 'power')),
-        (('power', 'load_w'), ('load_w', 'W', 'power')),
-        (('power', 'battery_w'), ('battery_w', 'W', 'power')),
+        ('grid_power_w', ('grid_w', 'W', 'power')),
+        ('load_power_w', ('load_w', 'W', 'power')),
+        ('battery_power_w', ('battery_w', 'W', 'power')),
 
         # Battery Metrics
-        (('battery', 'soc_pct'), ('battery_soc_pct', '%', 'battery')),
-        (('battery', 'voltage_v'), ('battery_voltage_v', 'V', 'battery')),
-        (('battery', 'current_a'), ('battery_current_a', 'A', 'battery')),
-        (('battery', 'charging'), ('battery_charging', 'bool', 'battery')),
+        ('battery_soc_pct', ('battery_soc_pct', '%', 'battery')),
+        ('battery_voltage_v', ('battery_voltage_v', 'V', 'battery')),
+        ('battery_current_a', ('battery_current_a', 'A', 'battery')),
 
         # Energy Metrics
-        (('energy_today', 'pv_kwh'), ('pv_energy_today_kwh', 'kWh', 'energy')),
-        (('energy_today', 'load_kwh'), ('load_energy_today_kwh', 'kWh', 'energy')),
+        ('pv_energy_today_kwh', ('pv_energy_today_kwh', 'kWh', 'energy')),
+        ('load_energy_today_kwh', ('load_energy_today_kwh', 'kWh', 'energy')),
+        ('grid_export_energy_today_kwh', ('grid_export_energy_today_kwh', 'kWh', 'energy')),
+        ('grid_import_energy_today_kwh', ('grid_import_energy_today_kwh', 'kWh', 'energy')),
+        ('battery_charge_energy_today_kwh', ('battery_charge_energy_today_kwh', 'kWh', 'energy')),
+        ('battery_discharge_energy_today_kwh', ('battery_discharge_energy_today_kwh', 'kWh', 'energy')),
 
         # Temperature Metrics
-        (('temperatures', 'inverter_c'), ('inverter_temp_c', 'C', 'temperature')),
-        (('temperatures', 'battery_c'), ('battery_temp_c', 'C', 'temperature')),
+        ('inverter_temp_c', ('inverter_temp_c', 'C', 'temperature')),
+        ('battery_temp_c', ('battery_temp_c', 'C', 'temperature')),
+        ('heat_sink_temp_c', ('heat_sink_temp_c', 'C', 'temperature')),
 
         # Grid Metrics
-        (('grid', 'voltage_v'), ('grid_voltage_v', 'V', 'grid')),
-        (('grid', 'frequency_hz'), ('grid_frequency_hz', 'Hz', 'grid')),
-        (('grid', 'l1_voltage_v'), ('grid_l1_voltage_v', 'V', 'grid')),
-        (('grid', 'l2_voltage_v'), ('grid_l2_voltage_v', 'V', 'grid')),
-        (('grid', 'l3_voltage_v'), ('grid_l3_voltage_v', 'V', 'grid')),
+        ('grid_voltage_v', ('grid_voltage_v', 'V', 'grid')),
+        ('grid_frequency_hz', ('grid_frequency_hz', 'Hz', 'grid')),
+        ('grid_l1_voltage_v', ('grid_l1_voltage_v', 'V', 'grid')),
+        ('grid_l2_voltage_v', ('grid_l2_voltage_v', 'V', 'grid')),
+        ('grid_l3_voltage_v', ('grid_l3_voltage_v', 'V', 'grid')),
+        ('grid_l1_current_a', ('grid_l1_current_a', 'A', 'grid')),
+        ('grid_l2_current_a', ('grid_l2_current_a', 'A', 'grid')),
+        ('grid_l3_current_a', ('grid_l3_current_a', 'A', 'grid')),
+        ('grid_l1_power_w', ('grid_l1_power_w', 'W', 'grid')),
+        ('grid_l2_power_w', ('grid_l2_power_w', 'W', 'grid')),
+        ('grid_l3_power_w', ('grid_l3_power_w', 'W', 'grid')),
+
+        # Load Metrics
+        ('load_l1_power_w', ('load_l1_power_w', 'W', 'load')),
+        ('load_l2_power_w', ('load_l2_power_w', 'W', 'load')),
+        ('load_l3_power_w', ('load_l3_power_w', 'W', 'load')),
+
+        # PV String Details
+        ('pv1_voltage_v', ('pv1_voltage_v', 'V', 'pv')),
+        ('pv1_current_a', ('pv1_current_a', 'A', 'pv')),
+        ('pv2_voltage_v', ('pv2_voltage_v', 'V', 'pv')),
+        ('pv2_current_a', ('pv2_current_a', 'A', 'pv')),
+        ('pv3_voltage_v', ('pv3_voltage_v', 'V', 'pv')),
+        ('pv3_current_a', ('pv3_current_a', 'A', 'pv')),
+        ('pv4_voltage_v', ('pv4_voltage_v', 'V', 'pv')),
+        ('pv4_current_a', ('pv4_current_a', 'A', 'pv')),
+
+        # Grid CT Metrics
+        ('grid_ct_power_w', ('grid_ct_power_w', 'W', 'grid')),
 
         # Status Metrics
-        (('status', 'grid_connected'), ('grid_connected', 'bool', 'status')),
+        ('grid_status_raw', ('grid_status_raw', 'enum', 'status')),
+        ('working_mode_raw', ('working_mode_raw', 'enum', 'status')),
+        ('power_on_off_status', ('power_on_off_status', 'bool', 'status')),
 
-        # Raw Metrics (all the detailed ones)
-        (('raw', 'grid_power_w'), ('grid_power_w', 'W', 'raw')),
-        (('raw', 'load_power_w'), ('load_power_w', 'W', 'raw')),
-        (('raw', 'load_l1_power_w'), ('load_l1_power_w', 'W', 'raw')),
-        (('raw', 'load_l2_power_w'), ('load_l2_power_w', 'W', 'raw')),
-        (('raw', 'load_l3_power_w'), ('load_l3_power_w', 'W', 'raw')),
-        (('raw', 'battery_voltage_v'), ('battery_voltage_v_raw', 'V', 'raw')),
-        (('raw', 'battery_current_a'), ('battery_current_a_raw', 'A', 'raw')),
-        (('raw', 'battery_power_w'), ('battery_power_w_raw', 'W', 'raw')),
-        (('raw', 'battery_soc_pct'), ('battery_soc_pct_raw', '%', 'raw')),
-        (('raw', 'pv1_power_w'), ('pv1_power_w_raw', 'W', 'raw')),
-        (('raw', 'pv2_power_w'), ('pv2_power_w_raw', 'W', 'raw')),
-        (('raw', 'pv1_voltage_v'), ('pv1_voltage_v', 'V', 'raw')),
-        (('raw', 'pv1_current_a'), ('pv1_current_a', 'A', 'raw')),
-        (('raw', 'pv2_voltage_v'), ('pv2_voltage_v', 'V', 'raw')),
-        (('raw', 'pv2_current_a'), ('pv2_current_a', 'A', 'raw')),
-        (('raw', 'grid_import_energy_today_kwh'), ('grid_import_energy_today_kwh', 'kWh', 'raw')),
-        (('raw', 'grid_export_energy_today_kwh'), ('grid_export_energy_today_kwh', 'kWh', 'raw')),
-        (('raw', 'battery_charge_energy_today_kwh'), ('battery_charge_energy_today_kwh', 'kWh', 'raw')),
-        (('raw', 'battery_discharge_energy_today_kwh'), ('battery_discharge_energy_today_kwh', 'kWh', 'raw')),
-        (('raw', 'pv_energy_today_kwh'), ('pv_energy_today_kwh_raw', 'kWh', 'raw')),
-        (('raw', 'load_energy_today_kwh'), ('load_energy_today_kwh_raw', 'kWh', 'raw')),
-        (('raw', 'grid_l1_power_w'), ('grid_l1_power_w', 'W', 'raw')),
-        (('raw', 'grid_l2_power_w'), ('grid_l2_power_w', 'W', 'raw')),
-        (('raw', 'grid_l3_power_w'), ('grid_l3_power_w', 'W', 'raw')),
-        (('raw', 'grid_l1_current_a'), ('grid_l1_current_a', 'A', 'raw')),
-        (('raw', 'grid_l2_current_a'), ('grid_l2_current_a', 'A', 'raw')),
-        (('raw', 'grid_l3_current_a'), ('grid_l3_current_a', 'A', 'raw')),
-        (('raw', 'inverter_temp_c'), ('inverter_temp_c_raw', 'C', 'raw')),
-        (('raw', 'battery_temp_c'), ('battery_temp_c_raw', 'C', 'raw')),
-        (('raw', 'heat_sink_temp_c'), ('heat_sink_temp_c', 'C', 'raw')),
+        # Configuration
+        ('battery_capacity_ah', ('battery_capacity_ah', 'Ah', 'config')),
+        ('battery_type', ('battery_type', 'enum', 'config')),
+        ('inverter_type', ('inverter_type', 'enum', 'config')),
     ]
 
     def parse(
@@ -158,11 +164,11 @@ class DeyeHybridParser:
         site_id: UUID,
         timestamp: datetime
     ) -> List[TelemetryMetric]:
-        """Parse telemetry JSON into normalized metrics."""
+        """Parse Powdrive telemetry JSON into normalized metrics."""
         metrics = []
 
-        for (section, field), (metric_name, unit, _category) in self.METRIC_MAPPINGS:
-            value = telemetry_data.get(section, {}).get(field)
+        for json_field, (metric_name, unit, _category) in self.METRIC_MAPPINGS:
+            value = telemetry_data.get(json_field)
 
             if value is None:
                 continue
@@ -180,8 +186,31 @@ class DeyeHybridParser:
                     unit=unit,
                     source='telemetry'
                 )
+                metrics.append(metric)
+
+            # Handle enum values
+            elif unit == 'enum':
+                try:
+                    numeric_value = float(value)
+                    metric = TelemetryMetric(
+                        time=timestamp,
+                        device_id=device_id,
+                        site_id=site_id,
+                        metric_name=metric_name,
+                        metric_value=numeric_value,
+                        metric_value_str=str(value),
+                        quality='good',
+                        unit=unit,
+                        source='telemetry'
+                    )
+                    metrics.append(metric)
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"Could not convert enum {metric_name}={value} to float"
+                    )
+
+            # Handle numeric values
             else:
-                # Numeric values
                 try:
                     numeric_value = float(value)
                     metric = TelemetryMetric(
@@ -194,13 +223,31 @@ class DeyeHybridParser:
                         unit=unit,
                         source='telemetry'
                     )
+                    metrics.append(metric)
                 except (ValueError, TypeError):
                     logger.warning(
                         f"Could not convert {metric_name}={value} to float, skipping"
                     )
                     continue
 
-            metrics.append(metric)
+        # Calculate total PV power if not already present
+        pv_total_w = sum(
+            telemetry_data.get(f'pv{i}_power_w', 0)
+            for i in range(1, 5)
+        )
+        if pv_total_w > 0:
+            metrics.append(
+                TelemetryMetric(
+                    time=timestamp,
+                    device_id=device_id,
+                    site_id=site_id,
+                    metric_name='pv_total_w',
+                    metric_value=float(pv_total_w),
+                    quality='good',
+                    unit='W',
+                    source='telemetry'
+                )
+            )
 
         return metrics
 
@@ -254,7 +301,7 @@ async def backfill_telemetry(
         logger.info(f"Total records to process: {total_count}")
 
         # Initialize parser
-        parser = DeyeHybridParser()
+        parser = PowdriveParser()
 
         # Process in batches
         offset = 0
