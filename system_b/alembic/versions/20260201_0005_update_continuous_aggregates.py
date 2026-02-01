@@ -1,14 +1,13 @@
-"""Add continuous aggregates and retention policies.
+"""Update continuous aggregates and retention policies.
 
-Revision ID: 0003
-Revises: 0002
+Revision ID: 0005
+Revises: 0004
 Create Date: 2026-02-01
 
-Creates TimescaleDB continuous aggregates for efficient time-series queries:
-- telemetry_hourly: Hourly aggregates (1 year retention)
-- telemetry_daily: Daily aggregates (3 years retention)
-- telemetry_monthly: Monthly aggregates (5 years retention)
-- telemetry_yearly: Yearly aggregates (forever)
+Replaces old continuous aggregates with new 4-tier hierarchy:
+- Drops old: telemetry_5min, telemetry_hourly, telemetry_daily (from 0002)
+- Creates new: telemetry_hourly (1 year), telemetry_daily (3 years),
+               telemetry_monthly (5 years), telemetry_yearly (forever)
 
 Also adds compression and retention policies for telemetry_raw.
 """
@@ -19,8 +18,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = "0003"
-down_revision: Union[str, None] = "0002"
+revision: str = "0005"
+down_revision: Union[str, None] = "0004"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -34,6 +33,14 @@ def upgrade() -> None:
     if not USE_TIMESCALEDB:
         print("Skipping continuous aggregates (USE_TIMESCALEDB=false)")
         return
+
+    # =========================================================================
+    # 0. Drop old continuous aggregates from migration 0002
+    # =========================================================================
+    print("Dropping old continuous aggregates...")
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS telemetry_5min CASCADE;")
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS telemetry_hourly CASCADE;")
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS telemetry_daily CASCADE;")
 
     # =========================================================================
     # 1. Create Hourly Continuous Aggregate
