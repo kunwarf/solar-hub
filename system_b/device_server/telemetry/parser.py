@@ -3,6 +3,7 @@ Base telemetry parser classes.
 
 Defines the interface for parsing device telemetry into normalized metrics.
 """
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -40,7 +41,7 @@ class TelemetryMetric:
             self.quality,
             self.unit,
             self.source,
-            self.tags,
+            json.dumps(self.tags) if self.tags else None,
         )
 
 
