@@ -27,6 +27,7 @@ export interface DevicePowerData {
   battery_soc_pct: number;
   is_charging: boolean;
   online: boolean;
+  raw?: Record<string, any>;  // Raw telemetry for MPPT and extended metrics
 }
 
 export interface DeviceStatsData {

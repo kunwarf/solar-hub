@@ -46,6 +46,7 @@ class DevicePowerData(BaseModel):
     battery_soc_pct: float = 0
     is_charging: bool = False
     online: bool = False
+    raw: Optional[Dict[str, Any]] = None  # Raw telemetry for MPPT and extended metrics
 
 
 class PowerFlowResponse(BaseModel):
@@ -628,6 +629,7 @@ async def get_power_flow(
                 battery_soc_pct=soc,
                 is_charging=charging,
                 online=is_online,
+                raw=telemetry.get("raw"),  # Include raw telemetry for MPPT and extended metrics
             )
 
         devices_data.append(device_data)
