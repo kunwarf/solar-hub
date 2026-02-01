@@ -103,14 +103,21 @@ test.describe('Telemetry Page - Real Data Integration', () => {
     expect(updatedValue).toMatch(/\d+\.\d+/);
   });
 
-  test('should display fallback warning when using simulated data', async ({ page }) => {
-    // Check if fallback warning appears (may appear if API is down)
-    const fallbackAlert = page.getByText(/simulated|unavailable/i);
+  test('should display empty state when data is unavailable', async ({ page }) => {
+    // Intercept API calls and return empty responses
+    await page.route('**/api/v1/devices/*/mppt-channels', (route) => {
+      route.fulfill({ status: 200, body: JSON.stringify([]) });
+    });
+    await page.route('**/api/v1/dashboard/energy-chart*', (route) => {
+      route.fulfill({ status: 200, body: JSON.stringify({ data: [] }) });
+    });
 
-    // If fallback is shown, it should be visible
-    if (await fallbackAlert.isVisible()) {
-      await expect(fallbackAlert).toContainText(/simulated|unavailable/i);
-    }
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Should show empty state messages instead of simulated data
+    const emptyStateMessages = page.getByText(/no.*data available|no.*channel data/i);
+    await expect(emptyStateMessages.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should handle device switching', async ({ page }) => {
@@ -184,13 +191,16 @@ test.describe('Telemetry Page - Real Data Integration', () => {
     await page.route('**/api/v1/devices/*/snapshot', (route) => {
       route.fulfill({ status: 500, body: 'Internal Server Error' });
     });
+    await page.route('**/api/v1/devices/*/mppt-channels', (route) => {
+      route.fulfill({ status: 500, body: 'Internal Server Error' });
+    });
 
     await page.reload();
     await page.waitForLoadState('networkidle');
 
-    // Should show fallback data or error message
-    const fallbackIndicator = page.getByText(/simulated|fallback|unavailable/i);
-    await expect(fallbackIndicator).toBeVisible({ timeout: 10000 });
+    // Should show empty state with error indicator
+    const emptyState = page.getByText(/no.*data available/i);
+    await expect(emptyState.first()).toBeVisible({ timeout: 10000 });
   });
 });
 

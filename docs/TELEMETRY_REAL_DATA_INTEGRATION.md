@@ -109,19 +109,18 @@ export interface HistoricalPowerPoint {
 
 **Features:**
 - ✅ Real-time polling (default: 5 seconds)
-- ✅ Automatic fallback to simulated data on API failure
+- ✅ Real data only - no mock/fallback data
 - ✅ Configurable data sources (MPPT, historical, metrics)
-- ✅ Error handling and loading states
+- ✅ Error handling with empty states
 - ✅ Memory-efficient polling cleanup
 
 **Usage:**
 ```typescript
 const {
-  metrics,           // ExtendedInverterMetrics
-  mpptChannels,      // MPPTChannel[]
-  historicalData,    // HistoricalPowerPoint[]
+  metrics,           // ExtendedInverterMetrics | null
+  mpptChannels,      // MPPTChannel[] (empty if unavailable)
+  historicalData,    // HistoricalPowerPoint[] (empty if unavailable)
   isLoading,         // boolean
-  usingFallback,     // boolean
   error,             // Error | null
   refresh,           // () => Promise<void>
 } = useTelemetryData({
@@ -142,26 +141,25 @@ const {
 | `/dashboard/energy-chart?period=day` | Historical energy data | ✅ Working |
 | `/devices/{id}/mppt-channels` | MPPT channel details | ⚠️ Not available yet |
 
-### 4. Fallback Strategy
+### 4. Error Handling Strategy
 
 **When APIs are unavailable:**
 ```typescript
-// MPPT Data: Generated based on current PV power
-mpptChannels = generateMockMPPTData(currentSolarPowerW);
+// No fallback data - show empty states instead
+mpptChannels = [];  // Empty array triggers empty state UI
+historicalData = []; // Empty array triggers empty state UI
 
-// Historical Data: Generated realistic 24-hour pattern
-historicalData = generateMockHistoricalData();
+// Metrics: null when unavailable
+metrics = null;  // Triggers "No data available" message
 
-// Metrics: Default safe values
-metrics = {
-  dc_voltage_v: 580,
-  ac_voltage_v: 238,
-  ac_frequency_hz: 50.0,
-  efficiency_pct: 97.0,
-  temperature_c: 42,
-  online: false,
-};
+// All sections show appropriate empty states with error indicators
+// Example:
+// - Solar Arrays: "No MPPT channel data available"
+// - Power History: "No historical data available"
+// - Efficiency & Temp: "No performance data available"
 ```
+
+**Note:** All mock/fallback data generators have been removed. The application now shows real data or empty states only.
 
 ## 📊 Data Mapping
 
@@ -363,23 +361,28 @@ if (import.meta.env.VITE_ENABLE_REAL_TELEMETRY === 'false') {
 
 ## 🐛 Known Issues
 
-### Issue 1: MPPT Data is Simulated
-**Status:** ⚠️ Temporary
-**Reason:** Backend endpoint `/devices/{id}/mppt-channels` not yet available
-**Workaround:** Generating realistic data from total PV power
+### Issue 1: MPPT Data Shows Empty State
+**Status:** ⚠️ Requires Backend Implementation
+**Reason:** Backend endpoint `/devices/{id}/mppt-channels` not yet implemented
+**Current Behavior:** Shows "No MPPT channel data available" empty state
+**Required Action:** Backend must implement MPPT endpoint
 **ETA for Fix:** Backend Sprint 3
 
-### Issue 2: AC Voltage Hardcoded
-**Status:** ⚠️ Temporary
-**Reason:** Not available in current DeviceMetrics schema
-**Workaround:** Using standard grid voltage (238V)
+### Issue 2: Extended Metrics May Show Zero Values
+**Status:** ⚠️ Requires Backend Implementation
+**Reason:** Backend endpoint `/devices/{id}/telemetry/extended` not yet implemented
+**Current Behavior:** Shows 0 for DC/AC voltage, frequency, etc. when extended metrics unavailable
+**Required Action:** Backend must implement extended telemetry endpoint
 **ETA for Fix:** Backend Sprint 3
 
 ### Issue 3: Battery Power Missing in Historical Chart
 **Status:** ⚠️ Limitation
-**Reason:** Energy Chart API doesn't include battery power
-**Workaround:** Showing as 0 in charts
+**Reason:** Energy Chart API doesn't include battery power data
+**Current Behavior:** Battery power shown as 0 in historical charts
+**Required Action:** Backend must add battery_power field to energy chart response
 **ETA for Fix:** Backend Sprint 4
+
+**Note:** All mock/fallback data has been removed. Empty states will be displayed until backend endpoints are fully implemented.
 
 ## 📞 Support
 
@@ -390,20 +393,25 @@ if (import.meta.env.VITE_ENABLE_REAL_TELEMETRY === 'false') {
 
 **Common Troubleshooting:**
 
-1. **Seeing "Simulated" badges everywhere?**
-   - Check backend API availability
-   - Verify device is online
+1. **Seeing empty states everywhere?**
+   - Verify backend endpoints are implemented and returning data
+   - Check backend API availability (Network tab in browser)
+   - Verify device is online and reporting data
    - Check browser console for API errors
+   - Verify backend has proper data in database
 
-2. **Charts not rendering?**
-   - Ensure EnergyChart API returns data
+2. **Charts not rendering (showing empty states)?**
+   - Ensure EnergyChart API returns non-empty data array
+   - Check MPPT endpoint returns channel data
    - Check for JavaScript errors in console
    - Verify recharts library is installed
+   - Check API responses in Network tab
 
 3. **Polling not working?**
    - Check `pollingInterval` is > 0
    - Verify component is mounted
    - Check for memory leaks (use React DevTools)
+   - Verify API endpoints are responding (not timing out)
 
 ## 📋 Checklist
 

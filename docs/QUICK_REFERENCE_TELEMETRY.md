@@ -9,11 +9,10 @@ import { useTelemetryData } from '@/hooks/useTelemetryData';
 
 const MyComponent = ({ device }) => {
   const {
-    metrics,          // Extended inverter metrics
-    mpptChannels,     // Solar array/MPPT data
-    historicalData,   // 24-hour power history
+    metrics,          // Extended inverter metrics (null if unavailable)
+    mpptChannels,     // Solar array/MPPT data (empty array if unavailable)
+    historicalData,   // 24-hour power history (empty array if unavailable)
     isLoading,        // Initial load state
-    usingFallback,    // True if using simulated data
     error,            // Error object if fetch failed
     refresh,          // Manual refresh function
   } = useTelemetryData({
@@ -26,9 +25,14 @@ const MyComponent = ({ device }) => {
 
   return (
     <div>
-      {usingFallback && <FallbackWarning />}
-      {metrics && <MetricsDisplay metrics={metrics} />}
-      {mpptChannels.map(channel => <MPPTCard key={channel.channel_id} data={channel} />)}
+      {isLoading ? <LoadingSpinner /> : (
+        <>
+          {mpptChannels.length === 0 ? <EmptyState /> : (
+            mpptChannels.map(channel => <MPPTCard key={channel.channel_id} data={channel} />)
+          )}
+          {metrics && <MetricsDisplay metrics={metrics} />}
+        </>
+      )}
     </div>
   );
 };
@@ -87,18 +91,17 @@ const MyComponent = ({ device }) => {
 
 ## ⚠️ Common Patterns
 
-### Handling Fallback Data
+### Handling Empty Data
 ```typescript
-const { usingFallback } = useTelemetryData({...});
+const { mpptChannels, historicalData, error } = useTelemetryData({...});
 
-// Show warning to user
-{usingFallback && (
-  <Alert className="bg-warning/10">
-    <AlertCircle className="h-4 w-4" />
-    <AlertDescription>
-      Using simulated data - real-time data unavailable
-    </AlertDescription>
-  </Alert>
+// Show empty state when no data available
+{mpptChannels.length === 0 && (
+  <div className="text-center py-8">
+    <Sun className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+    <p className="text-sm text-muted-foreground">No MPPT channel data available</p>
+    {error && <p className="text-xs text-destructive mt-2">Error loading data</p>}
+  </div>
 )}
 ```
 
@@ -142,11 +145,12 @@ const { mpptChannels } = useTelemetryData({
 
 ### Common Issues
 
-**Issue:** All data showing as "Simulated"
+**Issue:** No data showing (empty states)
 ```typescript
-// Solution: Check API availability
+// Solution: Check API availability and data
 console.log('Metrics:', metrics);
-console.log('Using Fallback:', usingFallback);
+console.log('MPPT Channels:', mpptChannels);
+console.log('Historical Data:', historicalData);
 console.log('Error:', error);
 ```
 
@@ -199,15 +203,17 @@ useEffect(() => {
 
 **Telemetry not updating?**
 1. Check device is online
-2. Verify API endpoints are responding
+2. Verify API endpoints are responding (check Network tab)
 3. Check browser console for errors
 4. Ensure `pollingInterval > 0`
+5. Verify backend services are running
 
-**Seeing wrong data?**
-1. Check `serialNumber` matches device
-2. Verify `deviceId` is correct UUID
-3. Clear browser cache and reload
-4. Check backend logs for mapping issues
+**Seeing empty states?**
+1. Check API endpoints return data (not empty arrays)
+2. Verify backend has implemented MPPT and extended telemetry endpoints
+3. Check `serialNumber` matches device
+4. Verify `deviceId` is correct UUID
+5. Check backend logs for data processing issues
 
 **Tests failing?**
 ```bash

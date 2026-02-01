@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Sun, Battery, Home, Zap, Activity, Thermometer, Gauge, TrendingUp, AlertCircle } from "lucide-react";
+import { Sun, Battery, Home, Zap, Activity, Thermometer, Gauge, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   LineChart,
@@ -13,7 +13,6 @@ import {
   Area,
 } from "recharts";
 import { useTelemetryData } from "@/hooks/useTelemetryData";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface DeviceTelemetry {
   serial_number: string;
@@ -36,22 +35,6 @@ interface InverterTelemetryProps {
   telemetry?: DeviceTelemetry | null;
 }
 
-// Generate historical data for inverter
-const generateHistoricalData = () => {
-  return Array.from({ length: 24 }, (_, i) => {
-    const hour = i;
-    const sunIntensity = Math.max(0, Math.sin((hour - 6) * Math.PI / 12));
-    return {
-      time: `${hour.toString().padStart(2, "0")}:00`,
-      solarPower: parseFloat((sunIntensity * 10 + Math.random() * 0.5).toFixed(1)),
-      batteryPower: parseFloat((sunIntensity > 0.5 ? 2 + Math.random() * 0.5 : -1.5 - Math.random() * 0.5).toFixed(1)),
-      loadPower: parseFloat((3 + Math.random() * 2 + (hour >= 18 && hour <= 22 ? 2 : 0)).toFixed(1)),
-      gridPower: parseFloat((Math.random() * 2 - 1).toFixed(1)),
-      efficiency: parseFloat((94 + Math.random() * 4).toFixed(1)),
-      temperature: parseFloat((35 + sunIntensity * 15 + Math.random() * 5).toFixed(1)),
-    };
-  });
-};
 
 const PowerFlowCard = ({ 
   icon: Icon, 
@@ -113,7 +96,6 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
     mpptChannels,
     historicalData,
     isLoading,
-    usingFallback,
     error,
   } = useTelemetryData({
     deviceId: device.id,
@@ -141,12 +123,12 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
     gridPower: Math.abs(gridPower),
     isGridExporting: isGridExporting,
     isCharging: isCharging,
-    // Use extended metrics when available, fallback to defaults
-    dcVoltage: extendedMetrics?.dc_voltage_v || 580,
-    acVoltage: extendedMetrics?.ac_voltage_v || 238,
-    frequency: extendedMetrics?.ac_frequency_hz || 50.02,
-    efficiency: extendedMetrics?.efficiency_pct || 97.2,
-    temperature: extendedMetrics?.temperature_c || 42,
+    // Use extended metrics from API
+    dcVoltage: extendedMetrics?.dc_voltage_v || 0,
+    acVoltage: extendedMetrics?.ac_voltage_v || 0,
+    frequency: extendedMetrics?.ac_frequency_hz || 0,
+    efficiency: extendedMetrics?.efficiency_pct || 0,
+    temperature: extendedMetrics?.temperature_c || 0,
   };
 
   return (
@@ -206,31 +188,31 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         transition={{ delay: 0.25 }}
         className="glass-card p-3 sm:p-5"
       >
-        {usingFallback && (
-          <Alert className="mb-4 bg-warning/10 border-warning/30">
-            <AlertCircle className="h-4 w-4 text-warning" />
-            <AlertDescription className="text-xs text-warning">
-              Using simulated MPPT data - real-time data unavailable
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
           <div>
             <h3 className="text-base sm:text-lg font-semibold text-foreground">
-              Solar Arrays {usingFallback && <span className="text-xs text-muted-foreground">(Simulated)</span>}
+              Solar Arrays
             </h3>
             <p className="text-xs sm:text-sm text-muted-foreground">MPPT channel monitoring</p>
           </div>
-          <div className="text-xs sm:text-sm text-muted-foreground">
-            Total: <span className="font-mono font-bold text-solar">
-              {(mpptChannels.reduce((sum, arr) => sum + arr.power_w, 0) / 1000).toFixed(2)} kW
-            </span>
-          </div>
+          {mpptChannels.length > 0 && (
+            <div className="text-xs sm:text-sm text-muted-foreground">
+              Total: <span className="font-mono font-bold text-solar">
+                {(mpptChannels.reduce((sum, arr) => sum + arr.power_w, 0) / 1000).toFixed(2)} kW
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {mpptChannels.map((array, index) => {
+        {mpptChannels.length === 0 ? (
+          <div className="text-center py-8">
+            <Sun className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+            <p className="text-sm text-muted-foreground">No MPPT channel data available</p>
+            {error && <p className="text-xs text-destructive mt-2">Error loading data</p>}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            {mpptChannels.map((array, index) => {
             const statusStyle = arrayStatusStyles[array.status];
             return (
               <motion.div
@@ -284,7 +266,8 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
               </motion.div>
             );
           })}
-        </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Inverter Metrics */}
@@ -352,48 +335,50 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         transition={{ delay: 0.3 }}
         className="glass-card p-3 sm:p-5"
       >
-        {usingFallback && (
-          <Alert className="mb-4 bg-warning/10 border-warning/30">
-            <AlertCircle className="h-4 w-4 text-warning" />
-            <AlertDescription className="text-xs text-warning">
-              Using simulated historical data - real-time data unavailable
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
           <div>
             <h3 className="text-base sm:text-lg font-semibold text-foreground">
-              Power History {usingFallback && <span className="text-xs text-muted-foreground">(Simulated)</span>}
+              Power History
             </h3>
             <p className="text-xs sm:text-sm text-muted-foreground">24-hour trend</p>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-solar" />
-              <span className="text-muted-foreground">Solar</span>
+          {historicalData.length > 0 && (
+            <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-solar" />
+                <span className="text-muted-foreground">Solar</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-consumption" />
+                <span className="text-muted-foreground">Load</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-battery" />
+                <span className="text-muted-foreground">Battery</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-consumption" />
-              <span className="text-muted-foreground">Load</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-battery" />
-              <span className="text-muted-foreground">Battery</span>
+          )}
+        </div>
+
+        {historicalData.length === 0 ? (
+          <div className="h-[180px] sm:h-[250px] flex items-center justify-center">
+            <div className="text-center">
+              <Activity className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground">No historical data available</p>
+              {error && <p className="text-xs text-destructive mt-2">Error loading data</p>}
             </div>
           </div>
-        </div>
-        
-        <div className="h-[180px] sm:h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={historicalData.length > 0 ? historicalData.map(point => ({
-              time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-              solarPower: point.solar_power_kw,
-              loadPower: point.load_power_kw,
-              batteryPower: point.battery_power_kw,
-              efficiency: point.efficiency_pct,
-              temperature: point.temperature_c,
-            })) : generateHistoricalData()}>
+        ) : (
+          <div className="h-[180px] sm:h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={historicalData.map(point => ({
+                time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                solarPower: point.solar_power_kw,
+                loadPower: point.load_power_kw,
+                batteryPower: point.battery_power_kw,
+                efficiency: point.efficiency_pct,
+                temperature: point.temperature_c,
+              }))}>
               <defs>
                 <linearGradient id="solarGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(var(--solar))" stopOpacity={0.3} />
@@ -452,7 +437,8 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
               />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Efficiency & Temperature History - Real Data */}
@@ -462,29 +448,29 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         transition={{ delay: 0.4 }}
         className="glass-card p-3 sm:p-5"
       >
-        {usingFallback && (
-          <Alert className="mb-4 bg-warning/10 border-warning/30">
-            <AlertCircle className="h-4 w-4 text-warning" />
-            <AlertDescription className="text-xs text-warning">
-              Using simulated efficiency data - real-time data unavailable
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="mb-3 sm:mb-4">
           <h3 className="text-base sm:text-lg font-semibold text-foreground">
-            Efficiency & Temp {usingFallback && <span className="text-xs text-muted-foreground">(Simulated)</span>}
+            Efficiency & Temp
           </h3>
           <p className="text-xs sm:text-sm text-muted-foreground">24-hour performance</p>
         </div>
-        
-        <div className="h-[150px] sm:h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={historicalData.length > 0 ? historicalData.map(point => ({
-              time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-              efficiency: point.efficiency_pct || 95,
-              temperature: point.temperature_c || 40,
-            })) : generateHistoricalData()}>
+
+        {historicalData.length === 0 ? (
+          <div className="h-[150px] sm:h-[200px] flex items-center justify-center">
+            <div className="text-center">
+              <Gauge className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground">No performance data available</p>
+              {error && <p className="text-xs text-destructive mt-2">Error loading data</p>}
+            </div>
+          </div>
+        ) : (
+          <div className="h-[150px] sm:h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={historicalData.map(point => ({
+                time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                efficiency: point.efficiency_pct || 95,
+                temperature: point.temperature_c || 40,
+              }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
               <XAxis 
                 dataKey="time" 
@@ -539,7 +525,8 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );
