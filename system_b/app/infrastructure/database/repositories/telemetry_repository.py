@@ -503,48 +503,52 @@ class TelemetryRepository:
             interval_seconds = minutes * 60
 
         query = text(f"""
-            WITH energy_data AS (
+            WITH device_data AS (
                 SELECT
-                    time_bucket(INTERVAL '{bucket_interval}', time) AS bucket,
-                    metric_name,
-                    SUM(metric_value) AS total_value,
-                    AVG(metric_value) AS avg_value
-                FROM telemetry_raw
-                WHERE site_id = :site_id
-                  AND time >= :start_time
-                  AND time < :end_time
-                  AND metric_name IN (
-                    'energy_generated_kwh', 'pv_power_w',
-                    'energy_consumed_kwh', 'load_power_w',
-                    'grid_import_kwh', 'grid_power_w',
-                    'grid_export_kwh',
-                    'battery_charge_kwh', 'battery_power_w',
-                    'battery_discharge_kwh',
-                    'inverter_temp_c', 'temperature_c'
-                  )
-                GROUP BY bucket, metric_name
+                    time_bucket(INTERVAL '{bucket_interval}', dt.time) AS bucket,
+                    dt.data,
+                    dt.device_id
+                FROM device_telemetry dt
+                JOIN device_registry dr ON dt.device_id = dr.device_id
+                WHERE dr.site_id = :site_id
+                  AND dt.time >= :start_time
+                  AND dt.time < :end_time
+            ),
+            energy_data AS (
+                SELECT
+                    bucket,
+                    -- Extract power metrics from JSONB (instantaneous watts)
+                    AVG((data->'power'->>'pv_total_w')::float) AS avg_pv_w,
+                    AVG((data->'power'->>'load_w')::float) AS avg_load_w,
+                    AVG((data->'power'->>'grid_w')::float) AS avg_grid_w,
+                    AVG((data->'power'->>'battery_w')::float) AS avg_battery_w,
+
+                    -- Extract energy metrics from JSONB (kWh)
+                    AVG((data->'energy_today'->>'pv_kwh')::float) AS pv_energy_today,
+                    AVG((data->'energy_today'->>'load_kwh')::float) AS load_energy_today,
+
+                    -- Extract temperature
+                    AVG((data->'temperatures'->>'inverter_c')::float) AS avg_temp_c,
+
+                    -- Extract raw energy values if available
+                    AVG((data->'raw'->>'grid_import_energy_today_kwh')::float) AS grid_import_today,
+                    AVG((data->'raw'->>'grid_export_energy_today_kwh')::float) AS grid_export_today,
+                    AVG((data->'raw'->>'battery_charge_energy_today_kwh')::float) AS battery_charge_today,
+                    AVG((data->'raw'->>'battery_discharge_energy_today_kwh')::float) AS battery_discharge_today
+                FROM device_data
+                GROUP BY bucket
             )
             SELECT
                 bucket,
-                -- Energy metrics (sum for cumulative, avg for instantaneous power converted to energy)
-                COALESCE(SUM(CASE WHEN metric_name = 'energy_generated_kwh' THEN total_value END), 0) +
-                COALESCE(AVG(CASE WHEN metric_name = 'pv_power_w' THEN avg_value END) * :interval_seconds / 3600000.0, 0) AS pv_kwh,
-
-                COALESCE(SUM(CASE WHEN metric_name = 'energy_consumed_kwh' THEN total_value END), 0) +
-                COALESCE(AVG(CASE WHEN metric_name = 'load_power_w' THEN avg_value END) * :interval_seconds / 3600000.0, 0) AS load_kwh,
-
-                COALESCE(SUM(CASE WHEN metric_name = 'grid_import_kwh' THEN total_value END), 0) AS grid_import_kwh,
-
-                COALESCE(SUM(CASE WHEN metric_name = 'grid_export_kwh' THEN total_value END), 0) AS grid_export_kwh,
-
-                COALESCE(SUM(CASE WHEN metric_name = 'battery_charge_kwh' THEN total_value END), 0) AS battery_charge_kwh,
-
-                COALESCE(SUM(CASE WHEN metric_name = 'battery_discharge_kwh' THEN total_value END), 0) AS battery_discharge_kwh,
-
-                -- Temperature (average)
-                AVG(CASE WHEN metric_name IN ('inverter_temp_c', 'temperature_c') THEN avg_value END) AS temperature_c
+                -- Convert power (W) to energy (kWh) for the interval
+                COALESCE(avg_pv_w * :interval_seconds / 3600000.0, 0) AS pv_kwh,
+                COALESCE(avg_load_w * :interval_seconds / 3600000.0, 0) AS load_kwh,
+                COALESCE(grid_import_today, 0) AS grid_import_kwh,
+                COALESCE(grid_export_today, 0) AS grid_export_kwh,
+                COALESCE(battery_charge_today, 0) AS battery_charge_kwh,
+                COALESCE(battery_discharge_today, 0) AS battery_discharge_kwh,
+                COALESCE(avg_temp_c, 0) AS temperature_c
             FROM energy_data
-            GROUP BY bucket
             ORDER BY bucket
         """)
 

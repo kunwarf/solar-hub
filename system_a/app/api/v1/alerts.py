@@ -365,39 +365,66 @@ async def delete_alert_rule(
     responses={403: {"model": ErrorResponse}},
 )
 async def list_alerts(
-    organization_id: UUID = Query(..., description="Organization ID"),
+    organization_id: Optional[UUID] = Query(None, description="Filter by organization"),
     site_id: Optional[UUID] = Query(None, description="Filter by site"),
     device_id: Optional[UUID] = Query(None, description="Filter by device"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
-    """List alerts for an organization."""
-    await check_org_access(organization_id, current_user, uow)
+    """
+    List alerts the user has access to.
 
-    if device_id:
-        alerts = await uow.alerts.get_by_device_id(device_id, limit, status_filter)
-        total = len(alerts)
-    elif site_id:
-        alerts = await uow.alerts.get_by_site_id(
-            site_id, limit, offset, status_filter, severity
-        )
-        total = await uow.alerts.count_by_site_id(site_id, status_filter, severity)
+    If organization_id is provided, returns alerts for that organization.
+    Otherwise, returns alerts across all user's organizations.
+    """
+    offset = (page - 1) * page_size
+
+    if organization_id:
+        # List alerts for specific organization
+        await check_org_access(organization_id, current_user, uow)
+
+        if device_id:
+            alerts = await uow.alerts.get_by_device_id(device_id, page_size, status_filter)
+            total = len(alerts)
+        elif site_id:
+            alerts = await uow.alerts.get_by_site_id(
+                site_id, page_size, offset, status_filter, severity
+            )
+            total = await uow.alerts.count_by_site_id(site_id, status_filter, severity)
+        else:
+            alerts = await uow.alerts.get_by_organization_id(
+                organization_id, page_size, offset, status_filter, severity
+            )
+            total = await uow.alerts.count_by_organization_id(
+                organization_id, status_filter, severity
+            )
     else:
-        alerts = await uow.alerts.get_by_organization_id(
-            organization_id, limit, offset, status_filter, severity
-        )
-        total = await uow.alerts.count_by_organization_id(
-            organization_id, status_filter, severity
-        )
+        # List alerts across all user's organizations
+        orgs = await uow.organizations.get_by_member_id(current_user.id)
+
+        all_alerts = []
+        total = 0
+
+        for org in orgs:
+            org_alerts = await uow.alerts.get_by_organization_id(
+                org.id, limit=1000, status=status_filter, severity=severity
+            )
+            all_alerts.extend(org_alerts)
+            total += await uow.alerts.count_by_organization_id(
+                org.id, status_filter, severity
+            )
+
+        # Manual pagination
+        alerts = all_alerts[offset:offset + page_size]
 
     return AlertListResponse(
         items=[alert_to_response(a) for a in alerts],
         total=total,
-        limit=limit,
+        limit=page_size,
         offset=offset,
     )
 
