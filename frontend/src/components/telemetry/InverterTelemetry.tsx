@@ -278,42 +278,35 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
         className="glass-card p-3 sm:p-5"
       >
         <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Inverter Metrics</h3>
-        
-        <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
-              <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-solar" />
-              <span className="text-[10px] sm:text-xs text-muted-foreground">DC V</span>
-            </div>
-            <p className="text-base sm:text-xl font-mono font-bold text-foreground">{powerFlowData.dcVoltage}</p>
-          </div>
+
+        <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
           <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
             <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
               <Activity className="w-3 h-3 sm:w-4 sm:h-4 text-grid" />
               <span className="text-[10px] sm:text-xs text-muted-foreground">AC V</span>
             </div>
-            <p className="text-base sm:text-xl font-mono font-bold text-foreground">{powerFlowData.acVoltage}</p>
+            <p className="text-base sm:text-xl font-mono font-bold text-foreground">{Math.round(powerFlowData.acVoltage)}</p>
           </div>
           <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
             <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
               <Activity className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
               <span className="text-[10px] sm:text-xs text-muted-foreground">Freq</span>
             </div>
-            <p className="text-base sm:text-xl font-mono font-bold text-foreground">{powerFlowData.frequency}</p>
+            <p className="text-base sm:text-xl font-mono font-bold text-foreground">{Math.round(powerFlowData.frequency * 10) / 10}</p>
           </div>
           <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
             <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
               <Gauge className="w-3 h-3 sm:w-4 sm:h-4 text-success" />
               <span className="text-[10px] sm:text-xs text-muted-foreground">Eff</span>
             </div>
-            <p className="text-base sm:text-xl font-mono font-bold text-success">{powerFlowData.efficiency}%</p>
+            <p className="text-base sm:text-xl font-mono font-bold text-success">{Math.round(powerFlowData.efficiency)}%</p>
           </div>
           <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
             <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
               <Battery className="w-3 h-3 sm:w-4 sm:h-4 text-battery" />
               <span className="text-[10px] sm:text-xs text-muted-foreground">SOC</span>
             </div>
-            <p className="text-base sm:text-xl font-mono font-bold text-battery">{powerFlowData.batterySoc}%</p>
+            <p className="text-base sm:text-xl font-mono font-bold text-battery">{Math.round(powerFlowData.batterySoc)}%</p>
           </div>
           <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
             <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
@@ -323,7 +316,7 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
             <p className={cn(
               "text-base sm:text-xl font-mono font-bold",
               powerFlowData.temperature > 50 ? "text-destructive" : powerFlowData.temperature > 45 ? "text-warning" : "text-foreground"
-            )}>{powerFlowData.temperature}°</p>
+            )}>{Math.round(powerFlowData.temperature)}°</p>
           </div>
         </div>
       </motion.div>
@@ -468,8 +461,8 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={historicalData.map(point => ({
                 time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                efficiency: point.efficiency_pct || 95,
-                temperature: point.temperature_c || 40,
+                efficiency: point.efficiency_pct || 0,
+                temperature: point.temperature_c || 0,
               }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
               <XAxis 
