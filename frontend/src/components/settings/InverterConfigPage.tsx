@@ -20,7 +20,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  Cpu, Plus, Trash2, Sun, Shield, Settings2, Plug, Power, Clock, Info, Zap, Battery, Edit3, Check, X
+  Cpu, Plus, Trash2, Sun, Shield, Settings2, Power, Clock, Info, Zap, Battery, Edit3, Check, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mapApiSettingsToConfig, mapApiSettingsToTOUWindows, type InverterConfig, type TOUWindowData } from "@/lib/settings-mapper";
@@ -587,7 +587,7 @@ export function InverterConfigPage({ deviceId, deviceName, settings }: InverterC
 
       {/* ============== SYSTEM TAB ============== */}
       <TabsContent value="system" className="space-y-4">
-        <Accordion type="multiple" defaultValue={["general", "specification", "grid", "adapter", "safety", "solar"]} className="space-y-2">
+        <Accordion type="multiple" defaultValue={["general", "specification", "grid", "safety", "solar"]} className="space-y-2">
           
           {/* General Settings */}
           <AccordionItem value="general" className="glass-card border-none">
@@ -624,22 +624,45 @@ export function InverterConfigPage({ deviceId, deviceName, settings }: InverterC
             </AccordionContent>
           </AccordionItem>
 
-          {/* Specification */}
+          {/* Specification - Read Only */}
           <AccordionItem value="specification" className="glass-card border-none">
             <AccordionTrigger className="px-4 hover:no-underline">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-primary" />
-                <span>Specification</span>
+                <span>Specification (Read Only)</span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
-              <SettingRow label="Driver" value={config.specification.driver} />
-              <SettingRow label="Serial Number" value={config.specification.serialNumber} />
-              <SettingRow label="Protocol Version" value={config.specification.protocolVersion} />
-              <SettingRow label="Max AC Output Power" value={config.specification.maxAcOutputPower} unit="kW" editable onEdit={(v) => updateSpecification("maxAcOutputPower", parseFloat(v))} />
-              <SettingRow label="MPPT Connections" value={config.specification.mpptConnections} />
-              <ToggleRow label="Parallel Mode" checked={config.specification.parallelMode} onCheckedChange={(v) => updateSpecification("parallelMode", v)} />
-              <SettingRow label="Modbus Number" value={config.specification.modbusNumber} />
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground mb-1">Driver</span>
+                  <span className="font-mono text-sm text-foreground">{config.specification.driver}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground mb-1">Serial Number</span>
+                  <span className="font-mono text-sm text-foreground">{config.specification.serialNumber}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground mb-1">Protocol Version</span>
+                  <span className="font-mono text-sm text-foreground">{config.specification.protocolVersion}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground mb-1">Max AC Output Power</span>
+                  <span className="font-mono text-sm text-foreground">{config.specification.maxAcOutputPower} <span className="text-muted-foreground">kW</span></span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground mb-1">MPPT Connections</span>
+                  <span className="font-mono text-sm text-foreground">{config.specification.mpptConnections}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground mb-1">Parallel Mode</span>
+                  <span className="font-mono text-sm text-foreground">{config.specification.parallelMode ? 'Enabled' : 'Disabled'}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground mb-1">Modbus Number</span>
+                  <span className="font-mono text-sm text-foreground">{config.specification.modbusNumber}</span>
+                </div>
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -652,151 +675,64 @@ export function InverterConfigPage({ deviceId, deviceName, settings }: InverterC
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
-              <SettingRow label="Grid Voltage High" value={config.gridSettings.voltageHigh} unit="V" editable onEdit={(v) => updateGridSettings("voltageHigh", parseFloat(v))} />
-              <SettingRow label="Grid Voltage Low" value={config.gridSettings.voltageLow || "—"} unit="V" editable onEdit={(v) => updateGridSettings("voltageLow", parseFloat(v))} />
-              <SettingRow label="Grid Frequency" value={config.gridSettings.frequency} unit="Hz" editable onEdit={(v) => updateGridSettings("frequency", parseFloat(v))} />
-              <SettingRow label="Grid Frequency High" value={config.gridSettings.frequencyHigh} unit="Hz" editable onEdit={(v) => updateGridSettings("frequencyHigh", parseFloat(v))} />
-              <SettingRow label="Grid Frequency Low" value={config.gridSettings.frequencyLow} unit="Hz" editable onEdit={(v) => updateGridSettings("frequencyLow", parseFloat(v))} />
-              <ToggleRow label="Grid Peak Shaving" description="Limit power drawn from grid during peak times" checked={config.gridSettings.peakShavingEnabled} onCheckedChange={(v) => updateGridSettings("peakShavingEnabled", v)} />
-            </AccordionContent>
-          </AccordionItem>
-
-          {/* Adapter Settings */}
-          <AccordionItem value="adapter" className="glass-card border-none">
-            <AccordionTrigger className="px-4 hover:no-underline">
-              <div className="flex items-center gap-2">
-                <Plug className="w-4 h-4 text-primary" />
-                <span>Adapter / Communication</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-4 pb-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Adapter Type</Label>
-                  <Select value={config.adapter.type} onValueChange={(v) => updateAdapter("type", v)}>
-                    <SelectTrigger className="bg-secondary/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="powdrive">Powdrive</SelectItem>
-                      <SelectItem value="sunsynk">Sunsynk</SelectItem>
-                      <SelectItem value="growatt">Growatt</SelectItem>
-                      <SelectItem value="deye">Deye</SelectItem>
-                      <SelectItem value="solis">Solis</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-4">
+                {/* Grid Voltage Limits (Read-only) */}
+                <div className="bg-secondary/20 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">Voltage Limits (Read Only)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground">High Limit</span>
+                      <p className="font-mono text-sm text-foreground">{config.gridSettings.voltageHigh} <span className="text-muted-foreground">V</span></p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Low Limit</span>
+                      <p className="font-mono text-sm text-foreground">{config.gridSettings.voltageLow || "—"} <span className="text-muted-foreground">V</span></p>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Transport</Label>
-                  <Select value={config.adapter.transport} onValueChange={(v) => updateAdapter("transport", v)}>
-                    <SelectTrigger className="bg-secondary/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="rtu">RTU (Serial)</SelectItem>
-                      <SelectItem value="tcp">TCP (Network)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
 
-              {config.adapter.transport === "rtu" ? (
-                <>
-                  <div className="space-y-2">
-                    <Label>Serial Port</Label>
-                    <Select value={config.adapter.serial_port} onValueChange={(v) => updateAdapter("serial_port", v)}>
-                      <SelectTrigger className="bg-secondary/50 font-mono text-xs">
-                        <SelectValue placeholder="Select USB port..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AVAILABLE_USB_PORTS.map((port) => (
-                          <SelectItem key={port.value} value={port.value} className="font-mono text-xs">{port.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <Label>Unit ID</Label>
-                      <Input type="number" value={config.adapter.unit_id} onChange={(e) => updateAdapter("unit_id", parseInt(e.target.value))} className="bg-secondary/50" min={1} max={247} />
+                {/* Grid Frequency Limits (Read-only) */}
+                <div className="bg-secondary/20 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">Frequency Limits (Read Only)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground">High Limit</span>
+                      <p className="font-mono text-sm text-foreground">{config.gridSettings.frequencyHigh} <span className="text-muted-foreground">Hz</span></p>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Baudrate</Label>
-                      <Select value={config.adapter.baudrate.toString()} onValueChange={(v) => updateAdapter("baudrate", parseInt(v))}>
-                        <SelectTrigger className="bg-secondary/50"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="4800">4800</SelectItem>
-                          <SelectItem value="9600">9600</SelectItem>
-                          <SelectItem value="19200">19200</SelectItem>
-                          <SelectItem value="38400">38400</SelectItem>
-                          <SelectItem value="57600">57600</SelectItem>
-                          <SelectItem value="115200">115200</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Parity</Label>
-                      <Select value={config.adapter.parity} onValueChange={(v) => updateAdapter("parity", v)}>
-                        <SelectTrigger className="bg-secondary/50"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="N">None (N)</SelectItem>
-                          <SelectItem value="E">Even (E)</SelectItem>
-                          <SelectItem value="O">Odd (O)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Stop Bits</Label>
-                      <Select value={config.adapter.stopbits.toString()} onValueChange={(v) => updateAdapter("stopbits", parseInt(v))}>
-                        <SelectTrigger className="bg-secondary/50"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1</SelectItem>
-                          <SelectItem value="2">2</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Low Limit</span>
+                      <p className="font-mono text-sm text-foreground">{config.gridSettings.frequencyLow} <span className="text-muted-foreground">Hz</span></p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Byte Size</Label>
-                      <Select value={config.adapter.bytesize.toString()} onValueChange={(v) => updateAdapter("bytesize", parseInt(v))}>
-                        <SelectTrigger className="bg-secondary/50"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="7">7</SelectItem>
-                          <SelectItem value="8">8</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Register Map File</Label>
-                      <Input value={config.adapter.register_map_file} onChange={(e) => updateAdapter("register_map_file", e.target.value)} className="bg-secondary/50 font-mono text-xs" />
-                    </div>
+                </div>
+
+                {/* Grid Frequency - Editable with validation */}
+                <div className="space-y-2">
+                  <Label>Grid Frequency</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="number"
+                      value={config.gridSettings.frequency}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value);
+                        if (value >= config.gridSettings.frequencyLow && value <= config.gridSettings.frequencyHigh) {
+                          updateGridSettings("frequency", value);
+                        }
+                      }}
+                      className="bg-secondary/50"
+                      step={0.01}
+                      min={config.gridSettings.frequencyLow}
+                      max={config.gridSettings.frequencyHigh}
+                    />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Hz</span>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>IP Address</Label>
-                      <Input value={config.adapter.host} onChange={(e) => updateAdapter("host", e.target.value)} className="bg-secondary/50 font-mono" placeholder="192.168.1.100" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Port</Label>
-                      <Input type="number" value={config.adapter.port} onChange={(e) => updateAdapter("port", parseInt(e.target.value))} className="bg-secondary/50" min={1} max={65535} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Unit ID</Label>
-                      <Input type="number" value={config.adapter.unit_id} onChange={(e) => updateAdapter("unit_id", parseInt(e.target.value))} className="bg-secondary/50" min={1} max={247} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Register Map File</Label>
-                      <Input value={config.adapter.register_map_file} onChange={(e) => updateAdapter("register_map_file", e.target.value)} className="bg-secondary/50 font-mono text-xs" />
-                    </div>
-                  </div>
-                </>
-              )}
+                  <p className="text-xs text-muted-foreground">
+                    Must be between {config.gridSettings.frequencyLow} Hz and {config.gridSettings.frequencyHigh} Hz
+                  </p>
+                </div>
+
+                <ToggleRow label="Grid Peak Shaving" description="Limit power drawn from grid during peak times" checked={config.gridSettings.peakShavingEnabled} onCheckedChange={(v) => updateGridSettings("peakShavingEnabled", v)} />
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -881,10 +817,37 @@ export function InverterConfigPage({ deviceId, deviceName, settings }: InverterC
                 <span>Battery Configuration</span>
               </div>
             </AccordionTrigger>
-            <AccordionContent className="px-4 pb-4">
-              <SettingRow label="Battery Type" value={config.batteryConfig.type} editable onEdit={(v) => updateBatteryConfig("type", v)} />
+            <AccordionContent className="px-4 pb-4 space-y-4">
+              {/* Battery Type - Dropdown */}
+              <div className="space-y-2">
+                <Label>Battery Type</Label>
+                <Select value={config.batteryConfig.type} onValueChange={(v) => updateBatteryConfig("type", v)}>
+                  <SelectTrigger className="bg-secondary/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Lithium battery">Lithium battery</SelectItem>
+                    <SelectItem value="Flooded battery">Flooded battery</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <SettingRow label="Battery Capacity" value={config.batteryConfig.capacity} unit="Ah" editable onEdit={(v) => updateBatteryConfig("capacity", parseInt(v))} />
-              <SettingRow label="Battery Operation" value={config.batteryConfig.operation} editable onEdit={(v) => updateBatteryConfig("operation", v)} />
+
+              {/* Battery Operation - Dropdown */}
+              <div className="space-y-2">
+                <Label>Battery Operation</Label>
+                <Select value={config.batteryConfig.operation} onValueChange={(v) => updateBatteryConfig("operation", v)}>
+                  <SelectTrigger className="bg-secondary/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="State of charge">State of charge</SelectItem>
+                    <SelectItem value="Voltage">Voltage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <SettingRow label="Max Discharge Current" value={config.batteryConfig.maxDischargeCurrent} unit="A" editable onEdit={(v) => updateBatteryConfig("maxDischargeCurrent", parseInt(v))} />
               <SettingRow label="Max Charge Current" value={config.batteryConfig.maxChargeCurrent} unit="A" editable onEdit={(v) => updateBatteryConfig("maxChargeCurrent", parseInt(v))} />
               <SettingRow label="Max Grid Charge Current" value={config.batteryConfig.maxGridChargeCurrent} unit="A" editable onEdit={(v) => updateBatteryConfig("maxGridChargeCurrent", parseInt(v))} />
