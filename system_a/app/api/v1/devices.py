@@ -27,6 +27,9 @@ from ..schemas.device_schemas import (
     DeviceStatusUpdate,
     DeviceSummaryResponse,
     DeviceUpdate,
+    MPPTChannelSchema,
+    MPPTChannelsResponse,
+    ExtendedInverterMetrics,
 )
 from ..schemas.auth_schemas import MessageResponse, ErrorResponse
 from ...application.interfaces.unit_of_work import UnitOfWork
@@ -852,3 +855,214 @@ async def get_device_realtime_telemetry_by_serial(
         "last_seen": last_seen,
         "telemetry": telemetry,
     }
+
+
+@router.get(
+    "/{device_id}/mppt-channels",
+    response_model=MPPTChannelsResponse,
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_mppt_channels(
+    device_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    cache: TelemetryCacheReader = Depends(get_telemetry_cache),
+):
+    """
+    Get MPPT (Maximum Power Point Tracking) channel data for the device.
+
+    This endpoint returns detailed information about each PV string/channel
+    connected to the inverter, including voltage, current, power, and status.
+    """
+    device = await uow.devices.get_by_id(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Check access
+    await check_site_access(device.site_id, current_user, uow)
+
+    # Only inverters have MPPT channels
+    if device.device_type != DeviceType.INVERTER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MPPT channel data is only available for inverter devices",
+        )
+
+    # Get telemetry from Redis cache
+    telemetry = await cache.get_telemetry(device.serial_number)
+
+    if not telemetry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No telemetry data available for this device",
+        )
+
+    # Extract MPPT channel data from telemetry
+    # System B writes MPPT data in format: pv1_voltage_v, pv1_current_a, pv1_power_w, etc.
+    channels = []
+    total_power_w = 0.0
+
+    # Check for up to 4 MPPT channels (common in hybrid inverters)
+    for i in range(1, 5):
+        voltage_key = f"pv{i}_voltage_v"
+        current_key = f"pv{i}_current_a"
+        power_key = f"pv{i}_power_w"
+
+        if voltage_key in telemetry or power_key in telemetry:
+            voltage = telemetry.get(voltage_key, 0.0) or 0.0
+            current = telemetry.get(current_key, 0.0) or 0.0
+            power = telemetry.get(power_key, 0.0) or 0.0
+
+            # Determine status based on power output
+            if power >= 50:  # Producing significant power
+                if voltage > 0 and current > 0:
+                    # Check if efficiency is reasonable
+                    expected_power = voltage * current
+                    actual_efficiency = (power / expected_power * 100) if expected_power > 0 else 0
+                    if actual_efficiency > 85:
+                        channel_status = "optimal"
+                    elif actual_efficiency > 60:
+                        channel_status = "shaded"
+                    else:
+                        channel_status = "low"
+                else:
+                    channel_status = "low"
+            elif power > 0:
+                channel_status = "low"
+            else:
+                channel_status = "offline"
+
+            # Calculate efficiency
+            efficiency_pct = None
+            if voltage > 0 and current > 0:
+                expected_power = voltage * current
+                if expected_power > 0:
+                    efficiency_pct = round((power / expected_power) * 100, 1)
+
+            channels.append(MPPTChannelSchema(
+                channel_id=i,
+                name=f"String {i}",
+                power_w=round(power, 2),
+                voltage_v=round(voltage, 2),
+                current_a=round(current, 2),
+                status=channel_status,
+                panel_count=telemetry.get(f"pv{i}_panel_count"),
+                efficiency_pct=efficiency_pct,
+            ))
+
+            total_power_w += power
+
+    if not channels:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No MPPT channel data found in telemetry",
+        )
+
+    return MPPTChannelsResponse(
+        device_id=device.id,
+        serial_number=device.serial_number,
+        channels=channels,
+        total_power_w=round(total_power_w, 2),
+        timestamp=datetime.now(timezone.utc),
+    )
+
+
+@router.get(
+    "/{device_id}/telemetry/extended",
+    response_model=ExtendedInverterMetrics,
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_extended_telemetry(
+    device_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    cache: TelemetryCacheReader = Depends(get_telemetry_cache),
+):
+    """
+    Get extended inverter telemetry with detailed electrical metrics.
+
+    This endpoint returns comprehensive inverter metrics including DC input,
+    AC output, efficiency, temperature, battery, grid, and load information.
+    """
+    device = await uow.devices.get_by_id(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Check access
+    await check_site_access(device.site_id, current_user, uow)
+
+    # Get telemetry from Redis cache
+    telemetry = await cache.get_telemetry(device.serial_number)
+    device_status = await cache.get_status(device.serial_number)
+
+    if not telemetry:
+        # Return empty metrics if no data available
+        return ExtendedInverterMetrics(
+            timestamp=datetime.now(timezone.utc),
+            online=False,
+        )
+
+    # Extract comprehensive metrics from telemetry
+    # DC Metrics
+    dc_voltage_v = telemetry.get("dc_voltage_v") or telemetry.get("voltage_v")
+    dc_current_a = telemetry.get("dc_current_a") or telemetry.get("current_a")
+    dc_power_w = telemetry.get("dc_power_w")
+
+    # AC Metrics
+    ac_voltage_v = telemetry.get("ac_voltage_v") or telemetry.get("grid_voltage_v")
+    ac_current_a = telemetry.get("ac_current_a")
+    ac_power_w = telemetry.get("ac_power_w") or telemetry.get("power_output_w")
+    ac_frequency_hz = telemetry.get("frequency_hz") or telemetry.get("grid_frequency_hz")
+
+    # Efficiency and Temperature
+    efficiency_pct = telemetry.get("efficiency_pct") or telemetry.get("efficiency_percent")
+    temperature_c = telemetry.get("temperature_c") or telemetry.get("inverter_temp_c")
+
+    # Battery Metrics
+    battery_voltage_v = telemetry.get("battery_voltage_v")
+    battery_current_a = telemetry.get("battery_current_a")
+    battery_power_w = telemetry.get("battery_power_w")
+    battery_soc_pct = telemetry.get("battery_soc_pct") or telemetry.get("battery_soc_percent")
+
+    # Power Flow
+    grid_power_w = telemetry.get("grid_power_w")
+    load_power_w = telemetry.get("load_power_w")
+
+    # PV Power (sum of all MPPT channels)
+    pv_power_w = telemetry.get("pv_power_w")
+    if not pv_power_w:
+        # Calculate from individual strings
+        pv1 = telemetry.get("pv1_power_w", 0) or 0
+        pv2 = telemetry.get("pv2_power_w", 0) or 0
+        pv3 = telemetry.get("pv3_power_w", 0) or 0
+        pv4 = telemetry.get("pv4_power_w", 0) or 0
+        pv_power_w = pv1 + pv2 + pv3 + pv4
+
+    return ExtendedInverterMetrics(
+        dc_voltage_v=dc_voltage_v,
+        dc_current_a=dc_current_a,
+        dc_power_w=dc_power_w,
+        ac_voltage_v=ac_voltage_v,
+        ac_current_a=ac_current_a,
+        ac_power_w=ac_power_w,
+        ac_frequency_hz=ac_frequency_hz,
+        efficiency_pct=efficiency_pct,
+        temperature_c=temperature_c,
+        battery_voltage_v=battery_voltage_v,
+        battery_current_a=battery_current_a,
+        battery_power_w=battery_power_w,
+        battery_soc_pct=battery_soc_pct,
+        grid_power_w=grid_power_w,
+        load_power_w=load_power_w,
+        pv_power_w=pv_power_w,
+        online=(device_status == "online"),
+        timestamp=datetime.now(timezone.utc),
+    )

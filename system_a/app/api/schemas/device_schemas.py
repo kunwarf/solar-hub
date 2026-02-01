@@ -163,3 +163,57 @@ class DeviceSummaryResponse(BaseModel):
     status: str
     last_seen_at: Optional[datetime]
     current_power_kw: Optional[float] = None
+
+
+class MPPTChannelSchema(BaseModel):
+    """MPPT (Maximum Power Point Tracking) channel data."""
+    channel_id: int = Field(..., description="Channel number/identifier")
+    name: str = Field(..., description="Channel name (e.g., 'String 1', 'Array 1 East')")
+    power_w: float = Field(..., description="Current power output in watts")
+    voltage_v: float = Field(..., description="String voltage")
+    current_a: float = Field(..., description="String current")
+    status: str = Field(..., description="Channel status (optimal, shaded, offline, low)")
+    panel_count: Optional[int] = Field(None, description="Number of panels in this string")
+    efficiency_pct: Optional[float] = Field(None, description="String efficiency percentage")
+
+
+class MPPTChannelsResponse(BaseModel):
+    """Response containing MPPT channel data."""
+    device_id: UUID
+    serial_number: str
+    channels: List[MPPTChannelSchema]
+    total_power_w: float = Field(..., description="Total power across all channels")
+    timestamp: datetime = Field(..., description="When this data was collected")
+
+
+class ExtendedInverterMetrics(BaseModel):
+    """Extended inverter metrics beyond basic DeviceMetrics."""
+    # DC metrics
+    dc_voltage_v: Optional[float] = Field(None, description="DC bus voltage")
+    dc_current_a: Optional[float] = Field(None, description="DC current")
+    dc_power_w: Optional[float] = Field(None, description="DC power input")
+
+    # AC metrics
+    ac_voltage_v: Optional[float] = Field(None, description="AC output voltage")
+    ac_current_a: Optional[float] = Field(None, description="AC output current")
+    ac_power_w: Optional[float] = Field(None, description="AC power output")
+    ac_frequency_hz: Optional[float] = Field(None, description="Grid frequency")
+
+    # Efficiency and temperature
+    efficiency_pct: Optional[float] = Field(None, description="Conversion efficiency")
+    temperature_c: Optional[float] = Field(None, description="Inverter temperature")
+
+    # Battery (if applicable)
+    battery_voltage_v: Optional[float] = Field(None, description="Battery voltage")
+    battery_current_a: Optional[float] = Field(None, description="Battery current")
+    battery_power_w: Optional[float] = Field(None, description="Battery power (+ charging, - discharging)")
+    battery_soc_pct: Optional[float] = Field(None, description="Battery state of charge")
+
+    # Additional metrics
+    grid_power_w: Optional[float] = Field(None, description="Grid power (+ import, - export)")
+    load_power_w: Optional[float] = Field(None, description="Load power consumption")
+    pv_power_w: Optional[float] = Field(None, description="Total PV power generation")
+
+    # Status
+    online: bool = Field(True, description="Whether device is online")
+    timestamp: datetime = Field(..., description="When this data was collected")
