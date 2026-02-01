@@ -502,10 +502,10 @@ class TelemetryRepository:
             minutes = int(bucket_interval.split()[0]) if bucket_interval.split()[0].isdigit() else 1
             interval_seconds = minutes * 60
 
-        query = text("""
+        query = text(f"""
             WITH energy_data AS (
                 SELECT
-                    time_bucket(:interval, time) AS bucket,
+                    time_bucket(INTERVAL '{bucket_interval}', time) AS bucket,
                     metric_name,
                     SUM(metric_value) AS total_value,
                     AVG(metric_value) AS avg_value
@@ -551,7 +551,6 @@ class TelemetryRepository:
         result = await self._session.execute(
             query,
             {
-                "interval": bucket_interval,
                 "interval_seconds": interval_seconds,
                 "site_id": str(site_id),
                 "start_time": start_time,
