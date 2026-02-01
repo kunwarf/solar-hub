@@ -146,7 +146,7 @@ class DevicesService {
   async getDeviceMetrics(deviceId: string): Promise<DeviceMetrics | null> {
     try {
       const response = await apiClient.get<DeviceMetrics>(
-        API_ENDPOINTS.devices.snapshot(deviceId)
+        `/devices/${deviceId}/metrics`
       );
       return response.data;
     } catch (error) {
