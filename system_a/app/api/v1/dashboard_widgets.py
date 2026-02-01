@@ -19,12 +19,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from ..dependencies import get_current_user, get_unit_of_work, get_telemetry_sync_service, require_admin
+from ..dependencies import get_current_user, get_unit_of_work, get_telemetry_sync_service, require_admin, get_system_b_client_instance
 from ...application.interfaces.unit_of_work import UnitOfWork
 from ...domain.entities.user import User, UserRole
 from ...infrastructure.cache.telemetry_cache import telemetry_cache
 from ...infrastructure.cache.site_cache import site_cache as site_info_cache, CachedSiteInfo
 from ...infrastructure.database.repositories.telemetry_repository import SQLAlchemyTelemetryRepository
+from ...infrastructure.external.system_b_client import SystemBClient
 from ...application.services.telemetry_sync_service import TelemetrySyncService
 
 logger = logging.getLogger(__name__)
@@ -985,97 +986,56 @@ async def get_energy_chart(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
-    """Get energy chart data aggregated for the site."""
+    """
+    Get energy chart data aggregated for the site.
+
+    Fetches data directly from System B's TimescaleDB using time_bucket aggregation.
+    No local data duplication - System B is the single source of truth for telemetry.
+    """
     site_info = await get_site_with_devices(current_user, uow, site_id)
 
-    # Query summary tables for historical chart data
-    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
-    now = datetime.now(timezone.utc)
-    data_points: List[EnergyChartPoint] = []
+    # Call System B to get aggregated energy chart data
+    try:
+        energy_data = await system_b_client.get_site_energy_chart(
+            site_id=site_info.site_id,
+            period=period,
+        )
 
-    if period == "day":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        hourly = await telemetry_repo.get_hourly_summaries(site_info.site_id, start, now)
-        for h in hourly:
-            data_points.append(EnergyChartPoint(
-                timestamp=h.timestamp_hour.isoformat(),
-                pv_kwh=h.energy_generated_kwh,
-                load_kwh=h.energy_consumed_kwh,
-                grid_import_kwh=h.energy_imported_kwh,
-                grid_export_kwh=h.energy_exported_kwh,
-                efficiency_pct=h.efficiency_pct,
-                self_sufficiency_pct=h.self_sufficiency_pct,
-                temperature_c=h.avg_temperature_c,
-            ))
-    elif period == "week":
-        start_date = (now - timedelta(days=7)).date()
-        end_date = now.date()
-        daily = await telemetry_repo.get_daily_summaries(site_info.site_id, start_date, end_date)
-        for d in daily:
-            data_points.append(EnergyChartPoint(
-                timestamp=d.summary_date.isoformat(),
-                pv_kwh=d.energy_generated_kwh,
-                load_kwh=d.energy_consumed_kwh,
-                grid_import_kwh=d.energy_imported_kwh,
-                grid_export_kwh=d.energy_exported_kwh,
-                efficiency_pct=d.efficiency_pct,
-                self_sufficiency_pct=d.self_sufficiency_pct,
-                temperature_c=d.avg_temperature_c,
-            ))
-    elif period == "month":
-        start_date = (now - timedelta(days=30)).date()
-        end_date = now.date()
-        daily = await telemetry_repo.get_daily_summaries(site_info.site_id, start_date, end_date)
-        for d in daily:
-            data_points.append(EnergyChartPoint(
-                timestamp=d.summary_date.isoformat(),
-                pv_kwh=d.energy_generated_kwh,
-                load_kwh=d.energy_consumed_kwh,
-                grid_import_kwh=d.energy_imported_kwh,
-                grid_export_kwh=d.energy_exported_kwh,
-                efficiency_pct=d.efficiency_pct,
-                self_sufficiency_pct=d.self_sufficiency_pct,
-                temperature_c=d.avg_temperature_c,
-            ))
+        # Convert System B response to our schema
+        data_points = [
+            EnergyChartPoint(
+                timestamp=point["timestamp"],
+                pv_kwh=point["pv_kwh"],
+                load_kwh=point["load_kwh"],
+                grid_import_kwh=point["grid_import_kwh"],
+                grid_export_kwh=point["grid_export_kwh"],
+                efficiency_pct=point.get("efficiency_pct"),
+                self_sufficiency_pct=point.get("self_sufficiency_pct"),
+                temperature_c=point.get("temperature_c"),
+            )
+            for point in energy_data.get("data", [])
+        ]
 
-    # Fallback to current Redis data if summary tables are empty
-    if not data_points:
-        telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
-        total_pv = 0.0
-        total_load = 0.0
-        total_import = 0.0
-        total_export = 0.0
-        latest_timestamp = now.isoformat()
+        return EnergyChartResponse(
+            organization_id=site_info.organization_id,
+            site_id=site_info.site_id,
+            site_name=site_info.site_name,
+            period=period,
+            data=data_points,
+        )
 
-        for serial in site_info.device_serials:
-            telemetry = telemetry_batch.get(serial)
-            if telemetry:
-                energy = telemetry.get("energy_today", {})
-                total_pv += energy.get("pv_kwh", 0)
-                total_load += energy.get("load_kwh", 0)
-                total_import += energy.get("grid_import_kwh", 0)
-                total_export += energy.get("grid_export_kwh", 0)
-                ts = telemetry.get("timestamp")
-                if ts:
-                    latest_timestamp = ts
-
-        if total_pv > 0 or total_load > 0:
-            data_points = [EnergyChartPoint(
-                timestamp=latest_timestamp,
-                pv_kwh=total_pv,
-                load_kwh=total_load,
-                grid_import_kwh=total_import,
-                grid_export_kwh=total_export,
-            )]
-
-    return EnergyChartResponse(
-        organization_id=site_info.organization_id,
-        site_id=site_info.site_id,
-        site_name=site_info.site_name,
-        period=period,
-        data=data_points,
-    )
+    except Exception as e:
+        logger.error(f"Failed to fetch energy chart from System B: {e}")
+        # Return empty data instead of failing
+        return EnergyChartResponse(
+            organization_id=site_info.organization_id,
+            site_id=site_info.site_id,
+            site_name=site_info.site_name,
+            period=period,
+            data=[],
+        )
 
 
 @router.get(

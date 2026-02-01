@@ -338,6 +338,35 @@ class TelemetryService:
             bucket_interval=bucket_interval,
         )
 
+    async def get_site_energy_chart(
+        self,
+        site_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+        bucket_interval: str = "1 hour",
+    ) -> List[Dict[str, Any]]:
+        """
+        Get comprehensive energy chart data for a site.
+
+        Returns aggregated energy metrics with calculated efficiency
+        and self-sufficiency for the specified time range.
+
+        Args:
+            site_id: Site UUID.
+            start_time: Start of time range.
+            end_time: End of time range.
+            bucket_interval: PostgreSQL interval string.
+
+        Returns:
+            List of dicts with timestamp and all energy metrics.
+        """
+        return await self._telemetry_repo.get_site_energy_chart(
+            site_id=site_id,
+            start_time=start_time,
+            end_time=end_time,
+            bucket_interval=bucket_interval,
+        )
+
     # =========================================================================
     # Metric Definitions
     # =========================================================================

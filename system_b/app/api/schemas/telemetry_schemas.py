@@ -96,3 +96,27 @@ class IngestResponse(BaseModel):
     inserted: int
     failed: int
     message: Optional[str] = None
+
+
+class EnergyChartDataPoint(BaseModel):
+    """Single data point in energy chart."""
+    timestamp: datetime
+    pv_kwh: float = 0.0
+    load_kwh: float = 0.0
+    grid_import_kwh: float = 0.0
+    grid_export_kwh: float = 0.0
+    battery_charge_kwh: float = 0.0
+    battery_discharge_kwh: float = 0.0
+    efficiency_pct: Optional[float] = None
+    self_sufficiency_pct: Optional[float] = None
+    temperature_c: Optional[float] = None
+
+
+class EnergyChartResponse(BaseModel):
+    """Response for energy chart data."""
+    site_id: UUID
+    period: str  # "day", "week", "month"
+    start_time: datetime
+    end_time: datetime
+    bucket_interval: str
+    data: List[EnergyChartDataPoint]

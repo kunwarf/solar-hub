@@ -19,6 +19,8 @@ from ..schemas import (
     TelemetryAggregateResponse,
     TelemetryStatsResponse,
     IngestResponse,
+    EnergyChartDataPoint,
+    EnergyChartResponse,
 )
 from ...application.services import TelemetryService
 from ...domain.entities.telemetry import TelemetryBatch, TelemetryPoint, DataQuality
@@ -343,6 +345,66 @@ async def get_telemetry_stats(
         first_reading=stats["first_reading"],
         last_reading=stats["last_reading"],
         distinct_metrics=stats["distinct_metrics"],
+    )
+
+
+@router.get(
+    "/energy-chart/{site_id}",
+    response_model=EnergyChartResponse,
+    summary="Get energy chart data",
+    description="Get comprehensive aggregated energy data for a site with calculated metrics.",
+)
+async def get_energy_chart(
+    site_id: UUID,
+    period: str = Query(default="day", regex="^(day|week|month)$"),
+    session: AsyncSession = Depends(get_db_session),
+) -> EnergyChartResponse:
+    """
+    Get comprehensive energy chart data for a site.
+
+    Returns time-bucketed aggregated data including:
+    - PV generation (kWh)
+    - Load consumption (kWh)
+    - Grid import/export (kWh)
+    - Battery charge/discharge (kWh)
+    - Inverter efficiency (%)
+    - Self-sufficiency (%)
+    - Temperature (°C)
+
+    Period determines the time range and bucket interval:
+    - day: Last 24 hours, hourly buckets
+    - week: Last 7 days, daily buckets
+    - month: Last 30 days, daily buckets
+    """
+    # Determine time range and bucket interval based on period
+    end_time = datetime.now(timezone.utc)
+    if period == "day":
+        start_time = end_time - timedelta(hours=24)
+        bucket_interval = "1 hour"
+    elif period == "week":
+        start_time = end_time - timedelta(days=7)
+        bucket_interval = "1 day"
+    else:  # month
+        start_time = end_time - timedelta(days=30)
+        bucket_interval = "1 day"
+
+    telemetry_repo = TelemetryRepository(session)
+    service = TelemetryService(telemetry_repo)
+
+    data = await service.get_site_energy_chart(
+        site_id=site_id,
+        start_time=start_time,
+        end_time=end_time,
+        bucket_interval=bucket_interval,
+    )
+
+    return EnergyChartResponse(
+        site_id=site_id,
+        period=period,
+        start_time=start_time,
+        end_time=end_time,
+        bucket_interval=bucket_interval,
+        data=[EnergyChartDataPoint(**point) for point in data],
     )
 
 

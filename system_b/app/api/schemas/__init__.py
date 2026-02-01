@@ -10,6 +10,8 @@ from .telemetry_schemas import (
     TelemetryQueryRequest,
     TelemetryStatsResponse,
     IngestResponse,
+    EnergyChartDataPoint,
+    EnergyChartResponse,
 )
 from .device_schemas import (
     DeviceRegisterRequest,
@@ -67,6 +69,8 @@ __all__ = [
     "TelemetryQueryRequest",
     "TelemetryStatsResponse",
     "IngestResponse",
+    "EnergyChartDataPoint",
+    "EnergyChartResponse",
     # Device
     "DeviceRegisterRequest",
     "DeviceSelfRegisterRequest",

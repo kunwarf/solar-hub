@@ -467,6 +467,51 @@ class SystemBClient:
             logger.error("System B connection error: %s", e)
             raise SystemBClientError(f"Connection error: {str(e)}")
 
+    async def get_site_energy_chart(
+        self,
+        site_id: UUID,
+        period: str = "day",
+    ) -> Dict[str, Any]:
+        """
+        Get comprehensive energy chart data for a site.
+
+        Returns aggregated energy metrics with calculated efficiency
+        and self-sufficiency from System B's TimescaleDB.
+
+        Args:
+            site_id: Site UUID
+            period: Time period - "day" (24h), "week" (7d), or "month" (30d)
+
+        Returns:
+            Dict with site_id, period, start_time, end_time, bucket_interval, and data array
+
+        Raises:
+            SystemBClientError: If request fails
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/energy-chart/{site_id}"
+            params = {"period": period}
+
+            logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
+            response = await client.get(url, params=params)
+            logger.info("System B response: status=%d, points=%s",
+                        response.status_code,
+                        len(response.json().get("data", [])) if response.status_code == 200 else "error")
+
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B energy chart error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get energy chart: {e.response.text}",
+                status_code=e.response.status_code
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
     async def get_device_latest(
         self,
         device_id: UUID,

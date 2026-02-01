@@ -467,6 +467,121 @@ class TelemetryRepository:
             for row in result
         ]
 
+    async def get_site_energy_chart(
+        self,
+        site_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+        bucket_interval: str = "1 hour",
+    ) -> List[Dict[str, Any]]:
+        """
+        Get comprehensive energy chart data for a site.
+
+        Aggregates all energy-related metrics for all devices at a site
+        into time buckets with calculated efficiency and self-sufficiency.
+
+        Args:
+            site_id: Site UUID.
+            start_time: Start of time range.
+            end_time: End of time range.
+            bucket_interval: PostgreSQL interval string (e.g., '1 hour', '1 day').
+
+        Returns:
+            List of dicts with timestamp and all energy metrics.
+        """
+        query = text("""
+            WITH energy_data AS (
+                SELECT
+                    time_bucket(:interval, time) AS bucket,
+                    metric_name,
+                    SUM(metric_value) AS total_value,
+                    AVG(metric_value) AS avg_value
+                FROM telemetry_raw
+                WHERE site_id = :site_id
+                  AND time >= :start_time
+                  AND time < :end_time
+                  AND metric_name IN (
+                    'energy_generated_kwh', 'pv_power_w',
+                    'energy_consumed_kwh', 'load_power_w',
+                    'grid_import_kwh', 'grid_power_w',
+                    'grid_export_kwh',
+                    'battery_charge_kwh', 'battery_power_w',
+                    'battery_discharge_kwh',
+                    'inverter_temp_c', 'temperature_c'
+                  )
+                GROUP BY bucket, metric_name
+            )
+            SELECT
+                bucket,
+                -- Energy metrics (sum for cumulative, avg for instantaneous power converted to energy)
+                COALESCE(SUM(CASE WHEN metric_name = 'energy_generated_kwh' THEN total_value END), 0) +
+                COALESCE(AVG(CASE WHEN metric_name = 'pv_power_w' THEN avg_value END) * EXTRACT(EPOCH FROM :interval::interval) / 3600000, 0) AS pv_kwh,
+
+                COALESCE(SUM(CASE WHEN metric_name = 'energy_consumed_kwh' THEN total_value END), 0) +
+                COALESCE(AVG(CASE WHEN metric_name = 'load_power_w' THEN avg_value END) * EXTRACT(EPOCH FROM :interval::interval) / 3600000, 0) AS load_kwh,
+
+                COALESCE(SUM(CASE WHEN metric_name = 'grid_import_kwh' THEN total_value END), 0) AS grid_import_kwh,
+
+                COALESCE(SUM(CASE WHEN metric_name = 'grid_export_kwh' THEN total_value END), 0) AS grid_export_kwh,
+
+                COALESCE(SUM(CASE WHEN metric_name = 'battery_charge_kwh' THEN total_value END), 0) AS battery_charge_kwh,
+
+                COALESCE(SUM(CASE WHEN metric_name = 'battery_discharge_kwh' THEN total_value END), 0) AS battery_discharge_kwh,
+
+                -- Temperature (average)
+                AVG(CASE WHEN metric_name IN ('inverter_temp_c', 'temperature_c') THEN avg_value END) AS temperature_c
+            FROM energy_data
+            GROUP BY bucket
+            ORDER BY bucket
+        """)
+
+        result = await self._session.execute(
+            query,
+            {
+                "interval": bucket_interval,
+                "site_id": str(site_id),
+                "start_time": start_time,
+                "end_time": end_time,
+            }
+        )
+
+        data_points = []
+        for row in result:
+            pv_kwh = float(row.pv_kwh or 0)
+            load_kwh = float(row.load_kwh or 0)
+            grid_import_kwh = float(row.grid_import_kwh or 0)
+            grid_export_kwh = float(row.grid_export_kwh or 0)
+            battery_charge_kwh = float(row.battery_charge_kwh or 0)
+            battery_discharge_kwh = float(row.battery_discharge_kwh or 0)
+
+            # Calculate efficiency: (AC Output / DC Input) × 100
+            # AC Output = Load + Grid Export + Battery Charge
+            # DC Input = PV Generation
+            efficiency_pct = None
+            if pv_kwh > 0:
+                ac_output = load_kwh + grid_export_kwh + battery_charge_kwh
+                efficiency_pct = min((ac_output / pv_kwh) * 100, 100.0)
+
+            # Calculate self-sufficiency: (1 - (Grid Import / Load)) × 100
+            self_sufficiency_pct = None
+            if load_kwh > 0:
+                self_sufficiency_pct = max(0.0, min((1 - (grid_import_kwh / load_kwh)) * 100, 100.0))
+
+            data_points.append({
+                "timestamp": row.bucket,
+                "pv_kwh": pv_kwh,
+                "load_kwh": load_kwh,
+                "grid_import_kwh": grid_import_kwh,
+                "grid_export_kwh": grid_export_kwh,
+                "battery_charge_kwh": battery_charge_kwh,
+                "battery_discharge_kwh": battery_discharge_kwh,
+                "efficiency_pct": round(efficiency_pct, 1) if efficiency_pct is not None else None,
+                "self_sufficiency_pct": round(self_sufficiency_pct, 1) if self_sufficiency_pct is not None else None,
+                "temperature_c": round(row.temperature_c, 1) if row.temperature_c else None,
+            })
+
+        return data_points
+
     # =========================================================================
     # Data Management
     # =========================================================================
