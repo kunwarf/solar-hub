@@ -365,15 +365,37 @@ class DeviceServer:
         telemetry: dict,
     ) -> None:
         """Handle collected telemetry."""
+        device_state = self.device_manager.get_device(device_id) if self.device_manager else None
+
+        # Determine which device_id to use for telemetry storage
+        # If this is an inverter linked to a data logger, use the data logger's device_id
+        # (because the data logger has a stable device_id and site_id in device_registry)
+        storage_device_id = device_id  # Default to current device
+
+        if device_state and device_state.data_logger_serial:
+            # Look up the data logger's device_id from device_registry
+            data_logger_info = await self.device_registry_client.get_device_by_serial(
+                device_state.data_logger_serial
+            )
+            if data_logger_info:
+                storage_device_id = data_logger_info["device_id"]
+                logger.debug(
+                    f"Using data logger device_id {storage_device_id} for telemetry storage "
+                    f"(inverter device_id: {device_id}, inverter serial: {device_state.serial_number})"
+                )
+            else:
+                logger.warning(
+                    f"Data logger {device_state.data_logger_serial} not found in registry, "
+                    f"using inverter device_id {device_id} for storage"
+                )
+
         # Write to TimescaleDB for historical storage
         if self.timescale_writer:
-            await self.timescale_writer.write(device_id, telemetry.copy())
+            await self.timescale_writer.write(storage_device_id, telemetry.copy())
 
         # Write to Redis cache for real-time access by System A
         # Use data_logger_serial (the serial printed on the device that users see)
         # for Redis caching, as this is what System A uses to look up telemetry
-        device_state = self.device_manager.get_device(device_id) if self.device_manager else None
-
         # Prefer data_logger_serial (from self-registration), fall back to Modbus serial
         if device_state and device_state.data_logger_serial:
             cache_serial = device_state.data_logger_serial

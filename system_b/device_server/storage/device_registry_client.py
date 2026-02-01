@@ -208,3 +208,46 @@ class DeviceRegistryClient:
         except Exception as e:
             logger.error(f"Error querying by inverter serial: {e}")
             return None
+
+    async def get_device_by_serial(
+        self,
+        serial_number: str,
+    ) -> Optional[dict]:
+        """
+        Get device info (device_id, site_id) by serial number.
+
+        Used to get the data logger's device_id for telemetry writes.
+
+        Args:
+            serial_number: The device serial number.
+
+        Returns:
+            Dict with device_id and site_id if found, None otherwise.
+        """
+        if not self._session_factory:
+            return None
+
+        try:
+            async with self._session_factory() as session:
+                result = await session.execute(
+                    text("""
+                    SELECT device_id, site_id
+                    FROM device_registry
+                    WHERE serial_number = :serial_number
+                    LIMIT 1
+                    """),
+                    {"serial_number": serial_number},
+                )
+                row = result.fetchone()
+
+                if row:
+                    return {
+                        "device_id": row[0],
+                        "site_id": row[1]
+                    }
+
+                return None
+
+        except Exception as e:
+            logger.error(f"Error querying device by serial: {e}")
+            return None
