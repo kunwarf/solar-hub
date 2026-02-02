@@ -113,66 +113,99 @@ class SQLAlchemyTelemetryRepository:
     Repository for querying telemetry summary data.
 
     This repository works with pre-aggregated data from System B.
+    After migration, all queries go directly to System B API.
     """
 
     def __init__(self, session: AsyncSession):
         self._session = session
+        self._system_b_client: Optional[SystemBClient] = None
+
+    async def _get_system_b_client(self) -> SystemBClient:
+        """Get or create System B client."""
+        if self._system_b_client is None:
+            self._system_b_client = SystemBClient(
+                base_url=settings.system_b.url,
+                api_key=settings.system_b.api_key,
+                timeout=settings.system_b.timeout,
+            )
+        return self._system_b_client
+
+    async def close(self):
+        """Close System B client connection."""
+        if self._system_b_client:
+            await self._system_b_client.close()
+            self._system_b_client = None
 
     # =========================================================================
     # Device Snapshots (Real-time data)
     # =========================================================================
 
     async def get_device_snapshots(self, site_id: UUID) -> List[DeviceSnapshot]:
-        """Get latest telemetry snapshots for all devices at a site."""
-        query = (
-            select(DeviceTelemetrySnapshotModel)
-            .where(DeviceTelemetrySnapshotModel.site_id == site_id)
-            .order_by(desc(DeviceTelemetrySnapshotModel.timestamp))
-        )
-        result = await self._session.execute(query)
-        models = result.scalars().all()
-        return [self._snapshot_to_dataclass(m) for m in models]
+        """
+        Get latest telemetry snapshots for all devices at a site.
+
+        Note: Device snapshots table was dropped. Returns empty list.
+        Real-time device data should come from device APIs or System B latest telemetry.
+        """
+        logger.warning(f"get_device_snapshots called for site {site_id} - device_telemetry_snapshot table dropped")
+        return []
 
     async def get_device_snapshot(self, device_id: UUID) -> Optional[DeviceSnapshot]:
-        """Get latest snapshot for a specific device."""
-        query = select(DeviceTelemetrySnapshotModel).where(
-            DeviceTelemetrySnapshotModel.device_id == device_id
-        )
-        result = await self._session.execute(query)
-        model = result.scalar_one_or_none()
-        return self._snapshot_to_dataclass(model) if model else None
+        """
+        Get latest snapshot for a specific device.
+
+        Note: Device snapshots table was dropped. Returns None.
+        Real-time device data should come from device APIs or System B latest telemetry.
+        """
+        logger.warning(f"get_device_snapshot called for device {device_id} - device_telemetry_snapshot table dropped")
+        return None
 
     async def get_site_current_power(self, site_id: UUID) -> float:
-        """Get total current power for a site from device snapshots."""
-        query = select(
-            func.coalesce(func.sum(DeviceTelemetrySnapshotModel.current_power_kw), 0.0)
-        ).where(
-            and_(
-                DeviceTelemetrySnapshotModel.site_id == site_id,
-                DeviceTelemetrySnapshotModel.timestamp >= datetime.now(timezone.utc) - timedelta(minutes=5),
+        """
+        Get total current power for a site.
+
+        Queries System B for the most recent telemetry data (last 5 minutes).
+        """
+        try:
+            client = await self._get_system_b_client()
+            now = datetime.now(timezone.utc)
+            start_time = now - timedelta(minutes=5)
+
+            # Get recent telemetry data
+            data_points = await client.get_hourly_energy_summary(
+                site_id=site_id,
+                start_time=start_time,
+                end_time=now,
             )
-        )
-        result = await self._session.execute(query)
-        return float(result.scalar() or 0.0)
+
+            if not data_points:
+                return 0.0
+
+            # Return the most recent power value (if available in response)
+            # System B energy-chart returns aggregated energy, not instantaneous power
+            # Return 0 for now as instantaneous power requires different endpoint
+            return 0.0
+
+        except Exception as e:
+            logger.error(f"Failed to get current power from System B for site {site_id}: {e}")
+            return 0.0
 
     async def get_org_current_power(
         self,
         site_ids: List[UUID],
     ) -> float:
-        """Get total current power across multiple sites."""
+        """
+        Get total current power across multiple sites.
+
+        Note: Aggregates across sites. Returns 0 as instantaneous power
+        requires different System B endpoint.
+        """
         if not site_ids:
             return 0.0
 
-        query = select(
-            func.coalesce(func.sum(DeviceTelemetrySnapshotModel.current_power_kw), 0.0)
-        ).where(
-            and_(
-                DeviceTelemetrySnapshotModel.site_id.in_(site_ids),
-                DeviceTelemetrySnapshotModel.timestamp >= datetime.now(timezone.utc) - timedelta(minutes=5),
-            )
-        )
-        result = await self._session.execute(query)
-        return float(result.scalar() or 0.0)
+        # Would need to query each site and sum - returning 0 for now
+        logger.warning("get_org_current_power called - returning 0 (requires per-site instantaneous power query)")
+        return 0.0
 
     # =========================================================================
     # Hourly Summaries
@@ -185,26 +218,68 @@ class SQLAlchemyTelemetryRepository:
         end_time: datetime,
         device_id: Optional[UUID] = None,
     ) -> List[TelemetryHourlySummaryModel]:
-        """Get hourly summaries for a site within a time range."""
-        conditions = [
-            TelemetryHourlySummaryModel.site_id == site_id,
-            TelemetryHourlySummaryModel.timestamp_hour >= start_time,
-            TelemetryHourlySummaryModel.timestamp_hour < end_time,
-        ]
+        """
+        Get hourly summaries for a site within a time range.
 
+        Now queries System B directly.
+        """
         if device_id:
-            conditions.append(TelemetryHourlySummaryModel.device_id == device_id)
-        else:
-            # Get site-level summaries (device_id is null)
-            conditions.append(TelemetryHourlySummaryModel.device_id.is_(None))
+            logger.warning(f"Device-level filtering requested but System B only supports site-level aggregates")
 
-        query = (
-            select(TelemetryHourlySummaryModel)
-            .where(and_(*conditions))
-            .order_by(TelemetryHourlySummaryModel.timestamp_hour)
-        )
-        result = await self._session.execute(query)
-        return list(result.scalars().all())
+        try:
+            client = await self._get_system_b_client()
+
+            # Fetch from System B
+            data_points = await client.get_hourly_energy_summary(
+                site_id=site_id,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            # Convert to TelemetryHourlySummaryModel objects
+            models = []
+            for point in data_points:
+                timestamp = point.get("timestamp")
+                if isinstance(timestamp, str):
+                    timestamp_dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                else:
+                    timestamp_dt = timestamp
+
+                # Ensure timezone-aware
+                if timestamp_dt.tzinfo is None:
+                    timestamp_dt = timestamp_dt.replace(tzinfo=timezone.utc)
+
+                model = TelemetryHourlySummaryModel(
+                    id=uuid4(),
+                    site_id=site_id,
+                    device_id=None,  # System B provides site-level aggregates
+                    timestamp_hour=timestamp_dt,
+                    energy_generated_kwh=Decimal(str(point.get("pv_kwh", 0))),
+                    energy_consumed_kwh=Decimal(str(point.get("load_kwh", 0))),
+                    energy_exported_kwh=Decimal(str(point.get("grid_export_kwh", 0))),
+                    energy_imported_kwh=Decimal(str(point.get("grid_import_kwh", 0))),
+                    energy_stored_kwh=Decimal(str(point.get("battery_charge_kwh", 0))),
+                    energy_discharged_kwh=Decimal(str(point.get("battery_discharge_kwh", 0))),
+                    peak_power_kw=None,
+                    average_power_kw=None,
+                    avg_irradiance_w_m2=None,
+                    avg_temperature_c=point.get("temperature_c"),
+                    max_temperature_c=None,
+                    min_temperature_c=None,
+                    avg_battery_soc_percent=None,
+                    avg_grid_voltage_v=None,
+                    avg_power_factor=None,
+                    sample_count=0,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=None,
+                )
+                models.append(model)
+
+            return models
+
+        except Exception as e:
+            logger.error(f"Failed to fetch hourly summaries from System B: {e}")
+            return []
 
     # =========================================================================
     # Daily Summaries
@@ -217,55 +292,150 @@ class SQLAlchemyTelemetryRepository:
         end_date: date,
         device_id: Optional[UUID] = None,
     ) -> List[DailySummary]:
-        """Get daily summaries for a site within a date range."""
-        conditions = [
-            TelemetryDailySummaryModel.site_id == site_id,
-            TelemetryDailySummaryModel.summary_date >= start_date,
-            TelemetryDailySummaryModel.summary_date <= end_date,
-        ]
+        """
+        Get daily summaries for a site within a date range.
 
+        Now queries System B and aggregates hourly data to daily.
+        """
         if device_id:
-            conditions.append(TelemetryDailySummaryModel.device_id == device_id)
-        else:
-            conditions.append(TelemetryDailySummaryModel.device_id.is_(None))
+            logger.warning(f"Device-level filtering requested but System B only supports site-level aggregates")
 
-        query = (
-            select(TelemetryDailySummaryModel)
-            .where(and_(*conditions))
-            .order_by(TelemetryDailySummaryModel.summary_date)
-        )
-        result = await self._session.execute(query)
-        models = result.scalars().all()
-        return [self._daily_to_dataclass(m) for m in models]
+        try:
+            client = await self._get_system_b_client()
+
+            # Fetch hourly data from System B for the date range
+            start_time = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+            end_time = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+
+            data_points = await client.get_hourly_energy_summary(
+                site_id=site_id,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            if not data_points:
+                return []
+
+            # Group by date and aggregate to daily
+            from collections import defaultdict
+            daily_data = defaultdict(lambda: {
+                "pv_kwh": 0.0,
+                "load_kwh": 0.0,
+                "grid_export_kwh": 0.0,
+                "grid_import_kwh": 0.0,
+                "battery_charge_kwh": 0.0,
+                "battery_discharge_kwh": 0.0,
+            })
+
+            for point in data_points:
+                timestamp = point.get("timestamp")
+                if isinstance(timestamp, str):
+                    ts_dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                else:
+                    ts_dt = timestamp
+
+                day = ts_dt.date()
+                daily_data[day]["pv_kwh"] += float(point.get("pv_kwh", 0))
+                daily_data[day]["load_kwh"] += float(point.get("load_kwh", 0))
+                daily_data[day]["grid_export_kwh"] += float(point.get("grid_export_kwh", 0))
+                daily_data[day]["grid_import_kwh"] += float(point.get("grid_import_kwh", 0))
+                daily_data[day]["battery_charge_kwh"] += float(point.get("battery_charge_kwh", 0))
+                daily_data[day]["battery_discharge_kwh"] += float(point.get("battery_discharge_kwh", 0))
+
+            # Convert to DailySummary objects
+            summaries = []
+            for day in sorted(daily_data.keys()):
+                data = daily_data[day]
+                summary = DailySummary(
+                    id=uuid4(),
+                    site_id=site_id,
+                    device_id=None,
+                    summary_date=day,
+                    energy_generated_kwh=data["pv_kwh"],
+                    energy_consumed_kwh=data["load_kwh"],
+                    energy_exported_kwh=data["grid_export_kwh"],
+                    energy_imported_kwh=data["grid_import_kwh"],
+                    energy_stored_kwh=data["battery_charge_kwh"],
+                    energy_discharged_kwh=data["battery_discharge_kwh"],
+                    net_energy_kwh=data["pv_kwh"] - data["load_kwh"],
+                    peak_power_kw=0.0,
+                    peak_power_time=None,
+                    average_power_kw=0.0,
+                    sunshine_hours=0.0,
+                    production_hours=0.0,
+                    performance_ratio=0.0,
+                    capacity_factor=0.0,
+                    grid_outage_minutes=0,
+                    avg_irradiance_w_m2=0.0,
+                    avg_temperature_c=None,
+                    max_temperature_c=None,
+                    min_temperature_c=None,
+                    co2_avoided_kg=data["pv_kwh"] * 0.8,
+                    estimated_savings_pkr=0.0,
+                    hours_with_data=0,
+                    data_completeness_percent=0.0,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=None,
+                )
+                summaries.append(summary)
+
+            return summaries
+
+        except Exception as e:
+            logger.error(f"Failed to fetch daily summaries from System B: {e}")
+            return []
 
     async def get_today_energy(self, site_id: UUID) -> Dict[str, float]:
-        """Get today's energy totals for a site."""
-        today = date.today()
-        query = select(TelemetryDailySummaryModel).where(
-            and_(
-                TelemetryDailySummaryModel.site_id == site_id,
-                TelemetryDailySummaryModel.summary_date == today,
-                TelemetryDailySummaryModel.device_id.is_(None),
-            )
-        )
-        result = await self._session.execute(query)
-        model = result.scalar_one_or_none()
+        """
+        Get today's energy totals for a site.
 
-        if model:
+        Now queries System B for today's data.
+        """
+        today = date.today()
+        try:
+            client = await self._get_system_b_client()
+
+            start_time = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+            end_time = datetime.now(timezone.utc)
+
+            data_points = await client.get_hourly_energy_summary(
+                site_id=site_id,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            if not data_points:
+                return {
+                    "energy_generated_kwh": 0.0,
+                    "energy_consumed_kwh": 0.0,
+                    "energy_exported_kwh": 0.0,
+                    "energy_imported_kwh": 0.0,
+                    "peak_power_kw": 0.0,
+                }
+
+            # Aggregate today's data
+            total_generated = sum(float(d.get("pv_kwh", 0)) for d in data_points)
+            total_consumed = sum(float(d.get("load_kwh", 0)) for d in data_points)
+            total_exported = sum(float(d.get("grid_export_kwh", 0)) for d in data_points)
+            total_imported = sum(float(d.get("grid_import_kwh", 0)) for d in data_points)
+
             return {
-                "energy_generated_kwh": model.energy_generated_kwh,
-                "energy_consumed_kwh": model.energy_consumed_kwh,
-                "energy_exported_kwh": model.energy_exported_kwh,
-                "energy_imported_kwh": model.energy_imported_kwh,
-                "peak_power_kw": model.peak_power_kw,
+                "energy_generated_kwh": total_generated,
+                "energy_consumed_kwh": total_consumed,
+                "energy_exported_kwh": total_exported,
+                "energy_imported_kwh": total_imported,
+                "peak_power_kw": 0.0,
             }
-        return {
-            "energy_generated_kwh": 0.0,
-            "energy_consumed_kwh": 0.0,
-            "energy_exported_kwh": 0.0,
-            "energy_imported_kwh": 0.0,
-            "peak_power_kw": 0.0,
-        }
+
+        except Exception as e:
+            logger.error(f"Failed to fetch today's energy from System B: {e}")
+            return {
+                "energy_generated_kwh": 0.0,
+                "energy_consumed_kwh": 0.0,
+                "energy_exported_kwh": 0.0,
+                "energy_imported_kwh": 0.0,
+                "peak_power_kw": 0.0,
+            }
 
     # =========================================================================
     # Monthly Summaries
@@ -277,25 +447,17 @@ class SQLAlchemyTelemetryRepository:
         year: int,
         device_id: Optional[UUID] = None,
     ) -> List[MonthlySummary]:
-        """Get all monthly summaries for a site for a given year."""
-        conditions = [
-            TelemetryMonthlySummaryModel.site_id == site_id,
-            TelemetryMonthlySummaryModel.year == year,
-        ]
+        """
+        Get all monthly summaries for a site for a given year.
 
-        if device_id:
-            conditions.append(TelemetryMonthlySummaryModel.device_id == device_id)
-        else:
-            conditions.append(TelemetryMonthlySummaryModel.device_id.is_(None))
-
-        query = (
-            select(TelemetryMonthlySummaryModel)
-            .where(and_(*conditions))
-            .order_by(TelemetryMonthlySummaryModel.month)
-        )
-        result = await self._session.execute(query)
-        models = result.scalars().all()
-        return [self._monthly_to_dataclass(m) for m in models]
+        Now queries System B for each month.
+        """
+        summaries = []
+        for month in range(1, 13):
+            summary = await self.get_monthly_summary(site_id, year, month)
+            if summary:
+                summaries.append(summary)
+        return summaries
 
     async def get_monthly_summary(
         self,
@@ -401,36 +563,64 @@ class SQLAlchemyTelemetryRepository:
         start_date: date,
         end_date: date,
     ) -> SiteEnergyTotals:
-        """Aggregate energy totals for a site over a date range."""
-        query = select(
-            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_generated_kwh), 0.0).label("generated"),
-            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_consumed_kwh), 0.0).label("consumed"),
-            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_exported_kwh), 0.0).label("exported"),
-            func.coalesce(func.sum(TelemetryDailySummaryModel.energy_imported_kwh), 0.0).label("imported"),
-            func.coalesce(func.max(TelemetryDailySummaryModel.peak_power_kw), 0.0).label("peak"),
-            func.coalesce(func.sum(TelemetryDailySummaryModel.co2_avoided_kg), 0.0).label("co2"),
-            func.coalesce(func.sum(TelemetryDailySummaryModel.estimated_savings_pkr), 0.0).label("savings"),
-        ).where(
-            and_(
-                TelemetryDailySummaryModel.site_id == site_id,
-                TelemetryDailySummaryModel.summary_date >= start_date,
-                TelemetryDailySummaryModel.summary_date <= end_date,
-                TelemetryDailySummaryModel.device_id.is_(None),
-            )
-        )
-        result = await self._session.execute(query)
-        row = result.one()
+        """
+        Aggregate energy totals for a site over a date range.
 
-        return SiteEnergyTotals(
-            site_id=site_id,
-            energy_generated_kwh=float(row.generated),
-            energy_consumed_kwh=float(row.consumed),
-            energy_exported_kwh=float(row.exported),
-            energy_imported_kwh=float(row.imported),
-            peak_power_kw=float(row.peak),
-            co2_avoided_kg=float(row.co2),
-            estimated_savings_pkr=float(row.savings),
-        )
+        Now queries System B and aggregates hourly data.
+        """
+        try:
+            client = await self._get_system_b_client()
+
+            start_time = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+            end_time = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+
+            data_points = await client.get_hourly_energy_summary(
+                site_id=site_id,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            if not data_points:
+                return SiteEnergyTotals(
+                    site_id=site_id,
+                    energy_generated_kwh=0.0,
+                    energy_consumed_kwh=0.0,
+                    energy_exported_kwh=0.0,
+                    energy_imported_kwh=0.0,
+                    peak_power_kw=0.0,
+                    co2_avoided_kg=0.0,
+                    estimated_savings_pkr=0.0,
+                )
+
+            # Aggregate totals
+            total_generated = sum(float(d.get("pv_kwh", 0)) for d in data_points)
+            total_consumed = sum(float(d.get("load_kwh", 0)) for d in data_points)
+            total_exported = sum(float(d.get("grid_export_kwh", 0)) for d in data_points)
+            total_imported = sum(float(d.get("grid_import_kwh", 0)) for d in data_points)
+
+            return SiteEnergyTotals(
+                site_id=site_id,
+                energy_generated_kwh=total_generated,
+                energy_consumed_kwh=total_consumed,
+                energy_exported_kwh=total_exported,
+                energy_imported_kwh=total_imported,
+                peak_power_kw=0.0,  # Not available from hourly aggregates
+                co2_avoided_kg=total_generated * 0.8,  # Approximate
+                estimated_savings_pkr=0.0,  # Would need pricing data
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to aggregate site totals from System B: {e}")
+            return SiteEnergyTotals(
+                site_id=site_id,
+                energy_generated_kwh=0.0,
+                energy_consumed_kwh=0.0,
+                energy_exported_kwh=0.0,
+                energy_imported_kwh=0.0,
+                peak_power_kw=0.0,
+                co2_avoided_kg=0.0,
+                estimated_savings_pkr=0.0,
+            )
 
     async def aggregate_org_totals(
         self,
@@ -532,7 +722,7 @@ class SQLAlchemyTelemetryRepository:
         }
 
     # =========================================================================
-    # Upsert Methods (for Telemetry Sync Pipeline)
+    # Upsert Methods (DEPRECATED - Telemetry tables dropped, System B migration)
     # =========================================================================
 
     async def upsert_hourly_summary(
@@ -543,37 +733,12 @@ class SQLAlchemyTelemetryRepository:
         data: Dict[str, Any],
     ) -> None:
         """
-        Insert or update an hourly telemetry summary row.
+        DEPRECATED: Telemetry summary tables dropped after System B migration.
 
-        Uses PostgreSQL ON CONFLICT DO UPDATE for idempotent upserts.
-        For site-level rows (device_id=None), uses partial unique index.
+        This method is a no-op. Data should be written to System B instead.
         """
-        values = {
-            "id": uuid4(),
-            "site_id": site_id,
-            "device_id": device_id,
-            "timestamp_hour": timestamp_hour,
-            **data,
-        }
-
-        stmt = pg_insert(TelemetryHourlySummaryModel).values(**values)
-
-        # Use different conflict targets based on device_id presence
-        update_fields = {k: stmt.excluded[k] for k in data.keys()}
-        if device_id is not None:
-            stmt = stmt.on_conflict_do_update(
-                constraint="uq_hourly_site_device_time",
-                set_=update_fields,
-            )
-        else:
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["site_id", "timestamp_hour"],
-                index_where=TelemetryHourlySummaryModel.device_id.is_(None),
-                set_=update_fields,
-            )
-
-        await self._session.execute(stmt)
-        await self._session.flush()
+        logger.warning(f"ups upsert_hourly_summary called for site {site_id} - method deprecated, tables dropped")
+        pass
 
     async def upsert_daily_summary(
         self,
@@ -583,37 +748,12 @@ class SQLAlchemyTelemetryRepository:
         data: Dict[str, Any],
     ) -> None:
         """
-        Insert or update a daily telemetry summary row.
+        DEPRECATED: Telemetry summary tables dropped after System B migration.
 
-        Uses PostgreSQL ON CONFLICT DO UPDATE for idempotent upserts.
+        This method is a no-op. Data should be written to System B instead.
         """
-        values = {
-            "id": uuid4(),
-            "site_id": site_id,
-            "device_id": device_id,
-            "summary_date": summary_date,
-            **data,
-        }
-
-        stmt = pg_insert(TelemetryDailySummaryModel).values(**values)
-
-        update_fields = {k: stmt.excluded[k] for k in data.keys()}
-        update_fields["updated_at"] = datetime.now(timezone.utc)
-
-        if device_id is not None:
-            stmt = stmt.on_conflict_do_update(
-                constraint="uq_daily_site_device_date",
-                set_=update_fields,
-            )
-        else:
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["site_id", "summary_date"],
-                index_where=TelemetryDailySummaryModel.device_id.is_(None),
-                set_=update_fields,
-            )
-
-        await self._session.execute(stmt)
-        await self._session.flush()
+        logger.warning(f"upsert_daily_summary called for site {site_id} - method deprecated, tables dropped")
+        pass
 
     async def upsert_monthly_summary(
         self,
@@ -624,38 +764,12 @@ class SQLAlchemyTelemetryRepository:
         data: Dict[str, Any],
     ) -> None:
         """
-        Insert or update a monthly telemetry summary row.
+        DEPRECATED: Telemetry summary tables dropped after System B migration.
 
-        Uses PostgreSQL ON CONFLICT DO UPDATE for idempotent upserts.
+        This method is a no-op. Data should be written to System B instead.
         """
-        values = {
-            "id": uuid4(),
-            "site_id": site_id,
-            "device_id": device_id,
-            "year": year,
-            "month": month,
-            **data,
-        }
-
-        stmt = pg_insert(TelemetryMonthlySummaryModel).values(**values)
-
-        update_fields = {k: stmt.excluded[k] for k in data.keys()}
-        update_fields["updated_at"] = datetime.now(timezone.utc)
-
-        if device_id is not None:
-            stmt = stmt.on_conflict_do_update(
-                constraint="uq_monthly_site_device_period",
-                set_=update_fields,
-            )
-        else:
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["site_id", "year", "month"],
-                index_where=TelemetryMonthlySummaryModel.device_id.is_(None),
-                set_=update_fields,
-            )
-
-        await self._session.execute(stmt)
-        await self._session.flush()
+        logger.warning(f"upsert_monthly_summary called for site {site_id} - method deprecated, tables dropped")
+        pass
 
     async def aggregate_hourly_to_daily(
         self,
