@@ -582,7 +582,6 @@ class SQLAlchemyNetMeteringRepository:
             net_metering_enabled=model.net_metering_enabled,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            version=model.version,
         )
 
     def _config_domain_to_model(self, config: BillingConfig) -> BillingConfigModel:
