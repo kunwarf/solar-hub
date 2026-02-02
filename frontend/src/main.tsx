@@ -1,6 +1,11 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
+
+// Ensure React hooks are available globally for Radix UI
+if (typeof window !== 'undefined') {
+  (window as any).React = React;
+}
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "@fontsource/jetbrains-mono/700.css";

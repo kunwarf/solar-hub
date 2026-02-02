@@ -11,7 +11,9 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   plugins: [
-    react(),
+    react({
+      jsxRuntime: 'automatic',
+    }),
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
@@ -138,6 +140,11 @@ export default defineConfig(({ mode }) => ({
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true,
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
     },
   },
 }));
