@@ -443,9 +443,32 @@ async def get_billing_summary(
     estimated_monthly_savings = max(0, estimated_cost_without_solar - float(snapshot.bill_final_rs_to_date))
 
     # Calculate total savings since installation
-    # This requires summing all finalized months - for now, return 0 as placeholder
-    # TODO: Query all finalized billing months and sum savings
+    # Sum savings from all finalized billing months
     total_savings_since_install = 0.0
+    try:
+        # Get all finalized billing months for this site
+        all_months = await nm_repo.list_billing_months(
+            site_id=site_id,
+            status="finalized",
+            limit=1000  # Get all finalized months
+        )
+
+        # Calculate savings for each finalized month
+        for month in all_months:
+            # Calculate what would have been paid without solar
+            # Using the same average rate approach
+            load_consumption = float(month.load_consumption_kwh)
+            actual_bill = float(month.bill_final_rs)
+            estimated_cost = load_consumption * avg_import_rate + float(month.bill_fixed_rs)
+            month_savings = max(0, estimated_cost - actual_bill)
+            total_savings_since_install += month_savings
+
+        # Add current month's savings to the total
+        total_savings_since_install += estimated_monthly_savings
+    except Exception as e:
+        # If calculation fails, log and return 0
+        print(f"Failed to calculate total savings: {e}")
+        total_savings_since_install = 0.0
 
     return BillingSummaryResponse(
         billing_month=billing_month,
