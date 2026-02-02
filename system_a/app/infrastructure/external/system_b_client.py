@@ -553,6 +553,84 @@ class SystemBClient:
             logger.error("System B connection error: %s", e)
             raise SystemBClientError(f"Connection error: {str(e)}")
 
+    async def get_hourly_energy_summary(
+        self,
+        site_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get hourly energy aggregates from System B for billing calculations.
+
+        This method fetches hourly-bucketed energy data from System B's
+        TimescaleDB continuous aggregates and returns it in a format
+        suitable for the billing module.
+
+        Args:
+            site_id: Site UUID
+            start_time: Start of time range (inclusive)
+            end_time: End of time range (inclusive)
+
+        Returns:
+            List of dicts with hourly energy data, each containing:
+                - timestamp: Hour timestamp
+                - pv_kwh: Solar PV generation (kWh)
+                - load_kwh: Load consumption (kWh)
+                - grid_import_kwh: Energy imported from grid (kWh)
+                - grid_export_kwh: Energy exported to grid (kWh)
+
+        Raises:
+            SystemBClientError: On API errors or connection failures
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/energy-chart/{site_id}"
+
+            # Calculate the period to fetch
+            # For billing, we need hourly buckets for the exact time range
+            params = {
+                "period": "custom",  # Request custom time range
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "bucket_interval": "1 hour",
+            }
+
+            logger.info(
+                "System B billing request: GET %s%s params=%s (start=%s, end=%s)",
+                self._base_url, url, params, start_time, end_time
+            )
+
+            response = await client.get(url, params=params)
+
+            logger.info(
+                "System B billing response: status=%d, points=%s",
+                response.status_code,
+                len(response.json().get("data", [])) if response.status_code == 200 else "error"
+            )
+
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract data points from response
+            data_points = data.get("data", [])
+
+            logger.info(
+                "Fetched %d hourly data points from System B for site %s",
+                len(data_points), site_id
+            )
+
+            return data_points
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B billing energy error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get hourly energy summary: {e.response.text}",
+                status_code=e.response.status_code
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
     # =========================================================================
     # Command Methods
     # =========================================================================
