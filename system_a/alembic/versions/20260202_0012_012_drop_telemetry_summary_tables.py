@@ -1,7 +1,7 @@
 """Drop telemetry summary tables after System B migration
 
 Revision ID: 20260202_0012
-Revises: 20260129_0011
+Revises: dcf3f785fbc8
 Create Date: 2026-02-02
 
 This migration drops the telemetry summary tables from System A after migrating
@@ -34,7 +34,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '20260202_0012'
-down_revision = '20260129_0011'  # Update this to match your latest migration
+down_revision = 'dcf3f785fbc8'  # Links to add_device_settings_table migration
 branch_labels = None
 depends_on = None
 
