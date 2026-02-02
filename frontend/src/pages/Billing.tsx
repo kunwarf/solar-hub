@@ -200,7 +200,7 @@ const BillingPage = () => {
     runningBill,
     trend,
     capacityStatus,
-    config,
+    config: netMeteringConfig,
     summary,
     loading: netMeteringLoading,
     refetchAll: refetchNetMetering,
@@ -229,7 +229,7 @@ const BillingPage = () => {
 
   // Build stats from running bill (real-time net metering data)
   const billingStats = useMemo(() => {
-    if (!runningBill || !config) {
+    if (!runningBill || !netMeteringConfig) {
       return {
         energyProduced: billingData?.energyProduced || 0,
         energyConsumed: billingData?.energyConsumed || 0,
@@ -250,12 +250,12 @@ const BillingPage = () => {
 
     // Calculate costs and earnings
     const earningsToday =
-      (runningBill.export_peak_kwh * config.prices.price_peak_settlement) +
-      (runningBill.export_off_kwh * config.prices.price_offpeak_settlement);
+      (runningBill.export_peak_kwh * netMeteringConfig.prices.price_peak_settlement) +
+      (runningBill.export_off_kwh * netMeteringConfig.prices.price_offpeak_settlement);
 
     const costsToday =
-      (runningBill.import_peak_kwh * config.prices.price_peak_import) +
-      (runningBill.import_off_kwh * config.prices.price_offpeak_import);
+      (runningBill.import_peak_kwh * netMeteringConfig.prices.price_peak_import) +
+      (runningBill.import_off_kwh * netMeteringConfig.prices.price_offpeak_import);
 
     return {
       energyProduced: runningBill.pv_energy_kwh || 0,
@@ -265,11 +265,11 @@ const BillingPage = () => {
       earnings: earningsToday,
       costs: costsToday,
       netBalance: earningsToday - costsToday,
-      importRate: config.prices.price_peak_import,
-      exportRate: config.prices.price_peak_settlement,
+      importRate: netMeteringConfig.prices.price_peak_import,
+      exportRate: netMeteringConfig.prices.price_peak_settlement,
       estimatedSavings: summary?.estimated_savings_month || 0,
     };
-  }, [runningBill, config, summary, billingData]);
+  }, [runningBill, netMeteringConfig, summary, billingData]);
 
   const handleRunScheduler = async () => {
     toast({
