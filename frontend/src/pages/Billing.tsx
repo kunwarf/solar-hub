@@ -140,10 +140,46 @@ function buildBillingData(
 const BillingPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const siteId = searchParams.get("site_id") || "default-site-id";
+  const urlSiteId = searchParams.get("site_id");
+  const [siteId, setSiteId] = useState<string>(urlSiteId || "");
+  const [isLoadingSite, setIsLoadingSite] = useState(!urlSiteId);
   const { formatCurrency, getCurrencySymbol, config } = useBillingConfig();
   const [billingData, setBillingData] = useState<BillingPageData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Auto-fetch site ID if not provided in URL
+  useEffect(() => {
+    const fetchSiteId = async () => {
+      if (urlSiteId) {
+        setSiteId(urlSiteId);
+        setIsLoadingSite(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/v1/sites', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('solar_hub_access_token')}`
+          }
+        });
+
+        if (response.ok) {
+          const sites = await response.json();
+          if (sites && sites.length > 0) {
+            const firstSiteId = sites[0].id;
+            setSiteId(firstSiteId);
+            navigate(`/billing?site_id=${firstSiteId}`, { replace: true });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch site:', error);
+      } finally {
+        setIsLoadingSite(false);
+      }
+    };
+
+    fetchSiteId();
+  }, [urlSiteId, navigate]);
 
   // Net metering data from new API
   const {
@@ -153,8 +189,8 @@ const BillingPage = () => {
     loading: netMeteringLoading,
     refetchAll: refetchNetMetering,
   } = useNetMetering({
-    siteId: siteId !== "default-site-id" ? siteId : "",
-    autoFetch: siteId !== "default-site-id",
+    siteId: siteId || "",
+    autoFetch: !!siteId && !isLoadingSite,
   });
 
   const fetchData = useCallback(async () => {
@@ -184,7 +220,7 @@ const BillingPage = () => {
       await Promise.all([
         dashboardService.getAllWidgets(),
         fetchData(),
-        siteId !== "default-site-id" ? refetchNetMetering() : Promise.resolve(),
+        siteId ? refetchNetMetering() : Promise.resolve(),
       ]);
       toast({
         title: "Billing data refreshed",
@@ -237,8 +273,9 @@ const BillingPage = () => {
             Refresh Data
           </Button>
           <Button
-            onClick={() => navigate(siteId !== "default-site-id" ? `/billing/settings?site_id=${siteId}` : "/billing/settings")}
+            onClick={() => navigate(siteId ? `/billing/settings?site_id=${siteId}` : "/billing/settings")}
             className="gap-2"
+            disabled={!siteId}
           >
             <Settings2 className="w-4 h-4" />
             Configure Billing

@@ -44,18 +44,67 @@ import { useBillingConfig, defaultConfig, type PeakWindow } from "@/hooks/use-bi
 const BillingSettingsPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const siteId = searchParams.get("site_id") || "default-site-id"; // Get site ID from URL or use default
+  const urlSiteId = searchParams.get("site_id");
+  const [siteId, setSiteId] = useState<string>(urlSiteId || "");
+  const [isLoadingSite, setIsLoadingSite] = useState(!urlSiteId);
   const { config, setConfig, loadFromBackend, saveToBackend, isSyncing } = useBillingConfig();
-  const [isFirstTime, setIsFirstTime] = useState(false); // Set to true for first-time wizard
+  const [isFirstTime, setIsFirstTime] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Auto-fetch site ID if not provided in URL
+  useEffect(() => {
+    const fetchSiteId = async () => {
+      if (urlSiteId) {
+        setSiteId(urlSiteId);
+        setIsLoadingSite(false);
+        return;
+      }
+
+      try {
+        // Fetch user's sites and use the first one
+        const response = await fetch('/api/v1/sites', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('solar_hub_access_token')}`
+          }
+        });
+
+        if (response.ok) {
+          const sites = await response.json();
+          if (sites && sites.length > 0) {
+            const firstSiteId = sites[0].id;
+            setSiteId(firstSiteId);
+            // Update URL to include site_id
+            navigate(`/billing/settings?site_id=${firstSiteId}`, { replace: true });
+          } else {
+            toast({
+              title: "No Sites Found",
+              description: "Please create a site first before configuring billing.",
+              variant: "destructive",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch site:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load site information.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingSite(false);
+      }
+    };
+
+    fetchSiteId();
+  }, [urlSiteId, navigate]);
+
   // Load config from backend on mount
   useEffect(() => {
-    if (siteId && siteId !== "default-site-id") {
+    if (siteId && siteId !== "default-site-id" && !isLoadingSite) {
       loadFromBackend(siteId);
     }
-  }, [siteId, loadFromBackend]);
+  }, [siteId, loadFromBackend, isLoadingSite]);
 
   const steps = [
     { number: 1, title: "Global Settings", icon: Globe },
@@ -90,33 +139,33 @@ const BillingSettingsPage = () => {
   };
 
   const handleSave = async () => {
-    if (siteId && siteId !== "default-site-id") {
-      setIsSaving(true);
-      try {
-        await saveToBackend(siteId);
-        toast({
-          title: "Configuration Saved",
-          description: "Billing settings have been saved to the server.",
-        });
-        setIsFirstTime(false);
-        navigate("/billing");
-      } catch (err) {
-        toast({
-          title: "Save Failed",
-          description: "Failed to save billing configuration. Please try again.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsSaving(false);
-      }
-    } else {
-      // Local-only save (no site ID)
+    if (!siteId) {
+      toast({
+        title: "No Site Selected",
+        description: "Please select a site before saving billing configuration.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await saveToBackend(siteId);
       toast({
         title: "Configuration Saved",
-        description: "Billing settings have been updated locally.",
+        description: "Billing settings have been saved to the server.",
       });
       setIsFirstTime(false);
-      navigate("/billing");
+      navigate(`/billing?site_id=${siteId}`);
+    } catch (err) {
+      console.error('Save error:', err);
+      toast({
+        title: "Save Failed",
+        description: "Failed to save billing configuration. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -572,6 +621,44 @@ const BillingSettingsPage = () => {
       </div>
     </div>
   );
+
+  // Show loading state while fetching site
+  if (isLoadingSite) {
+    return (
+      <AppLayout>
+        <AppHeader
+          title="Billing Setup"
+          subtitle="Loading site information..."
+        />
+        <div className="p-6 flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-muted-foreground">Loading site information...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Show error if no site ID
+  if (!siteId) {
+    return (
+      <AppLayout>
+        <AppHeader
+          title="Billing Setup"
+          subtitle="No site available"
+        />
+        <div className="p-6">
+          <div className="glass-card p-6 text-center">
+            <p className="text-muted-foreground mb-4">No site found. Please create a site first.</p>
+            <Button onClick={() => navigate("/sites")}>
+              Go to Sites
+            </Button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
