@@ -32,6 +32,8 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { devicesService } from "@/api/services/devices.service";
+import { sitesService } from "@/api/services/sites.service";
+import { useNetMetering } from "@/hooks/use-net-metering";
 
 // Default billing data (used when API data is not yet loaded)
 const defaultBillingSummaryData = {
@@ -62,25 +64,58 @@ const Index = () => {
   const [showAllStats, setShowAllStats] = useState(false);
   const [activeId, setActiveId] = useState<WidgetId | null>(null);
   const [firstDeviceId, setFirstDeviceId] = useState<string | undefined>();
+  const [siteId, setSiteId] = useState<string>("");
 
-  // Derive billing summary from API data
-  const billingSummaryData = useMemo(() => {
-    if (!widgetsData?.billing) return defaultBillingSummaryData;
-    const b = widgetsData.billing;
-    const exportRate = b.export_rate_pkr || 15;
-    const exportedKwh = exportRate > 0 ? b.grid_export_credit / exportRate : 0;
-    return {
-      currentMonthEstimate: b.grid_import_cost,
-      lastMonthBill: 0, // Historical data not available in real-time widget
-      exportCredits: b.grid_export_credit,
-      exportedKwh: Math.round(exportedKwh),
-      totalSavings: b.estimated_savings_month,
-      importRate: b.import_rate_pkr,
-      exportRate: exportRate,
-      peakHoursStart: "5PM",
-      peakHoursEnd: "10PM",
+  // Fetch site ID on mount
+  useEffect(() => {
+    const fetchSiteId = async () => {
+      try {
+        const result = await sitesService.listSites();
+        if (result?.items && result.items.length > 0) {
+          setSiteId(result.items[0].id);
+        }
+      } catch (error) {
+        console.error('[Dashboard] Failed to fetch sites:', error);
+      }
     };
-  }, [widgetsData]);
+    fetchSiteId();
+  }, []);
+
+  // Use net metering hook for real billing data
+  const {
+    runningBill,
+    summary,
+    config,
+  } = useNetMetering({
+    siteId,
+    autoFetch: !!siteId,
+  });
+
+  // Derive billing summary from net metering API data
+  const billingSummaryData = useMemo(() => {
+    if (!runningBill || !config) return defaultBillingSummaryData;
+
+    // Get peak window times from config
+    const peakWindows = config.tou_config?.peak_windows || [];
+    const firstPeakWindow = peakWindows[0];
+    const peakStart = firstPeakWindow ? `${firstPeakWindow.start_hour}:00` : "17:00";
+    const peakEnd = firstPeakWindow ? `${firstPeakWindow.end_hour}:00` : "22:00";
+
+    // Calculate exported kWh from credits
+    const exportedKwh = runningBill.export_peak_kwh + runningBill.export_off_kwh;
+
+    return {
+      currentMonthEstimate: runningBill.bill_final_rs_to_date,
+      lastMonthBill: 0, // Could get from summary or trend if available
+      exportCredits: runningBill.bill_credit_balance_rs_to_date,
+      exportedKwh: Math.round(exportedKwh),
+      totalSavings: summary?.total_savings_since_install || 0,
+      importRate: config.prices.price_peak_import,
+      exportRate: config.prices.price_peak_settlement,
+      peakHoursStart: peakStart,
+      peakHoursEnd: peakEnd,
+    };
+  }, [runningBill, summary, config]);
 
   // Fetch first online device ID for QuickActions
   useEffect(() => {

@@ -351,7 +351,7 @@ const BillingPage = () => {
               </div>
               <span className="text-sm text-muted-foreground">Energy Produced</span>
             </div>
-            <p className="font-mono text-2xl font-bold text-solar">
+            <p className="font-mono text-2xl font-bold text-solar" data-testid="total-generation">
               {billingData.energyProduced.toFixed(1)}
               <span className="text-sm font-normal text-muted-foreground ml-1">kWh</span>
             </p>
@@ -369,7 +369,7 @@ const BillingPage = () => {
               </div>
               <span className="text-sm text-muted-foreground">Energy Consumed</span>
             </div>
-            <p className="font-mono text-2xl font-bold text-consumption">
+            <p className="font-mono text-2xl font-bold text-consumption" data-testid="total-consumption">
               {billingData.energyConsumed.toFixed(1)}
               <span className="text-sm font-normal text-muted-foreground ml-1">kWh</span>
             </p>
@@ -390,7 +390,7 @@ const BillingPage = () => {
             <p className="font-mono text-2xl font-bold text-success">
               {formatCurrency(billingData.earnings)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1" data-testid="export-credits-value">
               {billingData.energyExported.toFixed(1)} kWh @ {getCurrencySymbol()}{billingData.feedInRate}/kWh
             </p>
           </motion.div>
@@ -454,6 +454,32 @@ const BillingPage = () => {
           </div>
         </motion.div>
 
+        {/* Estimated Savings */}
+        {netPositive && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.53 }}
+            className="glass-card p-6"
+            data-testid="estimated-savings"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Estimated Monthly Savings</p>
+                <p className="font-mono text-3xl font-bold text-success mt-2">
+                  {formatCurrency(Math.abs(billingData.netBalance))}
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Based on current export/import rates
+                </p>
+              </div>
+              <div className="w-14 h-14 rounded-full bg-success/20 flex items-center justify-center">
+                <DollarSign className="w-7 h-7 text-success" />
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Running Bill (from Net Metering API) */}
         {runningBill && (
           <motion.div
@@ -484,7 +510,7 @@ const BillingPage = () => {
               {/* Bill to Date */}
               <div className="p-4 rounded-lg bg-secondary/30">
                 <p className="text-xs text-muted-foreground mb-1">Bill To-Date</p>
-                <p className="font-mono text-xl font-bold text-foreground">
+                <p className="font-mono text-xl font-bold text-foreground" data-testid="bill-amount">
                   {formatCurrency(runningBill.bill_final_rs_to_date)}
                 </p>
               </div>
@@ -503,7 +529,8 @@ const BillingPage = () => {
                 <p className={cn(
                   "font-mono text-xl font-bold",
                   runningBill.net_kwh_position >= 0 ? "text-success" : "text-destructive"
-                )}>
+                )}
+                  data-testid="net-metering">
                   {runningBill.net_kwh_position >= 0 ? "+" : ""}{runningBill.net_kwh_position.toFixed(1)} kWh
                 </p>
               </div>
@@ -873,11 +900,11 @@ const BillingPage = () => {
           transition={{ delay: 1.0 }}
           className="glass-card p-6"
         >
-          <h3 className="text-lg font-semibold text-foreground mb-4">Current Rates</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-4">Current Tariff Rates</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-secondary/30">
               <p className="text-sm text-muted-foreground">Grid Import Rate</p>
-              <p className="font-mono text-xl font-bold text-foreground">{getCurrencySymbol()}{billingData.importRate}/kWh</p>
+              <p className="font-mono text-xl font-bold text-foreground" data-testid="rate-per-kwh">{getCurrencySymbol()}{billingData.importRate}/kWh</p>
             </div>
             <div className="p-4 rounded-lg bg-secondary/30">
               <p className="text-sm text-muted-foreground">Feed-in Tariff (Export)</p>
