@@ -73,7 +73,7 @@ async def test_get_hourly_energy_summary_maps_correctly(mock_system_b_client):
 
     # Assert
     assert len(result) == 2
-    assert mock_system_b_client.get_hourly_energy_summary.called_once_with(
+    mock_system_b_client.get_hourly_energy_summary.assert_called_once_with(
         site_id=site_id,
         start_time=start_time,
         end_time=end_time,
