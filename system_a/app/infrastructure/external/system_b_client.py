@@ -586,29 +586,14 @@ class SystemBClient:
             client = await self._get_client()
             url = f"/api/v1/telemetry/energy-chart/{site_id}"
 
-            # Calculate the period to fetch based on time range
-            # System B only accepts "day", "week", or "month" - no "custom"
-            # We use the closest matching period
-            time_diff = end_time - start_time
-
-            # Choose period based on time range duration
-            if time_diff.days <= 1:
-                period = "day"
-            elif time_diff.days <= 7:
-                period = "week"
-            else:
-                period = "month"
-
-            # For billing, we need hourly buckets
-            # Note: System B's energy-chart endpoint may not support custom start/end times
-            # It will return data for the standard period (last 24h for "day", last 30d for "month")
-            # We'll need to filter results on our side to match exact billing periods
+            # For billing, we need hourly buckets for the exact time range
+            # System B's energy-chart endpoint supports period="custom" with custom time ranges
             params = {
-                "period": period,
+                "period": "custom",
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "bucket_interval": "1 hour",
             }
-
-            # TODO: System B needs to support custom time ranges for precise billing calculations
-            # For now, we use the predefined period and accept approximate ranges
 
             logger.info(
                 "System B billing request: GET %s%s params=%s (start=%s, end=%s)",
