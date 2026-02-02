@@ -35,10 +35,15 @@ from ...infrastructure.database.repositories.net_metering_repository import (
 from ...infrastructure.database.repositories.telemetry_repository import (
     SQLAlchemyTelemetryRepository,
 )
+from ...infrastructure.database.repositories.telemetry_system_b_repository import (
+    SystemBTelemetryRepository,
+)
 from ...infrastructure.database.repositories.site_repository import (
     SQLAlchemySiteRepository,
 )
+from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
 from ..interfaces.unit_of_work import UnitOfWork
+from ...config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +90,11 @@ class BillingSchedulerService:
         telemetry_repo: SQLAlchemyTelemetryRepository,
         site_repo: SQLAlchemySiteRepository,
         calculator: NetMeteringCalculator,
+        system_b_telemetry_repo: Optional[SystemBTelemetryRepository] = None,
     ):
         self._nm_repo = net_metering_repo
         self._telemetry_repo = telemetry_repo
+        self._system_b_telemetry_repo = system_b_telemetry_repo
         self._site_repo = site_repo
         self._calculator = calculator
 
@@ -599,26 +606,203 @@ class BillingSchedulerService:
         start_date: date,
         end_date: date,
     ) -> List[HourlyEnergyData]:
-        """Get hourly telemetry data from the telemetry repository."""
-        # Get hourly summaries from telemetry repository
-        summaries = await self._telemetry_repo.get_hourly_summaries(
-            site_id=site_id,
-            start_time=datetime.combine(start_date, datetime.min.time()),
-            end_time=datetime.combine(end_date, datetime.max.time()),
-        )
+        """
+        Get hourly telemetry data with optional dual-read validation.
 
-        hourly_data = []
-        for summary in summaries:
-            hourly_data.append(HourlyEnergyData(
-                timestamp=summary.timestamp_hour,
-                hour=summary.timestamp_hour.hour,
-                load_kwh=summary.energy_consumed_kwh or Decimal("0"),
-                solar_kwh=summary.energy_generated_kwh or Decimal("0"),
-                grid_import_kwh=summary.energy_imported_kwh or Decimal("0"),
-                grid_export_kwh=summary.energy_exported_kwh or Decimal("0"),
-            ))
+        Supports three modes based on feature flags:
+        1. System A only (default, legacy behavior)
+        2. System B only (after migration)
+        3. Dual-read with validation (during transition)
+        """
+        start_time = datetime.combine(start_date, datetime.min.time())
+        end_time = datetime.combine(end_date, datetime.max.time())
 
-        return hourly_data
+        # Check if System B should be used (based on feature flags)
+        use_system_b = settings.use_system_b_for_billing
+        validate_data = settings.validate_system_b_data
+
+        if use_system_b and self._system_b_telemetry_repo:
+            logger.info(
+                "Using System B for billing telemetry (site=%s, validation=%s)",
+                site_id, validate_data
+            )
+
+            try:
+                # Primary: Fetch from System B
+                system_b_summaries = await self._system_b_telemetry_repo.get_hourly_summaries(
+                    site_id=site_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                )
+
+                system_b_data = [
+                    HourlyEnergyData(
+                        timestamp=summary.timestamp_hour,
+                        hour=summary.timestamp_hour.hour,
+                        load_kwh=summary.energy_consumed_kwh or Decimal("0"),
+                        solar_kwh=summary.energy_generated_kwh or Decimal("0"),
+                        grid_import_kwh=summary.energy_imported_kwh or Decimal("0"),
+                        grid_export_kwh=summary.energy_exported_kwh or Decimal("0"),
+                    )
+                    for summary in system_b_summaries
+                ]
+
+                # Optional: Validate against System A
+                if validate_data:
+                    logger.info("Dual-read validation enabled for site %s", site_id)
+                    try:
+                        system_a_summaries = await self._telemetry_repo.get_hourly_summaries(
+                            site_id=site_id,
+                            start_time=start_time,
+                            end_time=end_time,
+                        )
+
+                        system_a_data = [
+                            HourlyEnergyData(
+                                timestamp=summary.timestamp_hour,
+                                hour=summary.timestamp_hour.hour,
+                                load_kwh=summary.energy_consumed_kwh or Decimal("0"),
+                                solar_kwh=summary.energy_generated_kwh or Decimal("0"),
+                                grid_import_kwh=summary.energy_imported_kwh or Decimal("0"),
+                                grid_export_kwh=summary.energy_exported_kwh or Decimal("0"),
+                            )
+                            for summary in system_a_summaries
+                        ]
+
+                        # Validate consistency
+                        self._validate_data_consistency(
+                            site_id=site_id,
+                            system_a_data=system_a_data,
+                            system_b_data=system_b_data,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "Validation failed for site %s: %s. Using System B data anyway.",
+                            site_id, e, exc_info=True
+                        )
+
+                return system_b_data
+
+            except SystemBClientError as e:
+                logger.error(
+                    "System B fetch failed for site %s: %s. Falling back to System A.",
+                    site_id, e, exc_info=True
+                )
+                # Fallback to System A on error
+                use_system_b = False
+
+        # Fallback or default: Use System A
+        if not use_system_b:
+            logger.debug("Using System A for billing telemetry (site=%s)", site_id)
+            summaries = await self._telemetry_repo.get_hourly_summaries(
+                site_id=site_id,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            hourly_data = []
+            for summary in summaries:
+                hourly_data.append(HourlyEnergyData(
+                    timestamp=summary.timestamp_hour,
+                    hour=summary.timestamp_hour.hour,
+                    load_kwh=summary.energy_consumed_kwh or Decimal("0"),
+                    solar_kwh=summary.energy_generated_kwh or Decimal("0"),
+                    grid_import_kwh=summary.energy_imported_kwh or Decimal("0"),
+                    grid_export_kwh=summary.energy_exported_kwh or Decimal("0"),
+                ))
+
+            return hourly_data
+
+    def _validate_data_consistency(
+        self,
+        site_id: UUID,
+        system_a_data: List[HourlyEnergyData],
+        system_b_data: List[HourlyEnergyData],
+        tolerance_kwh: Decimal = Decimal("0.1"),
+    ) -> None:
+        """
+        Validate that System A and System B data match within tolerance.
+
+        Logs discrepancies for monitoring but does not raise exceptions.
+
+        Args:
+            site_id: Site UUID for logging
+            system_a_data: Data from System A (PostgreSQL)
+            system_b_data: Data from System B (TimescaleDB)
+            tolerance_kwh: Maximum acceptable difference in kWh
+        """
+        if len(system_a_data) != len(system_b_data):
+            logger.warning(
+                "Data count mismatch for site %s: System A has %d points, System B has %d points",
+                site_id, len(system_a_data), len(system_b_data)
+            )
+            return
+
+        total_discrepancies = 0
+        max_discrepancy = Decimal("0")
+
+        for a_point, b_point in zip(system_a_data, system_b_data):
+            # Check timestamp alignment
+            if a_point.timestamp != b_point.timestamp:
+                logger.warning(
+                    "Timestamp mismatch for site %s: A=%s, B=%s",
+                    site_id, a_point.timestamp, b_point.timestamp
+                )
+                continue
+
+            # Check each energy field
+            diff_solar = abs(a_point.solar_kwh - b_point.solar_kwh)
+            diff_load = abs(a_point.load_kwh - b_point.load_kwh)
+            diff_import = abs(a_point.grid_import_kwh - b_point.grid_import_kwh)
+            diff_export = abs(a_point.grid_export_kwh - b_point.grid_export_kwh)
+
+            max_diff = max(diff_solar, diff_load, diff_import, diff_export)
+
+            if max_diff > tolerance_kwh:
+                total_discrepancies += 1
+                max_discrepancy = max(max_discrepancy, max_diff)
+
+                logger.warning(
+                    "Data discrepancy at %s for site %s: "
+                    "solar(A=%.3f, B=%.3f, diff=%.3f), "
+                    "load(A=%.3f, B=%.3f, diff=%.3f), "
+                    "import(A=%.3f, B=%.3f, diff=%.3f), "
+                    "export(A=%.3f, B=%.3f, diff=%.3f)",
+                    a_point.timestamp.isoformat(),
+                    site_id,
+                    float(a_point.solar_kwh),
+                    float(b_point.solar_kwh),
+                    float(diff_solar),
+                    float(a_point.load_kwh),
+                    float(b_point.load_kwh),
+                    float(diff_load),
+                    float(a_point.grid_import_kwh),
+                    float(b_point.grid_import_kwh),
+                    float(diff_import),
+                    float(a_point.grid_export_kwh),
+                    float(b_point.grid_export_kwh),
+                    float(diff_export),
+                )
+
+        if total_discrepancies > 0:
+            discrepancy_rate = (total_discrepancies / len(system_a_data)) * 100
+            logger.warning(
+                "Data validation summary for site %s: "
+                "%d/%d points (%.2f%%) exceed tolerance of %.3f kWh. "
+                "Max discrepancy: %.3f kWh",
+                site_id,
+                total_discrepancies,
+                len(system_a_data),
+                discrepancy_rate,
+                float(tolerance_kwh),
+                float(max_discrepancy),
+            )
+        else:
+            logger.info(
+                "Data validation passed for site %s: All %d points within tolerance",
+                site_id,
+                len(system_a_data),
+            )
 
     def _aggregate_hourly_to_daily(
         self,
