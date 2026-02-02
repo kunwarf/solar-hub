@@ -127,12 +127,12 @@ async def backfill_site(
                 if dry_run:
                     logger.info(
                         f"  DRY RUN: Would save snapshot with "
-                        f"bill_final={result.snapshot.bill_final_rs_to_date if result.snapshot else 'N/A'}"
+                        f"snapshot_id={result.snapshot_id}"
                     )
                 else:
                     logger.info(
                         f"  ✓ Backfilled {current_date}: "
-                        f"bill_final={result.snapshot.bill_final_rs_to_date if result.snapshot else 'N/A'}"
+                        f"snapshot_id={result.snapshot_id}"
                     )
 
                 if stats:
