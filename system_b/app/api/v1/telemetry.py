@@ -356,7 +356,10 @@ async def get_telemetry_stats(
 )
 async def get_energy_chart(
     site_id: UUID,
-    period: str = Query(default="day", regex="^(day|week|month)$"),
+    period: str = Query(default="day", regex="^(day|week|month|custom)$"),
+    start_time: Optional[datetime] = Query(default=None, description="Custom start time (requires period=custom)"),
+    end_time: Optional[datetime] = Query(default=None, description="Custom end time (requires period=custom)"),
+    bucket_interval: Optional[str] = Query(default=None, description="Custom bucket interval like '1 hour', '1 day' (requires period=custom)"),
     session: AsyncSession = Depends(get_db_session),
 ) -> EnergyChartResponse:
     """
@@ -375,18 +378,36 @@ async def get_energy_chart(
     - day: Last 24 hours, hourly buckets
     - week: Last 7 days, daily buckets
     - month: Last 30 days, daily buckets
+    - custom: Use provided start_time, end_time, and bucket_interval
     """
-    # Determine time range and bucket interval based on period
-    end_time = datetime.now(timezone.utc)
-    if period == "day":
-        start_time = end_time - timedelta(hours=24)
-        bucket_interval = "1 hour"
-    elif period == "week":
-        start_time = end_time - timedelta(days=7)
-        bucket_interval = "1 day"
-    else:  # month
-        start_time = end_time - timedelta(days=30)
-        bucket_interval = "1 day"
+    # Determine time range and bucket interval
+    if period == "custom":
+        # Custom period requires start_time, end_time, and bucket_interval
+        if not start_time or not end_time:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="start_time and end_time are required for period=custom"
+            )
+        if not bucket_interval:
+            bucket_interval = "1 hour"  # Default to hourly for custom
+
+        # Ensure times are timezone-aware
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+    else:
+        # Preset periods
+        end_time = datetime.now(timezone.utc)
+        if period == "day":
+            start_time = end_time - timedelta(hours=24)
+            bucket_interval = "1 hour"
+        elif period == "week":
+            start_time = end_time - timedelta(days=7)
+            bucket_interval = "1 day"
+        else:  # month
+            start_time = end_time - timedelta(days=30)
+            bucket_interval = "1 day"
 
     telemetry_repo = TelemetryRepository(session)
     service = TelemetryService(telemetry_repo)
