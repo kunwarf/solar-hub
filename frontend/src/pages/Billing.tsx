@@ -84,14 +84,15 @@ function buildBillingData(
   const importRate = billing.import_rate_pkr || 30;
   const exportRate = billing.export_rate_pkr || 15;
 
-  // Energy data from today's stats
+  // Energy data from today's stats - USE CORRECT FIELDS
   const energyProduced = stats.energy_today_kwh || 0;
-  const energyConsumed = energyProduced; // approximate (no separate consumption metric)
-  const energyExported = exportRate > 0 ? billing.grid_export_credit / exportRate : 0;
-  const energyImported = importRate > 0 ? billing.grid_import_cost / importRate : 0;
+  const energyConsumed = stats.load_energy_today_kwh || 0; // FIX: Use actual load consumption
+  const energyExported = stats.grid_export_today_kwh || 0; // FIX: Use actual export kWh
+  const energyImported = stats.grid_import_today_kwh || 0; // FIX: Use actual import kWh
 
-  const earnings = billing.grid_export_credit;
-  const costs = billing.grid_import_cost;
+  // Calculate earnings and costs from actual energy flows
+  const earnings = energyExported * exportRate;
+  const costs = energyImported * importRate;
   const netBalance = earnings - costs;
 
   // Build monthly history from chart data points
@@ -199,6 +200,8 @@ const BillingPage = () => {
     runningBill,
     trend,
     capacityStatus,
+    config,
+    summary,
     loading: netMeteringLoading,
     refetchAll: refetchNetMetering,
   } = useNetMetering({
@@ -223,6 +226,50 @@ const BillingPage = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Build stats from running bill (real-time net metering data)
+  const billingStats = useMemo(() => {
+    if (!runningBill || !config) {
+      return {
+        energyProduced: billingData?.energyProduced || 0,
+        energyConsumed: billingData?.energyConsumed || 0,
+        energyExported: billingData?.energyExported || 0,
+        energyImported: billingData?.energyImported || 0,
+        earnings: billingData?.earnings || 0,
+        costs: billingData?.costs || 0,
+        netBalance: billingData?.netBalance || 0,
+        importRate: billingData?.importRate || 30,
+        exportRate: billingData?.feedInRate || 15,
+        estimatedSavings: 0,
+      };
+    }
+
+    // Calculate today's values from running bill
+    const exportedToday = runningBill.export_peak_kwh + runningBill.export_off_kwh;
+    const importedToday = runningBill.import_peak_kwh + runningBill.import_off_kwh;
+
+    // Calculate costs and earnings
+    const earningsToday =
+      (runningBill.export_peak_kwh * config.prices.price_peak_settlement) +
+      (runningBill.export_off_kwh * config.prices.price_offpeak_settlement);
+
+    const costsToday =
+      (runningBill.import_peak_kwh * config.prices.price_peak_import) +
+      (runningBill.import_off_kwh * config.prices.price_offpeak_import);
+
+    return {
+      energyProduced: runningBill.pv_energy_kwh || 0,
+      energyConsumed: runningBill.load_energy_kwh || 0,
+      energyExported: exportedToday,
+      energyImported: importedToday,
+      earnings: earningsToday,
+      costs: costsToday,
+      netBalance: earningsToday - costsToday,
+      importRate: config.prices.price_peak_import,
+      exportRate: config.prices.price_peak_settlement,
+      estimatedSavings: summary?.estimated_savings_month || 0,
+    };
+  }, [runningBill, config, summary, billingData]);
 
   const handleRunScheduler = async () => {
     toast({
@@ -265,7 +312,7 @@ const BillingPage = () => {
     );
   }
 
-  const netPositive = billingData.netBalance >= 0;
+  const netPositive = billingStats.netBalance >= 0;
 
   // Log button state for debugging
   console.log('[Billing] Render - siteId:', siteId);
@@ -352,7 +399,7 @@ const BillingPage = () => {
               <span className="text-sm text-muted-foreground">Energy Produced</span>
             </div>
             <p className="font-mono text-2xl font-bold text-solar" data-testid="total-generation">
-              {billingData.energyProduced.toFixed(1)}
+              {billingStats.energyProduced.toFixed(1)}
               <span className="text-sm font-normal text-muted-foreground ml-1">kWh</span>
             </p>
           </motion.div>
@@ -370,7 +417,7 @@ const BillingPage = () => {
               <span className="text-sm text-muted-foreground">Energy Consumed</span>
             </div>
             <p className="font-mono text-2xl font-bold text-consumption" data-testid="total-consumption">
-              {billingData.energyConsumed.toFixed(1)}
+              {billingStats.energyConsumed.toFixed(1)}
               <span className="text-sm font-normal text-muted-foreground ml-1">kWh</span>
             </p>
           </motion.div>
@@ -385,13 +432,16 @@ const BillingPage = () => {
               <div className="w-10 h-10 rounded-xl bg-success/20 flex items-center justify-center">
                 <TrendingUp className="w-5 h-5 text-success" />
               </div>
-              <span className="text-sm text-muted-foreground">Grid Earnings</span>
+              <div>
+                <span className="text-sm text-muted-foreground">Grid Earnings (Export Credits)</span>
+                <p className="text-xs text-muted-foreground">Energy sold back to grid</p>
+              </div>
             </div>
             <p className="font-mono text-2xl font-bold text-success">
-              {formatCurrency(billingData.earnings)}
+              {formatCurrency(billingStats.earnings)}
             </p>
             <p className="text-xs text-muted-foreground mt-1" data-testid="export-credits-value">
-              {billingData.energyExported.toFixed(1)} kWh @ {getCurrencySymbol()}{billingData.feedInRate}/kWh
+              {billingStats.energyExported.toFixed(1)} kWh @ {getCurrencySymbol()}{billingStats.exportRate}/kWh
             </p>
           </motion.div>
 
@@ -408,10 +458,10 @@ const BillingPage = () => {
               <span className="text-sm text-muted-foreground">Grid Costs</span>
             </div>
             <p className="font-mono text-2xl font-bold text-destructive">
-              {formatCurrency(billingData.costs)}
+              {formatCurrency(billingStats.costs)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {billingData.energyImported.toFixed(1)} kWh @ {getCurrencySymbol()}{billingData.importRate}/kWh
+              {billingStats.energyImported.toFixed(1)} kWh @ {getCurrencySymbol()}{billingStats.importRate}/kWh
             </p>
           </motion.div>
         </div>
@@ -433,7 +483,7 @@ const BillingPage = () => {
                 "font-mono text-4xl font-bold mt-2",
                 netPositive ? "text-success" : "text-destructive"
               )}>
-                {netPositive ? "+" : "-"}{formatCurrency(Math.abs(billingData.netBalance))}
+                {netPositive ? "+" : "-"}{formatCurrency(Math.abs(billingStats.netBalance))}
               </p>
               <p className="text-sm text-muted-foreground mt-2">
                 {netPositive
@@ -467,7 +517,7 @@ const BillingPage = () => {
               <div>
                 <p className="text-sm text-muted-foreground">Estimated Monthly Savings</p>
                 <p className="font-mono text-3xl font-bold text-success mt-2">
-                  {formatCurrency(Math.abs(billingData.netBalance))}
+                  {formatCurrency(billingStats.estimatedSavings)}
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
                   Based on current export/import rates
@@ -904,11 +954,11 @@ const BillingPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-secondary/30">
               <p className="text-sm text-muted-foreground">Grid Import Rate</p>
-              <p className="font-mono text-xl font-bold text-foreground" data-testid="rate-per-kwh">{getCurrencySymbol()}{billingData.importRate}/kWh</p>
+              <p className="font-mono text-xl font-bold text-foreground" data-testid="rate-per-kwh">{getCurrencySymbol()}{billingStats.importRate}/kWh</p>
             </div>
             <div className="p-4 rounded-lg bg-secondary/30">
               <p className="text-sm text-muted-foreground">Feed-in Tariff (Export)</p>
-              <p className="font-mono text-xl font-bold text-foreground">{getCurrencySymbol()}{billingData.feedInRate}/kWh</p>
+              <p className="font-mono text-xl font-bold text-foreground">{getCurrencySymbol()}{billingStats.exportRate}/kWh</p>
             </div>
           </div>
         </motion.div>
