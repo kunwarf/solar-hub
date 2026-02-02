@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from uuid import UUID, uuid4
+from calendar import monthrange
 
 from sqlalchemy import select, func, and_, desc, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -21,6 +22,8 @@ from ..models.telemetry_model import (
     TelemetryMonthlySummaryModel,
     DeviceTelemetrySnapshotModel,
 )
+from ...external.system_b_client import SystemBClient
+from ....config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -300,18 +303,87 @@ class SQLAlchemyTelemetryRepository:
         year: int,
         month: int,
     ) -> Optional[MonthlySummary]:
-        """Get a specific monthly summary for a site."""
-        query = select(TelemetryMonthlySummaryModel).where(
-            and_(
-                TelemetryMonthlySummaryModel.site_id == site_id,
-                TelemetryMonthlySummaryModel.year == year,
-                TelemetryMonthlySummaryModel.month == month,
-                TelemetryMonthlySummaryModel.device_id.is_(None),
+        """
+        Get a specific monthly summary for a site.
+
+        Now queries System B directly since telemetry_monthly_summary table was dropped.
+        """
+        try:
+            # Query System B for monthly data
+            _, last_day = monthrange(year, month)
+            start_time = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
+            end_time = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+
+            # Initialize System B client
+            client = SystemBClient(
+                base_url=settings.system_b.url,
+                api_key=settings.system_b.api_key,
+                timeout=settings.system_b.timeout,
             )
-        )
-        result = await self._session.execute(query)
-        model = result.scalar_one_or_none()
-        return self._monthly_to_dataclass(model) if model else None
+
+            try:
+                # Fetch hourly data and aggregate to monthly
+                data_points = await client.get_hourly_energy_summary(
+                    site_id=site_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                )
+
+                if not data_points:
+                    return None
+
+                # Aggregate to monthly totals
+                total_generated = sum(float(d.get("pv_kwh", 0)) for d in data_points)
+                total_consumed = sum(float(d.get("load_kwh", 0)) for d in data_points)
+                total_exported = sum(float(d.get("grid_export_kwh", 0)) for d in data_points)
+                total_imported = sum(float(d.get("grid_import_kwh", 0)) for d in data_points)
+                total_stored = sum(float(d.get("battery_charge_kwh", 0)) for d in data_points)
+                total_discharged = sum(float(d.get("battery_discharge_kwh", 0)) for d in data_points)
+
+                # Create MonthlySummary dataclass
+                return MonthlySummary(
+                    id=uuid4(),  # Generate a temporary ID
+                    site_id=site_id,
+                    device_id=None,
+                    year=year,
+                    month=month,
+                    energy_generated_kwh=total_generated,
+                    energy_consumed_kwh=total_consumed,
+                    energy_exported_kwh=total_exported,
+                    energy_imported_kwh=total_imported,
+                    energy_stored_kwh=total_stored,
+                    energy_discharged_kwh=total_discharged,
+                    net_energy_kwh=total_generated - total_consumed,
+                    peak_power_kw=0.0,  # Not available in hourly summary
+                    peak_power_date=None,
+                    average_daily_generation_kwh=total_generated / last_day if last_day > 0 else 0.0,
+                    total_sunshine_hours=0.0,
+                    total_production_hours=0.0,
+                    total_grid_outage_minutes=0,
+                    avg_temperature_c=None,
+                    total_irradiation_kwh_m2=0.0,
+                    performance_ratio=0.0,
+                    capacity_factor=0.0,
+                    specific_yield_kwh_kwp=0.0,
+                    efficiency_pct=0.0,
+                    self_sufficiency_pct=0.0,
+                    expected_generation_kwh=0.0,
+                    generation_variance_percent=0.0,
+                    co2_avoided_kg=total_generated * 0.8,  # Approximate 0.8 kg CO2/kWh
+                    trees_equivalent=0.0,
+                    estimated_revenue_pkr=0.0,
+                    estimated_savings_pkr=0.0,
+                    days_with_data=len(set(d.get("timestamp", "")[:10] for d in data_points)),
+                    data_completeness_percent=0.0,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=None,
+                )
+            finally:
+                await client.close()
+
+        except Exception as e:
+            logger.error(f"Failed to fetch monthly summary from System B: {e}")
+            return None
 
     async def get_this_month_energy(self, site_id: UUID) -> float:
         """Get total energy generated this month."""
