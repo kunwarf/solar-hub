@@ -215,10 +215,13 @@ export const TelemetryProvider = ({
   }, [fetchTelemetry]);
 
   // Reset auth error when authentication state changes
+  // Also trigger immediate fetch when user logs in
   useEffect(() => {
     if (isAuthenticated) {
       setAuthError(false);
       fetchCountRef.current = 0;
+      // Reset initial fetch flag so polling effect will fetch immediately
+      initialFetchDoneRef.current = false;
     }
   }, [isAuthenticated]);
 
