@@ -427,20 +427,26 @@ async def get_billing_summary(
     billing_month = config.get_billing_month_number(snapshot.date)
 
     # Calculate estimated monthly savings
-    # Monthly savings = export credits - import costs (if positive, you're saving)
-    export_earnings = (
-        (float(snapshot.export_peak_kwh) * config.prices.price_peak_settlement) +
-        (float(snapshot.export_off_kwh) * config.prices.price_offpeak_settlement)
+    # Savings = what you would have paid without solar - what you actually paid with solar
+
+    # Calculate average import rate (weighted by typical usage pattern)
+    # Use 60% off-peak, 40% peak as typical residential pattern
+    avg_import_rate = (
+        (config.prices.price_offpeak_import * 0.6) +
+        (config.prices.price_peak_import * 0.4)
     )
-    import_costs = (
-        (float(snapshot.import_peak_kwh) * config.prices.price_peak_import) +
-        (float(snapshot.import_off_kwh) * config.prices.price_offpeak_import)
+
+    # Cost WITHOUT solar = all load consumption bought from grid + fixed charges
+    estimated_cost_without_solar = (
+        float(snapshot.load_consumption_kwh) * avg_import_rate +
+        float(snapshot.fixed_prorated_rs)  # Include fixed charges
     )
-    # Estimated monthly savings is what you would have paid without solar
-    # Approximation: total load consumption * average import rate - actual bill
-    avg_import_rate = (config.prices.price_peak_import + config.prices.price_offpeak_import) / 2
-    estimated_cost_without_solar = float(snapshot.load_consumption_kwh) * avg_import_rate
-    estimated_monthly_savings = max(0, estimated_cost_without_solar - float(snapshot.bill_final_rs_to_date))
+
+    # Cost WITH solar = actual bill (already includes fixed charges)
+    actual_cost_with_solar = float(snapshot.bill_final_rs_to_date)
+
+    # Monthly savings
+    estimated_monthly_savings = max(0, estimated_cost_without_solar - actual_cost_with_solar)
 
     # Calculate total savings since installation
     # Sum savings from all finalized billing months
@@ -455,12 +461,18 @@ async def get_billing_summary(
 
         # Calculate savings for each finalized month
         for month in all_months:
-            # Calculate what would have been paid without solar
-            # Using the same average rate approach
+            # Cost without solar = all load would be imported from grid + fixed charges
             load_consumption = float(month.load_consumption_kwh)
+            estimated_cost_without_solar_month = (
+                load_consumption * avg_import_rate +
+                float(month.bill_fixed_rs)
+            )
+
+            # Cost with solar = actual bill paid
             actual_bill = float(month.bill_final_rs)
-            estimated_cost = load_consumption * avg_import_rate + float(month.bill_fixed_rs)
-            month_savings = max(0, estimated_cost - actual_bill)
+
+            # Savings for this month
+            month_savings = max(0, estimated_cost_without_solar_month - actual_bill)
             total_savings_since_install += month_savings
 
         # Add current month's savings to the total
