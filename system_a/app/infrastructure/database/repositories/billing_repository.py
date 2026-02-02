@@ -258,7 +258,6 @@ class SQLAlchemyBillingRepository:
             notes=model.notes,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            version=model.version,
         )
 
     def _tariff_domain_to_model(self, tariff: TariffPlan) -> TariffPlanModel:
@@ -412,7 +411,6 @@ class SQLAlchemyBillingRepository:
             notes=model.notes,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            version=model.version,
         )
 
     def _simulation_domain_to_model(self, simulation: BillingSimulation) -> BillingSimulationModel:
