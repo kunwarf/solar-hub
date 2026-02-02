@@ -258,8 +258,8 @@ const BillingPage = () => {
       (runningBill.import_off_kwh * netMeteringConfig.prices.price_offpeak_import);
 
     return {
-      energyProduced: runningBill.pv_energy_kwh || 0,
-      energyConsumed: runningBill.load_energy_kwh || 0,
+      energyProduced: runningBill.solar_generation_kwh || 0,
+      energyConsumed: runningBill.load_consumption_kwh || 0,
       energyExported: exportedToday,
       energyImported: importedToday,
       earnings: earningsToday,
