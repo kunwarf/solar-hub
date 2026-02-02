@@ -5,6 +5,7 @@ Orchestrates daily billing calculations for all sites.
 Runs as a scheduled job to compute running bills and finalize billing periods.
 """
 import logging
+import pytz
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -97,6 +98,28 @@ class BillingSchedulerService:
         self._system_b_telemetry_repo = system_b_telemetry_repo
         self._site_repo = site_repo
         self._calculator = calculator
+
+    @staticmethod
+    def _get_hour_in_timezone(timestamp: datetime, timezone_str: str) -> int:
+        """
+        Extract hour (0-23) from timestamp in the specified timezone.
+
+        Args:
+            timestamp: UTC or naive datetime
+            timezone_str: Timezone string (e.g., "Asia/Karachi")
+
+        Returns:
+            Hour in the specified timezone (0-23)
+        """
+        tz = pytz.timezone(timezone_str)
+
+        # If timestamp is naive, assume it's UTC
+        if timestamp.tzinfo is None:
+            timestamp = pytz.UTC.localize(timestamp)
+
+        # Convert to target timezone
+        local_time = timestamp.astimezone(tz)
+        return local_time.hour
 
     async def run_daily_billing_job(
         self,
@@ -234,7 +257,7 @@ class BillingSchedulerService:
 
         # Get hourly telemetry data for month-to-date
         hourly_data = await self._get_hourly_telemetry_for_period(
-            site_id, month_start, target_date
+            site_id, month_start, target_date, config.tou_config.timezone
         )
 
         if not hourly_data:
@@ -605,6 +628,7 @@ class BillingSchedulerService:
         site_id: UUID,
         start_date: date,
         end_date: date,
+        timezone_str: str = "Asia/Karachi",
     ) -> List[HourlyEnergyData]:
         """
         Get hourly telemetry data with optional dual-read validation.
@@ -613,6 +637,12 @@ class BillingSchedulerService:
         1. System A only (default, legacy behavior)
         2. System B only (after migration)
         3. Dual-read with validation (during transition)
+
+        Args:
+            site_id: Site UUID
+            start_date: Start date
+            end_date: End date
+            timezone_str: Timezone for TOU classification (e.g., "Asia/Karachi")
         """
         start_time = datetime.combine(start_date, datetime.min.time())
         end_time = datetime.combine(end_date, datetime.max.time())
@@ -638,7 +668,7 @@ class BillingSchedulerService:
                 system_b_data = [
                     HourlyEnergyData(
                         timestamp=summary.timestamp_hour,
-                        hour=summary.timestamp_hour.hour,
+                        hour=self._get_hour_in_timezone(summary.timestamp_hour, timezone_str),
                         load_kwh=summary.energy_consumed_kwh or Decimal("0"),
                         solar_kwh=summary.energy_generated_kwh or Decimal("0"),
                         grid_import_kwh=summary.energy_imported_kwh or Decimal("0"),
@@ -660,7 +690,7 @@ class BillingSchedulerService:
                         system_a_data = [
                             HourlyEnergyData(
                                 timestamp=summary.timestamp_hour,
-                                hour=summary.timestamp_hour.hour,
+                                hour=self._get_hour_in_timezone(summary.timestamp_hour, timezone_str),
                                 load_kwh=summary.energy_consumed_kwh or Decimal("0"),
                                 solar_kwh=summary.energy_generated_kwh or Decimal("0"),
                                 grid_import_kwh=summary.energy_imported_kwh or Decimal("0"),
@@ -704,7 +734,7 @@ class BillingSchedulerService:
             for summary in summaries:
                 hourly_data.append(HourlyEnergyData(
                     timestamp=summary.timestamp_hour,
-                    hour=summary.timestamp_hour.hour,
+                    hour=self._get_hour_in_timezone(summary.timestamp_hour, timezone_str),
                     load_kwh=summary.energy_consumed_kwh or Decimal("0"),
                     solar_kwh=summary.energy_generated_kwh or Decimal("0"),
                     grid_import_kwh=summary.energy_imported_kwh or Decimal("0"),
