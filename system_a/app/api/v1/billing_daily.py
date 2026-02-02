@@ -432,8 +432,8 @@ async def get_billing_summary(
     # Calculate average import rate (weighted by typical usage pattern)
     # Use 60% off-peak, 40% peak as typical residential pattern
     avg_import_rate = (
-        (config.prices.price_offpeak_import * 0.6) +
-        (config.prices.price_peak_import * 0.4)
+        (float(config.prices.price_offpeak_import) * 0.6) +
+        (float(config.prices.price_peak_import) * 0.4)
     )
 
     # Cost WITHOUT solar = all load consumption bought from grid + fixed charges
