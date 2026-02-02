@@ -39,7 +39,13 @@ class TestScheduler:
         assert mod._scheduler is None
 
     def test_jobs_are_registered(self):
-        """All three sync jobs should be registered."""
+        """
+        Billing jobs should be registered.
+
+        Note: Telemetry sync jobs (sync_hourly, sync_daily, sync_monthly)
+        have been disabled as part of System B migration. Billing now queries
+        System B directly instead of syncing to System A summary tables.
+        """
         import system_a.app.infrastructure.scheduler.scheduler as mod
         mod._scheduler = None
 
@@ -49,8 +55,14 @@ class TestScheduler:
         register_jobs(scheduler)
 
         job_ids = [job.id for job in scheduler.get_jobs()]
-        assert "sync_hourly" in job_ids
-        assert "sync_daily" in job_ids
-        assert "sync_monthly" in job_ids
+
+        # Billing jobs should be registered
+        assert "daily_billing" in job_ids, "Daily billing job should be registered"
+        assert "cycle_settlement_check" in job_ids, "Cycle settlement job should be registered"
+
+        # Telemetry sync jobs should NOT be registered (deprecated)
+        assert "sync_hourly" not in job_ids, "Hourly sync job should be disabled"
+        assert "sync_daily" not in job_ids, "Daily sync job should be disabled"
+        assert "sync_monthly" not in job_ids, "Monthly sync job should be disabled"
 
         mod._scheduler = None  # Cleanup
