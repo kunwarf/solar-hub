@@ -265,6 +265,22 @@ class AppSettings(BaseSettings):
     feature_ai_analysis: bool = Field(default=True)
     feature_load_shedding_tracking: bool = Field(default=True)
 
+    # Billing Migration Feature Flags
+    use_system_b_for_billing: bool = Field(
+        default=False,
+        description='Use System B (TimescaleDB) for billing telemetry instead of System A (PostgreSQL)'
+    )
+    validate_system_b_data: bool = Field(
+        default=False,
+        description='Enable dual-read validation: compare System A and System B data for consistency'
+    )
+    system_b_rollout_percentage: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        description='Percentage of sites to use System B for billing (0-100%). Used for gradual rollout.'
+    )
+
     # Pakistan-specific
     default_timezone: str = Field(default='Asia/Karachi')
     default_currency: str = Field(default='PKR')
