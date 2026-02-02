@@ -40,6 +40,7 @@ import { useNetMetering } from "@/hooks/use-net-metering";
 import { WhatIfCalculator } from "@/components/billing/WhatIfCalculator";
 import { dashboardService } from "@/api/services/dashboard.service";
 import type { AllWidgetsData, EnergyChartResponse } from "@/api/services/dashboard.service";
+import { sitesService } from "@/api/services/sites.service";
 
 interface BillingPageData {
   currentPeriod: {
@@ -157,19 +158,11 @@ const BillingPage = () => {
       }
 
       try {
-        const response = await fetch('/api/v1/sites', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('solar_hub_access_token')}`
-          }
-        });
-
-        if (response.ok) {
-          const sites = await response.json();
-          if (sites && sites.length > 0) {
-            const firstSiteId = sites[0].id;
-            setSiteId(firstSiteId);
-            navigate(`/billing?site_id=${firstSiteId}`, { replace: true });
-          }
+        const sites = await sitesService.listSites();
+        if (sites && sites.length > 0) {
+          const firstSiteId = sites[0].id;
+          setSiteId(firstSiteId);
+          navigate(`/billing?site_id=${firstSiteId}`, { replace: true });
         }
       } catch (error) {
         console.error('Failed to fetch site:', error);

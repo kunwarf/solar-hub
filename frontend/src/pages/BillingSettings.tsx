@@ -40,6 +40,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useBillingConfig, defaultConfig, type PeakWindow } from "@/hooks/use-billing-config";
+import { sitesService } from "@/api/services/sites.service";
 
 const BillingSettingsPage = () => {
   const navigate = useNavigate();
@@ -63,26 +64,19 @@ const BillingSettingsPage = () => {
 
       try {
         // Fetch user's sites and use the first one
-        const response = await fetch('/api/v1/sites', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('solar_hub_access_token')}`
-          }
-        });
+        const sites = await sitesService.listSites();
 
-        if (response.ok) {
-          const sites = await response.json();
-          if (sites && sites.length > 0) {
-            const firstSiteId = sites[0].id;
-            setSiteId(firstSiteId);
-            // Update URL to include site_id
-            navigate(`/billing/settings?site_id=${firstSiteId}`, { replace: true });
-          } else {
-            toast({
-              title: "No Sites Found",
-              description: "Please create a site first before configuring billing.",
-              variant: "destructive",
-            });
-          }
+        if (sites && sites.length > 0) {
+          const firstSiteId = sites[0].id;
+          setSiteId(firstSiteId);
+          // Update URL to include site_id
+          navigate(`/billing/settings?site_id=${firstSiteId}`, { replace: true });
+        } else {
+          toast({
+            title: "No Sites Found",
+            description: "Please create a site first before configuring billing.",
+            variant: "destructive",
+          });
         }
       } catch (error) {
         console.error('Failed to fetch site:', error);
