@@ -55,23 +55,39 @@ const BillingSettingsPage = () => {
 
   // Auto-fetch site ID if not provided in URL
   useEffect(() => {
+    console.log('[BillingSettings] useEffect triggered');
+    console.log('[BillingSettings] urlSiteId from URL params:', urlSiteId);
+    console.log('[BillingSettings] Current siteId state:', siteId);
+    console.log('[BillingSettings] isLoadingSite:', isLoadingSite);
+
     const fetchSiteId = async () => {
       if (urlSiteId) {
+        console.log('[BillingSettings] Using urlSiteId from URL:', urlSiteId);
         setSiteId(urlSiteId);
         setIsLoadingSite(false);
         return;
       }
 
+      console.log('[BillingSettings] No urlSiteId, fetching sites from API...');
       try {
         // Fetch user's sites and use the first one
-        const sites = await sitesService.listSites();
+        const result = await sitesService.listSites();
+        console.log('[BillingSettings] Sites fetched successfully:', result);
+        console.log('[BillingSettings] Result type:', typeof result);
+        console.log('[BillingSettings] Result has items?:', 'items' in (result || {}));
+        console.log('[BillingSettings] Result.items:', result?.items);
+        console.log('[BillingSettings] Number of sites:', result?.items?.length);
 
-        if (sites && sites.length > 0) {
-          const firstSiteId = sites[0].id;
+        if (result?.items && result.items.length > 0) {
+          const firstSiteId = result.items[0].id;
+          console.log('[BillingSettings] Using first site ID:', firstSiteId);
+          console.log('[BillingSettings] First site details:', result.items[0]);
           setSiteId(firstSiteId);
+          console.log('[BillingSettings] Navigating to /billing/settings with site_id:', firstSiteId);
           // Update URL to include site_id
           navigate(`/billing/settings?site_id=${firstSiteId}`, { replace: true });
         } else {
+          console.warn('[BillingSettings] No sites returned from API');
           toast({
             title: "No Sites Found",
             description: "Please create a site first before configuring billing.",
@@ -79,7 +95,8 @@ const BillingSettingsPage = () => {
           });
         }
       } catch (error) {
-        console.error('Failed to fetch site:', error);
+        console.error('[BillingSettings] Failed to fetch sites:', error);
+        console.error('[BillingSettings] Error details:', JSON.stringify(error, null, 2));
         toast({
           title: "Error",
           description: "Failed to load site information.",
@@ -87,6 +104,7 @@ const BillingSettingsPage = () => {
         });
       } finally {
         setIsLoadingSite(false);
+        console.log('[BillingSettings] fetchSiteId completed, isLoadingSite set to false');
       }
     };
 
@@ -95,8 +113,17 @@ const BillingSettingsPage = () => {
 
   // Load config from backend on mount
   useEffect(() => {
+    console.log('[BillingSettings] Config loading useEffect triggered');
+    console.log('[BillingSettings] siteId:', siteId);
+    console.log('[BillingSettings] siteId !== "default-site-id":', siteId !== "default-site-id");
+    console.log('[BillingSettings] !isLoadingSite:', !isLoadingSite);
+    console.log('[BillingSettings] Will load config?:', siteId && siteId !== "default-site-id" && !isLoadingSite);
+
     if (siteId && siteId !== "default-site-id" && !isLoadingSite) {
+      console.log('[BillingSettings] Loading config from backend for site:', siteId);
       loadFromBackend(siteId);
+    } else {
+      console.log('[BillingSettings] Skipping config load - conditions not met');
     }
   }, [siteId, loadFromBackend, isLoadingSite]);
 
@@ -133,7 +160,12 @@ const BillingSettingsPage = () => {
   };
 
   const handleSave = async () => {
+    console.log('[BillingSettings] handleSave called');
+    console.log('[BillingSettings] Current siteId:', siteId);
+    console.log('[BillingSettings] Config to save:', config);
+
     if (!siteId) {
+      console.error('[BillingSettings] No siteId - cannot save');
       toast({
         title: "No Site Selected",
         description: "Please select a site before saving billing configuration.",
@@ -142,17 +174,22 @@ const BillingSettingsPage = () => {
       return;
     }
 
+    console.log('[BillingSettings] Saving config for site:', siteId);
     setIsSaving(true);
     try {
+      console.log('[BillingSettings] Calling saveToBackend...');
       await saveToBackend(siteId);
+      console.log('[BillingSettings] Save successful');
       toast({
         title: "Configuration Saved",
         description: "Billing settings have been saved to the server.",
       });
       setIsFirstTime(false);
+      console.log('[BillingSettings] Navigating back to /billing');
       navigate(`/billing?site_id=${siteId}`);
     } catch (err) {
-      console.error('Save error:', err);
+      console.error('[BillingSettings] Save error:', err);
+      console.error('[BillingSettings] Error details:', JSON.stringify(err, null, 2));
       toast({
         title: "Save Failed",
         description: "Failed to save billing configuration. Please try again.",
@@ -160,6 +197,7 @@ const BillingSettingsPage = () => {
       });
     } finally {
       setIsSaving(false);
+      console.log('[BillingSettings] handleSave completed');
     }
   };
 

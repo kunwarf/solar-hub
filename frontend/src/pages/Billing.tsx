@@ -150,24 +150,44 @@ const BillingPage = () => {
 
   // Auto-fetch site ID if not provided in URL
   useEffect(() => {
+    console.log('[Billing] useEffect triggered');
+    console.log('[Billing] urlSiteId from URL params:', urlSiteId);
+    console.log('[Billing] Current siteId state:', siteId);
+    console.log('[Billing] isLoadingSite:', isLoadingSite);
+
     const fetchSiteId = async () => {
       if (urlSiteId) {
+        console.log('[Billing] Using urlSiteId from URL:', urlSiteId);
         setSiteId(urlSiteId);
         setIsLoadingSite(false);
         return;
       }
 
+      console.log('[Billing] No urlSiteId, fetching sites from API...');
       try {
-        const sites = await sitesService.listSites();
-        if (sites && sites.length > 0) {
-          const firstSiteId = sites[0].id;
+        const result = await sitesService.listSites();
+        console.log('[Billing] Sites fetched successfully:', result);
+        console.log('[Billing] Result type:', typeof result);
+        console.log('[Billing] Result has items?:', 'items' in (result || {}));
+        console.log('[Billing] Result.items:', result?.items);
+        console.log('[Billing] Number of sites:', result?.items?.length);
+
+        if (result?.items && result.items.length > 0) {
+          const firstSiteId = result.items[0].id;
+          console.log('[Billing] Using first site ID:', firstSiteId);
+          console.log('[Billing] First site details:', result.items[0]);
           setSiteId(firstSiteId);
+          console.log('[Billing] Navigating to /billing with site_id:', firstSiteId);
           navigate(`/billing?site_id=${firstSiteId}`, { replace: true });
+        } else {
+          console.warn('[Billing] No sites returned from API');
         }
       } catch (error) {
-        console.error('Failed to fetch site:', error);
+        console.error('[Billing] Failed to fetch sites:', error);
+        console.error('[Billing] Error details:', JSON.stringify(error, null, 2));
       } finally {
         setIsLoadingSite(false);
+        console.log('[Billing] fetchSiteId completed, isLoadingSite set to false');
       }
     };
 
@@ -247,6 +267,13 @@ const BillingPage = () => {
 
   const netPositive = billingData.netBalance >= 0;
 
+  // Log button state for debugging
+  console.log('[Billing] Render - siteId:', siteId);
+  console.log('[Billing] Render - siteId type:', typeof siteId);
+  console.log('[Billing] Render - siteId truthy?:', !!siteId);
+  console.log('[Billing] Render - isLoadingSite:', isLoadingSite);
+  console.log('[Billing] Render - Configure Billing button disabled:', !siteId);
+
   return (
     <AppLayout>
       <AppHeader
@@ -266,7 +293,10 @@ const BillingPage = () => {
             Refresh Data
           </Button>
           <Button
-            onClick={() => navigate(siteId ? `/billing/settings?site_id=${siteId}` : "/billing/settings")}
+            onClick={() => {
+              console.log('[Billing] Configure Billing button clicked, siteId:', siteId);
+              navigate(siteId ? `/billing/settings?site_id=${siteId}` : "/billing/settings");
+            }}
             className="gap-2"
             disabled={!siteId}
           >

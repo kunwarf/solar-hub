@@ -29,11 +29,29 @@ class SitesService {
     filters?: SiteFilters,
     pagination?: PaginationParams
   ): Promise<PaginatedResponse<Site>> {
-    const response = await apiClient.get<PaginatedResponse<Site>>(
-      API_ENDPOINTS.sites.list,
-      { params: { ...filters, ...pagination } }
-    );
-    return response.data;
+    console.log('[SitesService] listSites called');
+    console.log('[SitesService] filters:', filters);
+    console.log('[SitesService] pagination:', pagination);
+    console.log('[SitesService] API endpoint:', API_ENDPOINTS.sites.list);
+
+    try {
+      const response = await apiClient.get<PaginatedResponse<Site>>(
+        API_ENDPOINTS.sites.list,
+        { params: { ...filters, ...pagination } }
+      );
+      console.log('[SitesService] API response:', response);
+      console.log('[SitesService] Response data:', response.data);
+      console.log('[SitesService] Response data type:', typeof response.data);
+      console.log('[SitesService] Response data structure:', {
+        hasItems: 'items' in (response.data || {}),
+        items: (response.data as any)?.items,
+        itemsLength: (response.data as any)?.items?.length,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('[SitesService] listSites error:', error);
+      throw error;
+    }
   }
 
   /**
