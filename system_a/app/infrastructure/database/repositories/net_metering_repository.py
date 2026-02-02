@@ -631,7 +631,6 @@ class SQLAlchemyNetMeteringRepository:
             finalized_at=model.finalized_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            version=model.version,
         )
 
     def _cycle_domain_to_model(self, cycle: BillingCycle) -> BillingCycleModel:
@@ -702,7 +701,6 @@ class SQLAlchemyNetMeteringRepository:
             finalized_at=model.finalized_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            version=model.version,
         )
 
     def _month_domain_to_model(self, month: BillingMonth) -> BillingMonthModel:
