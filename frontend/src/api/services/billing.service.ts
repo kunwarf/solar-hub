@@ -200,6 +200,8 @@ export interface BillingSummary {
   days_elapsed: number;
   days_remaining: number;
   progress_percent: number;
+  estimated_savings_month: number;
+  total_savings_since_install: number;
 }
 
 export interface BillingTrendItem {

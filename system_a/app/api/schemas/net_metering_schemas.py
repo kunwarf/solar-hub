@@ -292,6 +292,10 @@ class BillingSummaryResponse(BaseModel):
     days_remaining: int
     progress_percent: float
 
+    # Savings
+    estimated_savings_month: float = Field(default=0.0, description="Estimated monthly savings in PKR")
+    total_savings_since_install: float = Field(default=0.0, description="Total lifetime savings in PKR")
+
 
 class BillingTrendItem(BaseModel):
     """Single month in billing trend."""

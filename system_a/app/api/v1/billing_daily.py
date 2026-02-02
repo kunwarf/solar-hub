@@ -426,6 +426,27 @@ async def get_billing_summary(
     month_start, month_end = config.get_billing_month_bounds(snapshot.date)
     billing_month = config.get_billing_month_number(snapshot.date)
 
+    # Calculate estimated monthly savings
+    # Monthly savings = export credits - import costs (if positive, you're saving)
+    export_earnings = (
+        (float(snapshot.export_peak_kwh) * config.prices.price_peak_settlement) +
+        (float(snapshot.export_off_kwh) * config.prices.price_offpeak_settlement)
+    )
+    import_costs = (
+        (float(snapshot.import_peak_kwh) * config.prices.price_peak_import) +
+        (float(snapshot.import_off_kwh) * config.prices.price_offpeak_import)
+    )
+    # Estimated monthly savings is what you would have paid without solar
+    # Approximation: total load consumption * average import rate - actual bill
+    avg_import_rate = (config.prices.price_peak_import + config.prices.price_offpeak_import) / 2
+    estimated_cost_without_solar = float(snapshot.load_consumption_kwh) * avg_import_rate
+    estimated_monthly_savings = max(0, estimated_cost_without_solar - float(snapshot.bill_final_rs_to_date))
+
+    # Calculate total savings since installation
+    # This requires summing all finalized months - for now, return 0 as placeholder
+    # TODO: Query all finalized billing months and sum savings
+    total_savings_since_install = 0.0
+
     return BillingSummaryResponse(
         billing_month=billing_month,
         year=month_start.year,
@@ -441,6 +462,8 @@ async def get_billing_summary(
         days_elapsed=snapshot.days_elapsed,
         days_remaining=snapshot.days_remaining,
         progress_percent=snapshot.progress_percent,
+        estimated_savings_month=estimated_monthly_savings,
+        total_savings_since_install=total_savings_since_install,
     )
 
 
