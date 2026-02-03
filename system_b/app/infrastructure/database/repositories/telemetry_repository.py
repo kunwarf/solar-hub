@@ -574,7 +574,8 @@ class TelemetryRepository:
                     SELECT
                         bucket,
                         metric_name,
-                        AVG(avg_value) AS avg_value
+                        AVG(avg_value) AS avg_value,
+                        SUM(total_energy) AS total_energy
                     FROM {table_name}
                     WHERE site_id = :site_id
                       AND bucket >= :start_time
@@ -590,41 +591,46 @@ class TelemetryRepository:
                 )
                 SELECT
                     bucket,
-                    -- Convert instantaneous power (W) to energy (kWh)
+                    -- PV energy: Prefer energy counter (total_energy), fallback to power conversion
                     COALESCE(
+                        SUM(CASE WHEN metric_name = 'pv_energy_today_kwh'
+                            THEN total_energy END),
                         AVG(CASE WHEN metric_name = 'pv_total_w' THEN avg_value END)
                         * :interval_seconds / 3600000.0,
                         0
                     ) AS pv_kwh,
 
+                    -- Load energy: Prefer energy counter (total_energy), fallback to power conversion
                     COALESCE(
+                        SUM(CASE WHEN metric_name = 'load_energy_today_kwh'
+                            THEN total_energy END),
                         AVG(CASE WHEN metric_name = 'load_w' THEN avg_value END)
                         * :interval_seconds / 3600000.0,
                         0
                     ) AS load_kwh,
 
-                    -- Use daily energy totals if available
+                    -- Use total_energy (DELTA) for energy counters
                     COALESCE(
-                        AVG(CASE WHEN metric_name = 'grid_import_energy_today_kwh'
-                            THEN avg_value END),
+                        SUM(CASE WHEN metric_name = 'grid_import_energy_today_kwh'
+                            THEN total_energy END),
                         0
                     ) AS grid_import_kwh,
 
                     COALESCE(
-                        AVG(CASE WHEN metric_name = 'grid_export_energy_today_kwh'
-                            THEN avg_value END),
+                        SUM(CASE WHEN metric_name = 'grid_export_energy_today_kwh'
+                            THEN total_energy END),
                         0
                     ) AS grid_export_kwh,
 
                     COALESCE(
-                        AVG(CASE WHEN metric_name = 'battery_charge_energy_today_kwh'
-                            THEN avg_value END),
+                        SUM(CASE WHEN metric_name = 'battery_charge_energy_today_kwh'
+                            THEN total_energy END),
                         0
                     ) AS battery_charge_kwh,
 
                     COALESCE(
-                        AVG(CASE WHEN metric_name = 'battery_discharge_energy_today_kwh'
-                            THEN avg_value END),
+                        SUM(CASE WHEN metric_name = 'battery_discharge_energy_today_kwh'
+                            THEN total_energy END),
                         0
                     ) AS battery_discharge_kwh,
 
