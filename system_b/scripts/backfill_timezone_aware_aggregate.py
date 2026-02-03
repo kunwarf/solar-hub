@@ -253,7 +253,7 @@ async def validate_backfill(
     )
 
     # Get sites count
-    sites_count = await conn.fetchval("SELECT COUNT(*) FROM sites")
+    sites_count = await conn.fetchval("SELECT COUNT(*) FROM sites_metadata")
 
     results = {
         'aggregate_buckets': aggregate_count,
