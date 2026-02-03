@@ -319,6 +319,7 @@ async def recalculate_billing(
     """
     from sqlalchemy import text
     from datetime import timedelta
+    import logging
     from ...application.services.billing_scheduler_service import BillingSchedulerService
     from ...infrastructure.database.repositories.net_metering_repository import SQLAlchemyNetMeteringRepository
     from ...infrastructure.database.repositories.telemetry_repository import SQLAlchemyTelemetryRepository
@@ -327,7 +328,13 @@ async def recalculate_billing(
     from ...domain.services.net_metering_calculator import NetMeteringCalculator
     from ...config import settings
 
+    logger = logging.getLogger(__name__)
+
     try:
+        logger.info(
+            "Recalculate billing started: site_id=%s, period=%s to %s",
+            site_id, period_start, period_end
+        )
         # Delete daily snapshots for this period (these feed the running bill display)
         daily_query = text("""
             DELETE FROM billing_daily
@@ -395,45 +402,70 @@ async def recalculate_billing(
         await uow.commit()
 
         total_deleted = deleted_daily + deleted_months + deleted_cycles + deleted_sims
-
-        # Now trigger billing calculation to regenerate the data
-        # Initialize billing scheduler service
-        nm_repo = SQLAlchemyNetMeteringRepository(uow._session)
-        telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
-        site_repo = SQLAlchemySiteRepository(uow._session)
-        calculator = NetMeteringCalculator()
-
-        # System B client for fetching corrected telemetry data
-        system_b_client = SystemBClient(base_url=settings.system_b_base_url)
-        system_b_telemetry_repo = SystemBTelemetryRepository(system_b_client)
-
-        scheduler = BillingSchedulerService(
-            net_metering_repo=nm_repo,
-            telemetry_repo=telemetry_repo,
-            site_repo=site_repo,
-            calculator=calculator,
-            system_b_telemetry_repo=system_b_telemetry_repo,
+        logger.info(
+            "Deleted billing data: total=%d (daily=%d, months=%d, cycles=%d, sims=%d)",
+            total_deleted, deleted_daily, deleted_months, deleted_cycles, deleted_sims
         )
 
+        # Now trigger billing calculation to regenerate the data
+        logger.info("Initializing billing scheduler to regenerate data...")
+
+        try:
+            # Initialize billing scheduler service
+            nm_repo = SQLAlchemyNetMeteringRepository(uow._session)
+            telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+            site_repo = SQLAlchemySiteRepository(uow._session)
+            calculator = NetMeteringCalculator()
+
+            # System B client for fetching corrected telemetry data
+            system_b_client = SystemBClient(base_url=settings.system_b_base_url)
+            system_b_telemetry_repo = SystemBTelemetryRepository(system_b_client)
+
+            scheduler = BillingSchedulerService(
+                net_metering_repo=nm_repo,
+                telemetry_repo=telemetry_repo,
+                site_repo=site_repo,
+                calculator=calculator,
+                system_b_telemetry_repo=system_b_telemetry_repo,
+            )
+            logger.info("Billing scheduler initialized successfully")
+        except Exception as e:
+            logger.error("Failed to initialize billing scheduler: %s", e, exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to initialize billing scheduler: {str(e)}"
+            )
+
         # Run billing calculation for each day in the period
+        logger.info("Starting billing regeneration for %d days...", (period_end - period_start).days + 1)
         current_date = period_start
         regenerated_count = 0
         failed_dates = []
 
         while current_date <= period_end:
             try:
+                logger.debug("Computing billing snapshot for %s", current_date)
                 result = await scheduler.compute_site_daily_snapshot(
                     site_id=site_id,
                     target_date=current_date,
                 )
                 if result.success:
                     regenerated_count += 1
+                    logger.debug("✓ Successfully generated snapshot for %s", current_date)
                 else:
-                    failed_dates.append(str(current_date))
+                    error_msg = result.error if hasattr(result, 'error') else 'Unknown error'
+                    failed_dates.append(f"{current_date} ({error_msg})")
+                    logger.warning("Failed to generate snapshot for %s: %s", current_date, error_msg)
             except Exception as e:
                 failed_dates.append(f"{current_date} (error: {str(e)})")
+                logger.error("Exception while generating snapshot for %s: %s", current_date, e, exc_info=True)
 
             current_date += timedelta(days=1)
+
+        logger.info(
+            "Billing regeneration complete: regenerated=%d, failed=%d",
+            regenerated_count, len(failed_dates)
+        )
 
         return {
             "status": "success",
@@ -447,6 +479,7 @@ async def recalculate_billing(
             "message": f"Deleted {total_deleted} records and regenerated {regenerated_count} daily snapshots with corrected timezone-aware data from System B."
         }
     except Exception as e:
+        logger.error("Recalculate billing failed: %s", e, exc_info=True)
         await uow.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
