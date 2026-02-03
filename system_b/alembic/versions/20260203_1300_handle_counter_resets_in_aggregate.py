@@ -1,7 +1,7 @@
 """Handle midnight counter resets in telemetry aggregate.
 
 Revision ID: 20260203_1300
-Revises: 20260203_0555_15b325dbb128
+Revises: 0010
 Create Date: 2026-02-03 13:00:00
 
 Bug fix: Energy counters with names like *_energy_today_kwh reset to 0 at midnight.
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '20260203_1300'
-down_revision: Union[str, None] = '15b325dbb128'
+down_revision: Union[str, None] = '0010'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
