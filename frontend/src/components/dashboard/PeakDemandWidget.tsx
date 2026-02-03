@@ -77,23 +77,36 @@ export function PeakDemandWidget({ className }: PeakDemandWidgetProps) {
       {/* Hourly demand sparkline */}
       {profile.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Today's Demand Profile</p>
-          <div className="flex items-end gap-[2px] h-16">
-            {profile.map((point, i) => {
-              const height = maxDemand > 0 ? (point.demand_kw / maxDemand) * 100 : 0;
-              const isPeak = point.hour === peakHour;
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex-1 rounded-t-sm min-w-[3px] transition-colors",
-                    isPeak ? "bg-warning" : "bg-primary/40"
-                  )}
-                  style={{ height: `${Math.max(height, 4)}%` }}
-                  title={`${point.hour}: ${point.demand_kw.toFixed(1)} kW`}
-                />
-              );
-            })}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">Today's Demand Profile</p>
+            <p className="text-[10px] text-muted-foreground">Max: {maxDemand.toFixed(1)} kW</p>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-end gap-[2px] h-16">
+              {profile.map((point, i) => {
+                const height = maxDemand > 0 ? (point.demand_kw / maxDemand) * 100 : 0;
+                const isPeak = point.hour === peakHour;
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex-1 rounded-t-sm min-w-[3px] transition-colors",
+                      isPeak ? "bg-warning" : "bg-primary/40"
+                    )}
+                    style={{ height: `${Math.max(height, 4)}%` }}
+                    title={`${point.hour}: ${point.demand_kw.toFixed(1)} kW`}
+                  />
+                );
+              })}
+            </div>
+            {/* Time axis labels */}
+            <div className="flex items-center justify-between text-[9px] text-muted-foreground/60">
+              <span>00:00</span>
+              <span>06:00</span>
+              <span>12:00</span>
+              <span>18:00</span>
+              <span>24:00</span>
+            </div>
           </div>
         </div>
       )}

@@ -189,6 +189,11 @@ export interface EnergyChartPoint {
   load_kwh: number;
   grid_import_kwh: number;
   grid_export_kwh: number;
+  battery_charge_kwh: number;
+  battery_discharge_kwh: number;
+  efficiency_pct?: number;
+  self_sufficiency_pct?: number;
+  temperature_c?: number;
 }
 
 export interface EnergyChartResponse {

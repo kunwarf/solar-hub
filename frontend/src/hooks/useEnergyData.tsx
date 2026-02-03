@@ -125,13 +125,14 @@ function mapChartResponse(response: EnergyChartResponse): ChartDataPoint[] {
       timeLabel = point.timestamp;
     }
 
+    // Calculate net battery: positive = charging, negative = discharging
+    const batteryNet = point.battery_charge_kwh - point.battery_discharge_kwh;
+
     return {
       time: timeLabel,
       solar: parseFloat(point.pv_kwh.toFixed(1)),
       consumption: parseFloat(point.load_kwh.toFixed(1)),
-      // TODO: Battery data not available in energy-chart API endpoint
-      // Backend needs to add battery charge/discharge kWh per hour to EnergyChartPoint
-      battery: 0,
+      battery: parseFloat(Math.abs(batteryNet).toFixed(1)),
       grid: parseFloat((point.grid_import_kwh - point.grid_export_kwh).toFixed(1)),
     };
   });
