@@ -22,13 +22,30 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add updated_at column to telemetry_hourly_summary table."""
-    op.add_column(
-        'telemetry_hourly_summary',
-        sa.Column('updated_at', TIMESTAMP(timezone=True), nullable=True)
-    )
+    """Add updated_at column to telemetry_hourly_summary table if it exists."""
+    # Check if table exists before attempting to alter it
+    # (System A may not have this table if using System B for telemetry)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
+    if 'telemetry_hourly_summary' in inspector.get_table_names():
+        op.add_column(
+            'telemetry_hourly_summary',
+            sa.Column('updated_at', TIMESTAMP(timezone=True), nullable=True)
+        )
+        print("✓ Added updated_at column to telemetry_hourly_summary")
+    else:
+        print("⊘ Table telemetry_hourly_summary does not exist - skipping migration")
+        print("  (This is expected if System A uses System B repository for telemetry)")
 
 
 def downgrade() -> None:
-    """Remove updated_at column from telemetry_hourly_summary table."""
-    op.drop_column('telemetry_hourly_summary', 'updated_at')
+    """Remove updated_at column from telemetry_hourly_summary table if it exists."""
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
+    if 'telemetry_hourly_summary' in inspector.get_table_names():
+        op.drop_column('telemetry_hourly_summary', 'updated_at')
+        print("✓ Removed updated_at column from telemetry_hourly_summary")
+    else:
+        print("⊘ Table telemetry_hourly_summary does not exist - skipping rollback")
