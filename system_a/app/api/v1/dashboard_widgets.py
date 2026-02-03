@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from ..dependencies import get_current_user, get_unit_of_work, get_telemetry_sync_service, require_admin, get_system_b_client_instance
 from ...application.interfaces.unit_of_work import UnitOfWork
 from ...domain.entities.user import User, UserRole
+from ...domain.services.weather_service import weather_service
 from ...infrastructure.cache.telemetry_cache import telemetry_cache
 from ...infrastructure.cache.site_cache import site_cache as site_info_cache, CachedSiteInfo
 from ...infrastructure.database.repositories.telemetry_repository import SQLAlchemyTelemetryRepository
@@ -1323,19 +1324,37 @@ async def get_peak_demand(
 @router.get(
     "/weather",
     response_model=WeatherResponse,
-    summary="Get weather data derived from telemetry",
-    description="Returns weather conditions inferred from site telemetry sensors. Refresh: 30 minutes.",
+    summary="Get real-time weather data",
+    description="Returns weather from external API (OpenWeatherMap) with telemetry fallback. Refresh: 30 minutes.",
 )
 async def get_weather(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
-    """Get weather data derived from site telemetry."""
+    """
+    Get real-time weather data for site location.
+
+    Integrates with OpenWeatherMap API for accurate weather data.
+    Falls back to telemetry-derived data if API unavailable.
+    """
     site_info = await get_site_with_devices(current_user, uow, site_id)
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
 
-    # Aggregate temperature and PV production from device telemetry
+    # Get site location and timezone
+    site_entity = await uow.sites.get_by_id(site_info.site_id)
+    site_timezone = site_entity.timezone if site_entity else "Asia/Karachi"
+
+    # Determine location
+    if site_entity and site_entity.address and site_entity.address.geo_location:
+        lat = site_entity.address.geo_location.latitude
+        lon = site_entity.address.geo_location.longitude
+    else:
+        # Default to Lahore, Pakistan
+        lat, lon = 31.5, 74.3
+        logger.warning(f"Site {site_info.site_id} has no geo_location, using default (Lahore)")
+
+    # Get temperature from telemetry (for fallback and solar forecast)
     temps = []
     total_pv_w = 0.0
     for serial in site_info.device_serials:
@@ -1348,68 +1367,54 @@ async def get_weather(
             power = telemetry.get("power", {})
             total_pv_w += power.get("pv_total_w", 0)
 
-    temperature = round(sum(temps) / len(temps), 1) if temps else 25.0
+    telemetry_temp = round(sum(temps) / len(temps), 1) if temps else None
 
-    # Derive solar forecast from current PV production vs expected peak
-    # Assume 5kW per device as nominal capacity for solar forecast calc
+    # Fetch weather from API (with telemetry fallback)
+    try:
+        weather_data = await weather_service.get_weather(lat, lon, telemetry_temp, site_timezone)
+    except Exception as e:
+        logger.error(f"Failed to get weather data: {e}")
+        # Use service fallback
+        weather_data = weather_service._get_fallback_weather(lat, lon, telemetry_temp, site_timezone)
+
+    # Calculate solar forecast from PV production (not from API)
     installed_kw = max(len(site_info.device_serials) * 5, 1)
     now = datetime.now(timezone.utc)
-    hour = now.hour
-    # Simple solar availability factor based on time of day
-    if 6 <= hour <= 18:
-        solar_factor = max(0, 1 - abs(hour - 12) / 6)
+
+    # Get hour in site timezone for solar factor calculation
+    from ...domain.services.timezone_utils import TimezoneUtils
+    site_hour = TimezoneUtils.get_hour_in_timezone(now, site_timezone)
+
+    # Solar availability factor based on time of day
+    if 6 <= site_hour <= 18:
+        solar_factor = max(0, 1 - abs(site_hour - 12) / 6)
     else:
         solar_factor = 0
     expected_w = installed_kw * 1000 * solar_factor
     solar_forecast = min(100, round(total_pv_w / max(expected_w, 1) * 100)) if solar_factor > 0 else 0
 
-    # Derive condition from solar forecast
-    if solar_factor == 0:
-        condition = "sunny"  # Nighttime - not relevant
-    elif solar_forecast >= 70:
-        condition = "sunny"
-    elif solar_forecast >= 40:
-        condition = "cloudy"
-    else:
-        condition = "rainy"
+    # Override weather condition with PV-based forecast if more accurate
+    if solar_forecast > 0:
+        if solar_forecast >= 70:
+            weather_data.condition = "sunny"
+        elif solar_forecast >= 40:
+            weather_data.condition = "cloudy"
+        else:
+            weather_data.condition = "rainy"
 
-    # Get site location for sunrise/sunset calculation
-    site_entity = await uow.sites.get_by_id(site_info.site_id)
-    if site_entity and site_entity.address and site_entity.address.geo_location:
-        lat = site_entity.address.geo_location.latitude
-        lon = site_entity.address.geo_location.longitude
-        sunrise, sunset = calculate_sunrise_sunset(lat, lon, now)
-    else:
-        # Default for Pakistan (~31.5°N, 74.3°E - Lahore)
-        sunrise, sunset = calculate_sunrise_sunset(31.5, 74.3, now)
-
-    # Derive humidity from temperature (simplified model)
-    # Typical relationship: higher temp = lower relative humidity in arid climates
-    # For Pakistan: RH typically 30-70% depending on season
-    if temperature > 35:
-        humidity = 25  # Hot & dry summer
-    elif temperature > 28:
-        humidity = 40  # Warm spring/fall
-    elif temperature > 20:
-        humidity = 55  # Mild weather
-    else:
-        humidity = 65  # Cool winter (higher RH)
-
-    # Wind speed: Not available from telemetry, use 0 (calm)
-    # Future: Could integrate with external weather API if needed
-    wind_speed = 0
+    weather_data.solar_forecast = solar_forecast
 
     return WeatherResponse(
         organization_id=site_info.organization_id,
         site_id=site_info.site_id,
         site_name=site_info.site_name,
-        temperature=temperature,
-        condition=condition,
-        humidity=humidity,
-        wind_speed=wind_speed,
-        solar_forecast=solar_forecast,
-        sunrise=sunrise,
-        sunset=sunset,
+        temperature=weather_data.temperature,
+        condition=weather_data.condition,
+        humidity=weather_data.humidity,
+        wind_speed=weather_data.wind_speed,
+        solar_forecast=weather_data.solar_forecast,
+        sunrise=weather_data.sunrise,
+        sunset=weather_data.sunset,
     )
 
 

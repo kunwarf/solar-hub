@@ -203,6 +203,23 @@ class AISettings(BaseSettings):
     forecasting_enabled: bool = Field(default=True)
 
 
+class WeatherSettings(BaseSettings):
+    """Weather API configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix='WEATHER_',
+        env_file='.env',
+        extra='ignore'
+    )
+
+    enabled: bool = Field(default=True, description='Enable external weather API')
+    provider: str = Field(default='openweathermap', description='Weather provider')
+    api_key: Optional[str] = Field(default=None, description='Weather API key')
+    cache_ttl_seconds: int = Field(default=1800, description='Cache TTL for weather data (30 minutes)')
+    timeout_seconds: float = Field(default=10.0, description='API request timeout')
+    fallback_to_telemetry: bool = Field(default=True, description='Use telemetry if API fails')
+
+
 class SystemBSettings(BaseSettings):
     """System B (Telemetry Service) connection settings."""
 
@@ -298,6 +315,7 @@ class AppSettings(BaseSettings):
     cors: CORSSettings = Field(default_factory=CORSSettings)
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
     ai: AISettings = Field(default_factory=AISettings)
+    weather: WeatherSettings = Field(default_factory=WeatherSettings)
     system_b: SystemBSettings = Field(default_factory=SystemBSettings)
 
     @property
