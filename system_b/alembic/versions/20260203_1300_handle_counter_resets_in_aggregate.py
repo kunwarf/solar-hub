@@ -151,19 +151,16 @@ def upgrade() -> None:
     print("✓ Created indexes")
 
     # =========================================================================
-    # Refresh Data (Last 60 days to cover all billing periods)
+    # Note: Refresh must be done manually after migration
     # =========================================================================
     print()
-    print("Step 5: Refreshing aggregate data for last 60 days...")
-    print("This may take a few minutes...")
-    op.execute("""
-        CALL refresh_continuous_aggregate('telemetry_hourly_local',
-            NOW() - INTERVAL '60 days',
-            NOW()
-        );
-    """)
-
-    print("✓ Refreshed last 60 days of data")
+    print("Step 5: Aggregate created (refresh must be done manually)")
+    print("  NOTE: refresh_continuous_aggregate() cannot run inside a transaction")
+    print("  Run this command AFTER the migration completes:")
+    print()
+    print("  psql -U postgres -d solar_hub_telemetry -c \"")
+    print("    CALL refresh_continuous_aggregate('telemetry_hourly_local',")
+    print("      NOW() - INTERVAL '60 days', NOW());\"")
     print()
     print("=" * 80)
     print("AGGREGATE FIX COMPLETE")
