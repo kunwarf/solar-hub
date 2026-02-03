@@ -209,6 +209,8 @@ function generateAnomalyAlerts(stats: EnergyStatsInput): Insight[] {
 
 function generateWeeklyDigest(stats: EnergyStatsInput): WeeklyDigest {
   // Estimate weekly values from today's data (7x daily average)
+  // NOTE: This is a rough estimate assuming consistent daily generation
+  // TODO: Replace with actual 7-day historical data when available
   const weeklyGenerated = Math.round(stats.dailyProduction * 7);
   const weeklySaved = Math.round(stats.moneySaved * 7);
   return {

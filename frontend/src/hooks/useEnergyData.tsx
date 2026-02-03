@@ -106,7 +106,9 @@ function mapWidgetsToStats(data: AllWidgetsData): EnergyAggregates {
     co2Saved: stats.co2_saved_kg,
     moneySaved: dailySavings,
     monthlyBillAmount: monthlyBillEstimate,
-    dailyPrediction: dailyProduction * 1.05, // slight buffer until prediction service exists
+    // Daily prediction with 5% buffer (temporary until ML prediction service is implemented)
+    // TODO: Replace with actual weather-based prediction model
+    dailyPrediction: dailyProduction * 1.05,
     avgKwPerKwp: avgYield,
     installedCapacity: installedCapacityKw,
   };
