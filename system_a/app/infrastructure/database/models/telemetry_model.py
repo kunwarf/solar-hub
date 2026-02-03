@@ -103,6 +103,7 @@ class TelemetryHourlySummaryModel(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint('site_id', 'device_id', 'timestamp_hour', name='uq_hourly_site_device_time'),
