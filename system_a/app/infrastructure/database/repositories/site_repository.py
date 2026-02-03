@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ....application.interfaces.repositories import SiteRepository
 from ....domain.entities.site import Site, SiteStatus
 from ..models.site_model import SiteModel
+from ...external.system_b_timezone_sync import get_timezone_sync_service
 
 
 class SQLAlchemySiteRepository(SiteRepository):
@@ -112,6 +113,11 @@ class SQLAlchemySiteRepository(SiteRepository):
         model = SiteModel.from_domain(entity)
         self._session.add(model)
         await self._session.flush()
+
+        # Sync timezone to System B (for timezone-aware aggregates)
+        sync_service = get_timezone_sync_service()
+        await sync_service.sync_site_timezone(entity.id, entity.timezone)
+
         return model.to_domain()
 
     async def update(self, entity: Site) -> Site:
@@ -123,6 +129,11 @@ class SQLAlchemySiteRepository(SiteRepository):
         if model:
             model.update_from_domain(entity)
             await self._session.flush()
+
+            # Sync timezone to System B (in case it changed)
+            sync_service = get_timezone_sync_service()
+            await sync_service.sync_site_timezone(entity.id, entity.timezone)
+
             return model.to_domain()
         return entity
 
@@ -135,5 +146,10 @@ class SQLAlchemySiteRepository(SiteRepository):
         if model:
             await self._session.delete(model)
             await self._session.flush()
+
+            # Remove from System B
+            sync_service = get_timezone_sync_service()
+            await sync_service.sync_site_deletion(id)
+
             return True
         return False
