@@ -34,9 +34,12 @@ function buildGoals(data?: AllWidgetsData | null): Goal[] {
   const savings = data?.billing?.estimated_savings_month || 0;
   const energyMonth = data?.stats?.energy_month_kwh || 0;
   const energyToday = data?.stats?.energy_today_kwh || 0;
-  const loadW = data?.power_flow?.load_power_w || 0;
-  const pvW = data?.power_flow?.pv_power_w || 0;
-  const selfConsumption = loadW > 0 ? Math.round(Math.min((pvW / loadW) * 100, 100)) : 0;
+  const exported = data?.stats?.grid_export_today_kwh || 0;
+
+  // Self-consumption: (production - exports) / production * 100
+  const selfConsumed = Math.max(0, energyToday - exported);
+  const selfConsumption = energyToday > 0 ? Math.round((selfConsumed / energyToday) * 100) : 0;
+
   const co2 = data?.environmental?.co2_avoided_kg || 0;
 
   return [
@@ -54,7 +57,7 @@ function buildGoals(data?: AllWidgetsData | null): Goal[] {
       type: "generation",
       title: "Generation Target",
       target: 500,
-      current: Math.round(energyMonth || energyToday),
+      current: Math.round(energyMonth),
       unit: "kWh",
       period: "this month",
     },

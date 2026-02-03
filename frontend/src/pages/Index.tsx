@@ -42,6 +42,7 @@ const defaultBillingSummaryData = {
   exportCredits: 0,
   exportedKwh: 0,
   totalSavings: 0,
+  monthlySavings: 0,
   importRate: 30,
   exportRate: 15,
   peakHoursStart: "5PM",
@@ -104,12 +105,20 @@ const Index = () => {
     // Calculate exported kWh from credits
     const exportedKwh = runningBill.export_peak_kwh + runningBill.export_off_kwh;
 
+    // Calculate monthly savings: value of self-consumed solar
+    const solarGenerated = runningBill.solar_generation_kwh;
+    const selfConsumed = Math.max(0, solarGenerated - exportedKwh);
+    // Use average of peak and off-peak import rates
+    const avgImportRate = (config.prices.price_peak_import + config.prices.price_offpeak_import) / 2;
+    const monthlySavings = Math.round(selfConsumed * avgImportRate);
+
     return {
       currentMonthEstimate: runningBill.bill_final_rs_to_date,
       lastMonthBill: 0, // Could get from summary or trend if available
       exportCredits: runningBill.bill_credit_balance_rs_to_date,
       exportedKwh: Math.round(exportedKwh),
       totalSavings: summary?.total_savings_since_install || 0,
+      monthlySavings, // Add monthly savings
       importRate: config.prices.price_peak_import,
       exportRate: config.prices.price_peak_settlement,
       peakHoursStart: peakStart,
@@ -197,16 +206,16 @@ const Index = () => {
   const priorityStats = [
     {
       title: "Monthly Bill Estimate",
-      value: Math.round(stats.monthlyBillAmount).toString(),
+      value: Math.round(billingSummaryData.currentMonthEstimate || stats.monthlyBillAmount).toString(),
       unit: "$",
       icon: Receipt,
       variant: "financial" as const,
-      tooltip: "Estimated electricity bill for current month based on usage patterns",
+      tooltip: "Estimated electricity bill for current billing period (month-to-date)",
       delay: 0,
     },
     {
       title: "This Month Savings",
-      value: Math.round(stats.moneySaved * 30).toString(),
+      value: Math.round(billingSummaryData.monthlySavings || stats.moneySaved).toString(),
       unit: "$",
       icon: DollarSign,
       variant: "savings" as const,

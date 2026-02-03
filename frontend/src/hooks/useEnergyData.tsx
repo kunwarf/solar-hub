@@ -72,6 +72,25 @@ function mapWidgetsToStats(data: AllWidgetsData): EnergyAggregates {
 
   const dailyConsumption = stats.load_energy_today_kwh;
   const gridExported = stats.grid_export_today_kwh;
+  const gridImported = stats.grid_import_today_kwh;
+
+  // Self-consumption: solar energy used directly (not exported)
+  const selfConsumedKwh = Math.max(0, dailyProduction - gridExported);
+  const selfConsumptionPct = dailyProduction > 0
+    ? Math.round((selfConsumedKwh / dailyProduction) * 100)
+    : 0;
+
+  // Daily savings: value of self-consumed solar (avoided grid purchase cost)
+  const importRate = billing.import_rate_pkr || 30;
+  const dailySavings = selfConsumedKwh * importRate;
+
+  // Monthly bill estimate: use grid import cost from billing widget
+  // Note: This is a simplified estimate. For accurate bills, use net metering API
+  const monthlyBillEstimate = billing.grid_import_cost || 0;
+
+  // Average yield (kWh per kWp of installed capacity)
+  const installedCapacityKw = stats.peak_power_kw > 0 ? Math.ceil(stats.peak_power_kw) : 1;
+  const avgYield = dailyProduction / installedCapacityKw;
 
   return {
     solarPower: power_flow.pv_power_w / 1000,
@@ -82,16 +101,14 @@ function mapWidgetsToStats(data: AllWidgetsData): EnergyAggregates {
     isGridExporting: gridPowerW < 0,
     dailyProduction,
     dailyConsumption,
-    selfConsumption: dailyProduction > 0
-      ? Math.round(((dailyProduction - (environmental.coal_avoided_kg / 0.4 - dailyProduction)) / dailyProduction) * 100)
-      : 0,
+    selfConsumption: selfConsumptionPct,
     gridExported,
     co2Saved: stats.co2_saved_kg,
-    moneySaved: billing.estimated_savings_today,
-    monthlyBillAmount: billing.estimated_savings_month,
+    moneySaved: dailySavings,
+    monthlyBillAmount: monthlyBillEstimate,
     dailyPrediction: dailyProduction * 1.05, // slight buffer until prediction service exists
-    avgKwPerKwp: stats.peak_power_kw,
-    installedCapacity: stats.peak_power_kw > 0 ? Math.ceil(stats.peak_power_kw) : 0,
+    avgKwPerKwp: avgYield,
+    installedCapacity: installedCapacityKw,
   };
 }
 

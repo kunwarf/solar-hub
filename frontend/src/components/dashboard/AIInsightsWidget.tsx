@@ -63,10 +63,17 @@ function deriveEnergyStats(widgetsData?: AllWidgetsData | null): EnergyStatsInpu
   const pf = widgetsData.power_flow;
   const st = widgetsData.stats;
   const bi = widgetsData.billing;
+
+  // Calculate self-consumption: (production - exports) / production * 100
+  const production = st?.energy_today_kwh || 0;
+  const exported = st?.grid_export_today_kwh || 0;
+  const selfConsumed = Math.max(0, production - exported);
+  const selfConsumptionPct = production > 0 ? Math.round((selfConsumed / production) * 100) : 0;
+
   return {
-    dailyProduction: st?.energy_today_kwh || 0,
+    dailyProduction: production,
     batteryLevel: pf?.battery_soc_pct || 0,
-    selfConsumption: st?.energy_today_kwh && pf?.load_power_w ? Math.round((1 - (pf.grid_power_w > 0 ? pf.grid_power_w : 0) / Math.max(pf.load_power_w, 1)) * 100) : 0,
+    selfConsumption: selfConsumptionPct,
     moneySaved: bi?.estimated_savings_today || 0,
     co2Saved: st?.co2_saved_kg || 0,
     peakPowerKw: st?.peak_power_kw || 0,
@@ -124,8 +131,9 @@ function generateDailyInsights(stats: EnergyStatsInput): Insight[] {
     });
   }
 
-  // Savings insight
-  const dailySavings = Math.round(stats.moneySaved || dailyProduction * stats.importRatePkr);
+  // Savings insight - use actual saved amount or calculate from self-consumed solar
+  const selfConsumedKwh = (stats.dailyProduction * stats.selfConsumption) / 100;
+  const dailySavings = Math.round(stats.moneySaved || selfConsumedKwh * stats.importRatePkr);
   if (dailySavings > 0) {
     insights.push({
       id: 'save-1',
