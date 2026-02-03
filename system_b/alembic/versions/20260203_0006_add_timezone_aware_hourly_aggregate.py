@@ -58,11 +58,11 @@ def upgrade() -> None:
         CREATE MATERIALIZED VIEW IF NOT EXISTS telemetry_hourly_local
         WITH (timescaledb.continuous) AS
         SELECT
-            -- Time bucket in site's local timezone
-            time_bucket('1 hour', tr.time AT TIME ZONE s.timezone) AS bucket_local,
+            -- Time bucket in UTC (TimescaleDB requirement - cannot transform time column)
+            time_bucket('1 hour', tr.time) AS bucket,
 
-            -- Store the timezone used for this bucket (for validation/auditing)
-            s.timezone AS bucket_timezone,
+            -- Store the site's timezone for query-time conversion
+            s.timezone AS site_timezone,
 
             -- Identifiers
             tr.site_id,
@@ -87,7 +87,7 @@ def upgrade() -> None:
 
         FROM telemetry_raw tr
         INNER JOIN sites_metadata s ON tr.site_id = s.id
-        GROUP BY bucket_local, bucket_timezone, tr.site_id, tr.device_id, tr.metric_name
+        GROUP BY bucket, site_timezone, tr.site_id, tr.device_id, tr.metric_name
         WITH NO DATA;
     """)
 
@@ -111,22 +111,22 @@ def upgrade() -> None:
     # =========================================================================
     # Create Indexes for Performance
     # =========================================================================
-    # Index on (site_id, bucket_local) for efficient daily queries
+    # Index on (site_id, bucket) for efficient queries
     op.execute("""
         CREATE INDEX IF NOT EXISTS idx_telemetry_hourly_local_site_bucket
-        ON telemetry_hourly_local (site_id, bucket_local DESC);
+        ON telemetry_hourly_local (site_id, bucket DESC);
     """)
 
-    # Index on (site_id, device_id, bucket_local) for device-specific queries
+    # Index on (site_id, device_id, bucket) for device-specific queries
     op.execute("""
         CREATE INDEX IF NOT EXISTS idx_telemetry_hourly_local_site_device_bucket
-        ON telemetry_hourly_local (site_id, device_id, bucket_local DESC);
+        ON telemetry_hourly_local (site_id, device_id, bucket DESC);
     """)
 
-    # Index on (site_id, metric_name, bucket_local) for metric-specific queries
+    # Index on (site_id, metric_name, bucket) for metric-specific queries
     op.execute("""
         CREATE INDEX IF NOT EXISTS idx_telemetry_hourly_local_site_metric_bucket
-        ON telemetry_hourly_local (site_id, metric_name, bucket_local DESC);
+        ON telemetry_hourly_local (site_id, metric_name, bucket DESC);
     """)
 
     print("✓ Created indexes for query performance")
