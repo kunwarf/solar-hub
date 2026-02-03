@@ -477,7 +477,7 @@ class TelemetryRepository:
 
         Strategy:
         - Last 90 days: telemetry_raw (highest resolution)
-        - Last 1 year: telemetry_hourly
+        - Last 1 year: telemetry_hourly_local (timezone-aware hourly aggregate)
         - Last 3 years: telemetry_daily
         - 3-5 years: telemetry_monthly
         - 5+ years: telemetry_yearly
@@ -497,11 +497,11 @@ class TelemetryRepository:
                 return ("telemetry_raw", "1 hour")
 
         elif time_range <= timedelta(days=365):
-            # Last year - use hourly aggregate
+            # Last year - use timezone-aware hourly aggregate
             if time_range <= timedelta(days=30):
-                return ("telemetry_hourly", "1 hour")
+                return ("telemetry_hourly_local", "1 hour")
             else:
-                return ("telemetry_hourly", "1 day")
+                return ("telemetry_hourly_local", "1 day")
 
         elif time_range <= timedelta(days=1095):  # 3 years
             # Multi-year - use daily aggregate
