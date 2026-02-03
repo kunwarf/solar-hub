@@ -33,9 +33,18 @@ async def sync_sites():
     # Build connection strings
     # System A (main database)
     system_a_url = os.getenv("DATABASE_URL")
+
+    # If DATABASE_URL not set, try to build from individual components
     if not system_a_url:
-        logger.error("DATABASE_URL environment variable not set")
-        sys.exit(1)
+        logger.info("DATABASE_URL not set, trying to build from components...")
+        db_host = os.getenv("DB_HOST", "127.0.0.1")
+        db_port = os.getenv("DB_PORT", "5432")
+        db_user = os.getenv("DB_USER", "solarhub")
+        db_password = os.getenv("DB_PASSWORD", "")
+        db_name = os.getenv("DB_NAME", "solar_hub")
+
+        system_a_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        logger.info(f"Built System A URL: {db_user}@{db_host}:{db_port}/{db_name}")
 
     # System B (telemetry database)
     timescale_host = os.getenv("TIMESCALE_HOST", "127.0.0.1")
