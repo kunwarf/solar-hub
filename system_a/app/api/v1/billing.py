@@ -467,6 +467,11 @@ async def recalculate_billing(
             regenerated_count, len(failed_dates)
         )
 
+        # CRITICAL: Commit the regenerated snapshots to database
+        logger.info("Committing regenerated billing data to database...")
+        await uow.commit()
+        logger.info("✓ Billing data committed successfully")
+
         return {
             "status": "success",
             "deleted_count": total_deleted,
