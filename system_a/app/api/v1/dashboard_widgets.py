@@ -98,6 +98,11 @@ class StatsResponse(BaseModel):
     co2_saved_kg: float = 0
     online: bool = False
     devices_online: int = 0
+
+    # Energy flows (from today's aggregate data)
+    load_energy_today_kwh: float = 0
+    grid_import_today_kwh: float = 0
+    grid_export_today_kwh: float = 0
     devices_total: int = 0
 
     # Per-device breakdown
@@ -687,6 +692,9 @@ async def get_stats(
     total_energy_today_kwh = 0.0
     month_energy_kwh = 0.0
     peak_power_kw = 0.0
+    load_energy_today_kwh = 0.0
+    grid_import_today_kwh = 0.0
+    grid_export_today_kwh = 0.0
 
     try:
         # Get today's hourly data
@@ -699,6 +707,10 @@ async def get_stats(
             total_energy_today_kwh += pv_kwh
             # Peak power is the max hourly generation (approximate)
             peak_power_kw = max(peak_power_kw, pv_kwh)
+            # Sum up load and grid flows
+            load_energy_today_kwh += point.get("load_kwh", 0)
+            grid_import_today_kwh += point.get("grid_import_kwh", 0)
+            grid_export_today_kwh += point.get("grid_export_kwh", 0)
 
         # Get this month's daily data
         month_data = await system_b_client.get_site_energy_chart(
@@ -754,6 +766,9 @@ async def get_stats(
         devices_online=devices_online,
         devices_total=len(site_info.device_serials),
         devices=devices_data,
+        load_energy_today_kwh=load_energy_today_kwh,
+        grid_import_today_kwh=grid_import_today_kwh,
+        grid_export_today_kwh=grid_export_today_kwh,
     )
 
 

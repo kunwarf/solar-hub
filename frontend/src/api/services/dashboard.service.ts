@@ -96,6 +96,11 @@ export interface StatsData {
   devices_online: number;
   devices_total: number;
 
+  // Energy flows (from today's aggregate data)
+  load_energy_today_kwh: number;
+  grid_import_today_kwh: number;
+  grid_export_today_kwh: number;
+
   // Per-device breakdown
   devices: DeviceStatsData[];
 }

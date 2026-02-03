@@ -85,11 +85,11 @@ function buildBillingData(
   const importRate = billing.import_rate_pkr || 30;
   const exportRate = billing.export_rate_pkr || 15;
 
-  // Energy data from today's stats - USE CORRECT FIELDS
+  // Energy data from today's stats
   const energyProduced = stats.energy_today_kwh || 0;
-  const energyConsumed = stats.load_energy_today_kwh || 0; // FIX: Use actual load consumption
-  const energyExported = stats.grid_export_today_kwh || 0; // FIX: Use actual export kWh
-  const energyImported = stats.grid_import_today_kwh || 0; // FIX: Use actual import kWh
+  const energyConsumed = stats.load_energy_today_kwh || 0;
+  const energyExported = stats.grid_export_today_kwh || 0;
+  const energyImported = stats.grid_import_today_kwh || 0;
 
   // Calculate earnings and costs from actual energy flows
   const earnings = energyExported * exportRate;

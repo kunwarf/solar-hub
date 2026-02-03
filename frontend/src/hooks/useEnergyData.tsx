@@ -70,6 +70,9 @@ function mapWidgetsToStats(data: AllWidgetsData): EnergyAggregates {
   const dailyProduction = stats.energy_today_kwh;
   const gridPowerW = power_flow.grid_power_w;
 
+  const dailyConsumption = stats.load_energy_today_kwh;
+  const gridExported = stats.grid_export_today_kwh;
+
   return {
     solarPower: power_flow.pv_power_w / 1000,
     batteryPower: Math.abs(power_flow.battery_power_w) / 1000,
@@ -78,11 +81,11 @@ function mapWidgetsToStats(data: AllWidgetsData): EnergyAggregates {
     gridPower: Math.abs(gridPowerW) / 1000,
     isGridExporting: gridPowerW < 0,
     dailyProduction,
-    dailyConsumption: dailyProduction, // approximate - no separate consumption total
+    dailyConsumption,
     selfConsumption: dailyProduction > 0
       ? Math.round(((dailyProduction - (environmental.coal_avoided_kg / 0.4 - dailyProduction)) / dailyProduction) * 100)
       : 0,
-    gridExported: billing.grid_export_credit / 15, // reverse from PKR credit at 15 PKR/kWh
+    gridExported,
     co2Saved: stats.co2_saved_kg,
     moneySaved: billing.estimated_savings_today,
     monthlyBillAmount: billing.estimated_savings_month,
