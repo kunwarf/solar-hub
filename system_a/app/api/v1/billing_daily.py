@@ -182,21 +182,58 @@ async def get_running_bill(
             detail="Billing configuration not found",
         )
 
-    # Get latest snapshot
+    # Get billing period bounds for the target date
+    month_start, month_end = config.get_billing_month_bounds(target_date)
+
+    # Get latest snapshot (only from current billing period, not old data)
     snapshot = await nm_repo.get_daily_snapshot(site_id, target_date)
 
     if not snapshot:
-        # Try yesterday if today's not ready yet
-        snapshot = await nm_repo.get_latest_daily_snapshot(site_id)
+        # Try yesterday if today's not ready yet (still within current billing period)
+        yesterday = target_date - timedelta(days=1)
+        if yesterday >= month_start:
+            snapshot = await nm_repo.get_daily_snapshot(site_id, yesterday)
 
+    # If no snapshot found for current billing period, return zeros
+    # This happens when billing data is being regenerated after recalculation
     if not snapshot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No billing snapshots found",
-        )
+        from datetime import datetime, timezone as dt_timezone
 
-    # Get billing period bounds
-    month_start, month_end = config.get_billing_month_bounds(snapshot.date)
+        # Calculate days elapsed in billing period
+        days_elapsed = (target_date - month_start).days + 1
+        total_days = (month_end - month_start).days + 1
+        progress_percent = (days_elapsed / total_days) * 100
+
+        return RunningBillResponse(
+            site_id=site_id,
+            date=target_date,
+            billing_month_id=None,
+            billing_period_start=month_start,
+            billing_period_end=month_end,
+            days_elapsed=days_elapsed,
+            total_days_in_month=total_days,
+            progress_percent=progress_percent,
+            import_off_kwh=0.0,
+            export_off_kwh=0.0,
+            import_peak_kwh=0.0,
+            export_peak_kwh=0.0,
+            solar_generation_kwh=0.0,
+            load_consumption_kwh=0.0,
+            net_import_off_kwh=0.0,
+            net_import_peak_kwh=0.0,
+            credits_off_cycle_kwh_balance=0.0,
+            credits_peak_cycle_kwh_balance=0.0,
+            bill_off_energy_rs=0.0,
+            bill_peak_energy_rs=0.0,
+            fixed_prorated_rs=0.0,
+            expected_cycle_credit_rs=0.0,
+            bill_raw_rs_to_date=0.0,
+            bill_credit_balance_rs_to_date=0.0,
+            bill_final_rs_to_date=0.0,
+            surplus_deficit_flag="NEUTRAL",
+            net_kwh_position=0.0,
+            generated_at=datetime.now(dt_timezone.utc),
+        )
 
     return RunningBillResponse(
         site_id=snapshot.site_id,
@@ -417,10 +454,35 @@ async def get_billing_summary(
 
     # Get latest snapshot
     snapshot = await nm_repo.get_latest_daily_snapshot(site_id)
+
+    # If no snapshot, return zeros for current billing period
     if not snapshot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No billing data available",
+        today = date.today()
+        month_start, month_end = config.get_billing_month_bounds(today)
+        billing_month = config.get_billing_month_number(today)
+
+        days_elapsed = (today - month_start).days + 1
+        total_days = (month_end - month_start).days + 1
+        days_remaining = total_days - days_elapsed
+        progress_percent = (days_elapsed / total_days) * 100
+
+        return BillingSummaryResponse(
+            billing_month=billing_month,
+            year=month_start.year,
+            billing_period_start=month_start,
+            billing_period_end=month_end,
+            import_off_kwh=0.0,
+            import_peak_kwh=0.0,
+            export_off_kwh=0.0,
+            export_peak_kwh=0.0,
+            fixed_charge=float(config.prices.fixed_charge_per_billing_month),
+            bill_amount=0.0,
+            credit_balance=0.0,
+            days_elapsed=days_elapsed,
+            days_remaining=days_remaining,
+            progress_percent=progress_percent,
+            estimated_savings_month=0.0,
+            total_savings_since_install=0.0,
         )
 
     month_start, month_end = config.get_billing_month_bounds(snapshot.date)
