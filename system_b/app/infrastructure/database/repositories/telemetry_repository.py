@@ -569,6 +569,10 @@ class TelemetryRepository:
         # Build query based on table type
         if table_name != "telemetry_raw":
             # Using aggregate table (hourly, daily, monthly, yearly)
+            logger.info(
+                f"[AGGREGATE DEBUG] Using table={table_name}, interval={bucket_interval}, "
+                f"range={start_time} to {end_time}"
+            )
             query = text(f"""
                 WITH power_data AS (
                     SELECT
@@ -719,13 +723,24 @@ class TelemetryRepository:
         )
 
         data_points = []
+        row_count = 0
         for row in result:
+            row_count += 1
             pv_kwh = float(row.pv_kwh or 0)
             load_kwh = float(row.load_kwh or 0)
             grid_import_kwh = float(row.grid_import_kwh or 0)
             grid_export_kwh = float(row.grid_export_kwh or 0)
             battery_charge_kwh = float(row.battery_charge_kwh or 0)
             battery_discharge_kwh = float(row.battery_discharge_kwh or 0)
+
+            # DEBUG: Log first few rows to see actual values from aggregate
+            if row_count <= 5:
+                logger.debug(
+                    f"[AGGREGATE DEBUG] Row {row_count}: bucket={row.bucket}, "
+                    f"pv={pv_kwh:.3f}, load={load_kwh:.3f}, "
+                    f"import={grid_import_kwh:.3f}, export={grid_export_kwh:.3f}, "
+                    f"bat_charge={battery_charge_kwh:.3f}, bat_discharge={battery_discharge_kwh:.3f}"
+                )
 
             # Calculate efficiency: (AC Output / DC Input) × 100
             # AC Output = Load + Grid Export + Battery Charge
@@ -752,6 +767,17 @@ class TelemetryRepository:
                 "self_sufficiency_pct": round(self_sufficiency_pct, 1) if self_sufficiency_pct is not None else None,
                 "temperature_c": round(row.temperature_c, 1) if row.temperature_c else None,
             })
+
+        # DEBUG: Log summary of returned data
+        if data_points:
+            total_export = sum(dp["grid_export_kwh"] for dp in data_points)
+            total_import = sum(dp["grid_import_kwh"] for dp in data_points)
+            total_pv = sum(dp["pv_kwh"] for dp in data_points)
+            logger.info(
+                f"[AGGREGATE DEBUG] Returning {len(data_points)} data points: "
+                f"total_pv={total_pv:.2f}kWh, total_import={total_import:.2f}kWh, "
+                f"total_export={total_export:.2f}kWh"
+            )
 
         return data_points
 
