@@ -324,21 +324,32 @@ const BillingPage = () => {
       periodEnd = new Date(now.getFullYear(), now.getMonth(), anchorDay - 1);
     }
 
+    // Cap periodEnd at today to avoid requesting future dates
+    // (Backend will also cap it, but we do it here for better UX)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (periodEnd > today) {
+      periodEnd = today;
+    }
+
+    const periodStartStr = periodStart.toISOString().split('T')[0];
+    const periodEndStr = periodEnd.toISOString().split('T')[0];
+
     toast({
       title: "Recalculating billing",
-      description: "Deleting old records and regenerating with timezone-aware data...",
+      description: `Regenerating data from ${periodStartStr} to ${periodEndStr}...`,
     });
 
     try {
       const result = await billingService.recalculateBilling({
         site_id: siteId,
-        period_start: periodStart.toISOString().split('T')[0],
-        period_end: periodEnd.toISOString().split('T')[0],
+        period_start: periodStartStr,
+        period_end: periodEndStr,
       });
 
       toast({
         title: "Billing recalculated",
-        description: `${result.message}. Refreshing data...`,
+        description: `Regenerated ${result.regenerated_snapshots} snapshots (${result.period_start} to ${result.period_end}). Refreshing data...`,
       });
 
       // Refresh all data after recalculation
