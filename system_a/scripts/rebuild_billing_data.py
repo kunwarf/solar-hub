@@ -158,7 +158,7 @@ async def recalculate_billing_for_period(
     4. Create new billing cycle record
     """
     # Import System A services
-    from app.domain.services.billing_service import BillingService
+    from app.application.services.billing_service import BillingService
     from app.infrastructure.external.system_b_client import SystemBClient
     from app.infrastructure.database.repositories.site_repository import SiteRepository
     from app.infrastructure.database.repositories.billing_repository import BillingRepository
