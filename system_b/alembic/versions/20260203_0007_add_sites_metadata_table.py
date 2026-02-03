@@ -28,7 +28,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
 revision: str = "0007"
-down_revision: Union[str, None] = "0005"
+down_revision: Union[str, None] = "0004"  # Skip 0005 (UTC aggregates) - going straight to timezone-aware
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
