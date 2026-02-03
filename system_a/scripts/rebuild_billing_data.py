@@ -64,7 +64,7 @@ async def get_billing_periods_to_rebuild(
             SELECT DISTINCT
                 DATE_TRUNC('month', period_start)::date as month_start,
                 (DATE_TRUNC('month', period_start) + INTERVAL '1 month' - INTERVAL '1 day')::date as month_end
-            FROM billing_cycles
+            FROM billing_simulations
             WHERE site_id = :site_id
             ORDER BY month_start
         """)
@@ -108,7 +108,7 @@ async def delete_billing_for_period(
         # Count what would be deleted
         query = text("""
             SELECT COUNT(*)
-            FROM billing_cycles
+            FROM billing_simulations
             WHERE site_id = :site_id
               AND period_start >= :start
               AND period_end <= :end
@@ -124,7 +124,7 @@ async def delete_billing_for_period(
 
     # Delete billing cycles
     query = text("""
-        DELETE FROM billing_cycles
+        DELETE FROM billing_simulations
         WHERE site_id = :site_id
           AND period_start >= :start
           AND period_end <= :end

@@ -163,7 +163,7 @@ SELECT
     off_peak_energy_kwh,
     total_cost,
     created_at
-FROM billing_cycles
+FROM billing_simulations
 WHERE site_id = '271edc3f-f8e8-4aac-acae-78ffd8bf4643'
   AND period_start >= '2026-01-01'
 ORDER BY period_start;
