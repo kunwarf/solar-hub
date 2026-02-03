@@ -312,10 +312,20 @@ async def recalculate_billing(
     """
     Delete and recalculate billing for a specific period.
 
-    This is useful for regenerating billing data with corrected values
-    (e.g., after timezone migration).
+    This endpoint:
+    1. Deletes old billing data for the specified period
+    2. Immediately triggers billing calculation to regenerate the data
+    3. Returns results with regenerated snapshot count
     """
     from sqlalchemy import text
+    from datetime import timedelta
+    from ...application.services.billing_scheduler_service import BillingSchedulerService
+    from ...infrastructure.database.repositories.net_metering_repository import SQLAlchemyNetMeteringRepository
+    from ...infrastructure.database.repositories.telemetry_repository import SQLAlchemyTelemetryRepository
+    from ...infrastructure.database.repositories.telemetry_system_b_repository import SystemBTelemetryRepository
+    from ...infrastructure.external.system_b_client import SystemBClient
+    from ...domain.services.net_metering_calculator import NetMeteringCalculator
+    from ...config import settings
 
     try:
         # Delete daily snapshots for this period (these feed the running bill display)
@@ -386,6 +396,45 @@ async def recalculate_billing(
 
         total_deleted = deleted_daily + deleted_months + deleted_cycles + deleted_sims
 
+        # Now trigger billing calculation to regenerate the data
+        # Initialize billing scheduler service
+        nm_repo = SQLAlchemyNetMeteringRepository(uow._session)
+        telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
+        site_repo = SQLAlchemySiteRepository(uow._session)
+        calculator = NetMeteringCalculator()
+
+        # System B client for fetching corrected telemetry data
+        system_b_client = SystemBClient(base_url=settings.system_b_base_url)
+        system_b_telemetry_repo = SystemBTelemetryRepository(system_b_client)
+
+        scheduler = BillingSchedulerService(
+            net_metering_repo=nm_repo,
+            telemetry_repo=telemetry_repo,
+            site_repo=site_repo,
+            calculator=calculator,
+            system_b_telemetry_repo=system_b_telemetry_repo,
+        )
+
+        # Run billing calculation for each day in the period
+        current_date = period_start
+        regenerated_count = 0
+        failed_dates = []
+
+        while current_date <= period_end:
+            try:
+                result = await scheduler.compute_site_daily_snapshot(
+                    site_id=site_id,
+                    target_date=current_date,
+                )
+                if result.success:
+                    regenerated_count += 1
+                else:
+                    failed_dates.append(str(current_date))
+            except Exception as e:
+                failed_dates.append(f"{current_date} (error: {str(e)})")
+
+            current_date += timedelta(days=1)
+
         return {
             "status": "success",
             "deleted_count": total_deleted,
@@ -393,7 +442,9 @@ async def recalculate_billing(
             "deleted_months": deleted_months,
             "deleted_cycles": deleted_cycles,
             "deleted_simulations": deleted_sims,
-            "message": f"Deleted {total_deleted} total records ({deleted_daily} daily, {deleted_months} months, {deleted_cycles} cycles, {deleted_sims} simulations). The billing scheduler will regenerate them using corrected timezone-aware data."
+            "regenerated_snapshots": regenerated_count,
+            "failed_dates": failed_dates,
+            "message": f"Deleted {total_deleted} records and regenerated {regenerated_count} daily snapshots with corrected timezone-aware data from System B."
         }
     except Exception as e:
         await uow.rollback()
