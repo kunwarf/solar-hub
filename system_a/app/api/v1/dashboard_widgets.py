@@ -1033,6 +1033,14 @@ async def get_energy_chart(
 
     Fetches data directly from System B's TimescaleDB using time_bucket aggregation.
     No local data duplication - System B is the single source of truth for telemetry.
+
+    Note on Historical Data Quality:
+    - Data before 2026-02-03 may contain negative energy values due to midnight
+      counter resets in the aggregate calculation (fixed in migration 20260203_1300)
+    - To refresh historical data with the fix applied, run:
+      CALL refresh_continuous_aggregate('telemetry_hourly_local',
+        NOW() - INTERVAL '60 days', NOW());
+    - New data automatically uses the corrected calculation (GREATEST(0, LAST - FIRST))
     """
     site_info = await get_site_with_devices(current_user, uow, site_id)
 
@@ -1389,52 +1397,83 @@ async def get_load_shedding(
     "/billing",
     response_model=BillingResponse,
     summary="Get billing summary",
-    description="Returns aggregated billing data for the site. Refresh: 1 hour.",
+    description="Returns aggregated billing data for the site using net metering calculations. Refresh: 1 hour.",
 )
 async def get_billing_summary(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
-    """Get billing summary aggregated for the site."""
+    """
+    Get billing summary using actual net metering calculations.
+
+    This ensures consistency with the billing page by using the same
+    data source (billing_daily snapshots) and calculation logic.
+    """
     site_info = await get_site_with_devices(current_user, uow, site_id)
-    telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
 
-    # Query summary tables for monthly savings
-    telemetry_repo = SQLAlchemyTelemetryRepository(uow._session)
-    month_energy_kwh = await telemetry_repo.get_this_month_energy(site_info.site_id)
+    # Use net metering repository to get authoritative billing data
+    from ...infrastructure.database.repositories.net_metering_repository import (
+        SQLAlchemyNetMeteringRepository,
+    )
+    from datetime import date, timedelta
 
-    total_pv_kwh = 0.0
-    total_import_kwh = 0.0
-    total_export_kwh = 0.0
+    nm_repo = SQLAlchemyNetMeteringRepository(uow._session)
 
-    for serial in site_info.device_serials:
-        telemetry = telemetry_batch.get(serial)
-        if telemetry:
-            energy = telemetry.get("energy_today", {})
-            total_pv_kwh += energy.get("pv_kwh", 0)
-            total_import_kwh += energy.get("grid_import_kwh", 0)
-            total_export_kwh += energy.get("grid_export_kwh", 0)
+    # Get billing config for pricing info
+    config = await nm_repo.get_billing_config_by_site(site_info.site_id)
 
-    # Calculate costs using site-configured rates (with defaults)
-    import_rate = site_info.import_rate_pkr
-    export_rate = site_info.export_rate_pkr
+    # Default rates if no config exists
+    import_rate = 30.0
+    export_rate = 15.0
 
-    import_cost = total_import_kwh * import_rate
-    export_credit = total_export_kwh * export_rate
-    savings = total_pv_kwh * import_rate
-    savings_month = month_energy_kwh * import_rate
+    if config:
+        # Use weighted average of peak and off-peak rates as "typical" rate
+        # This is a simplification for the dashboard widget display
+        import_rate = (config.prices.price_peak_import + config.prices.price_offpeak_import) / 2
+        export_rate = (config.prices.price_peak_settlement + config.prices.price_offpeak_settlement) / 2
+
+    # Try to get today's running bill data
+    today = date.today()
+    snapshot = await nm_repo.get_daily_snapshot(site_info.site_id, today)
+
+    # Fall back to yesterday if today not available yet
+    if not snapshot:
+        yesterday = today - timedelta(days=1)
+        snapshot = await nm_repo.get_daily_snapshot(site_info.site_id, yesterday)
+
+    # If we have snapshot data, use it for accurate billing info
+    if snapshot:
+        # Estimated today's savings = today's solar generation * import rate
+        # (Rough estimate - actual savings depends on TOU and self-consumption patterns)
+        estimated_savings_today = 0.0  # We don't have per-day solar in snapshot
+
+        # Month savings = solar generation * import rate (simplified)
+        estimated_savings_month = snapshot.solar_generation_kwh * import_rate
+
+        # Grid costs (simplified from bill components)
+        grid_import_cost = snapshot.bill_off_energy_rs + snapshot.bill_peak_energy_rs
+
+        # Export credit (from net metering balance)
+        grid_export_credit = abs(snapshot.bill_credit_balance_rs_to_date) if snapshot.bill_credit_balance_rs_to_date < 0 else 0
+
+    else:
+        # No snapshot available - return zeros
+        estimated_savings_today = 0.0
+        estimated_savings_month = 0.0
+        grid_import_cost = 0.0
+        grid_export_credit = 0.0
 
     return BillingResponse(
         organization_id=site_info.organization_id,
         site_id=site_info.site_id,
         site_name=site_info.site_name,
-        estimated_savings_today=round(savings, 2),
-        estimated_savings_month=round(savings_month, 2),
-        grid_import_cost=round(import_cost, 2),
-        grid_export_credit=round(export_credit, 2),
-        import_rate_pkr=import_rate,
-        export_rate_pkr=export_rate,
+        estimated_savings_today=round(estimated_savings_today, 2),
+        estimated_savings_month=round(estimated_savings_month, 2),
+        grid_import_cost=round(grid_import_cost, 2),
+        grid_export_credit=round(grid_export_credit, 2),
+        import_rate_pkr=round(import_rate, 2),
+        export_rate_pkr=round(export_rate, 2),
     )
 
 
