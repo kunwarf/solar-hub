@@ -588,11 +588,12 @@ class SystemBClient:
 
             # For billing, we need hourly buckets for the exact time range
             # System B's energy-chart endpoint supports period="custom" with custom time ranges
+            # Use "auto" to let System B select the best aggregate table with DELTA calculations
             params = {
                 "period": "custom",
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat(),
-                "bucket_interval": "1 hour",
+                "bucket_interval": "auto",
             }
 
             logger.info(
