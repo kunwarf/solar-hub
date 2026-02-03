@@ -318,8 +318,56 @@ async def recalculate_billing(
     from sqlalchemy import text
 
     try:
+        # Delete daily snapshots for this period (these feed the running bill display)
+        daily_query = text("""
+            DELETE FROM billing_daily
+            WHERE site_id = :site_id
+              AND date >= :period_start
+              AND date <= :period_end
+            RETURNING id
+        """)
+
+        daily_result = await uow._session.execute(daily_query, {
+            "site_id": str(site_id),
+            "period_start": period_start,
+            "period_end": period_end
+        })
+        deleted_daily = len([row[0] for row in daily_result])
+
+        # Delete billing months that overlap with this period
+        months_query = text("""
+            DELETE FROM billing_months
+            WHERE site_id = :site_id
+              AND period_start_date <= :period_end
+              AND period_end_date >= :period_start
+            RETURNING id
+        """)
+
+        months_result = await uow._session.execute(months_query, {
+            "site_id": str(site_id),
+            "period_start": period_start,
+            "period_end": period_end
+        })
+        deleted_months = len([row[0] for row in months_result])
+
+        # Delete billing cycles that overlap with this period
+        cycles_query = text("""
+            DELETE FROM billing_cycles
+            WHERE site_id = :site_id
+              AND cycle_start_date <= :period_end
+              AND cycle_end_date >= :period_start
+            RETURNING id
+        """)
+
+        cycles_result = await uow._session.execute(cycles_query, {
+            "site_id": str(site_id),
+            "period_start": period_start,
+            "period_end": period_end
+        })
+        deleted_cycles = len([row[0] for row in cycles_result])
+
         # Delete existing billing simulations for this period
-        query = text("""
+        sim_query = text("""
             DELETE FROM billing_simulations
             WHERE site_id = :site_id
               AND period_start >= :period_start
@@ -327,21 +375,25 @@ async def recalculate_billing(
             RETURNING id
         """)
 
-        result = await uow._session.execute(query, {
+        sim_result = await uow._session.execute(sim_query, {
             "site_id": str(site_id),
             "period_start": period_start,
             "period_end": period_end
         })
-
-        deleted_ids = [row[0] for row in result]
-        deleted_count = len(deleted_ids)
+        deleted_sims = len([row[0] for row in sim_result])
 
         await uow.commit()
 
+        total_deleted = deleted_daily + deleted_months + deleted_cycles + deleted_sims
+
         return {
             "status": "success",
-            "deleted_count": deleted_count,
-            "message": f"Deleted {deleted_count} billing record(s). The system will regenerate them automatically using timezone-aware data."
+            "deleted_count": total_deleted,
+            "deleted_daily": deleted_daily,
+            "deleted_months": deleted_months,
+            "deleted_cycles": deleted_cycles,
+            "deleted_simulations": deleted_sims,
+            "message": f"Deleted {total_deleted} total records ({deleted_daily} daily, {deleted_months} months, {deleted_cycles} cycles, {deleted_sims} simulations). The billing scheduler will regenerate them using corrected timezone-aware data."
         }
     except Exception as e:
         await uow.rollback()
