@@ -418,7 +418,7 @@ async def recalculate_billing(
             calculator = NetMeteringCalculator()
 
             # System B client for fetching corrected telemetry data
-            system_b_client = SystemBClient(base_url=settings.system_b_base_url)
+            system_b_client = SystemBClient(base_url=settings.system_b.url)
             system_b_telemetry_repo = SystemBTelemetryRepository(system_b_client)
 
             scheduler = BillingSchedulerService(
