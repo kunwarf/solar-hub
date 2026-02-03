@@ -437,12 +437,27 @@ async def recalculate_billing(
             )
 
         # Run billing calculation for each day in the period
-        logger.info("Starting billing regeneration for %d days...", (period_end - period_start).days + 1)
+        # IMPORTANT: Do not calculate future dates
+        today = date.today()
+        effective_end_date = min(period_end, today)
+
+        if period_end > today:
+            logger.warning(
+                "period_end %s is in the future. Capping at today (%s)",
+                period_end, today
+            )
+
+        logger.info(
+            "Starting billing regeneration for %d days (from %s to %s)...",
+            (effective_end_date - period_start).days + 1,
+            period_start,
+            effective_end_date
+        )
         current_date = period_start
         regenerated_count = 0
         failed_dates = []
 
-        while current_date <= period_end:
+        while current_date <= effective_end_date:
             try:
                 logger.debug("Computing billing snapshot for %s", current_date)
                 result = await scheduler.compute_site_daily_snapshot(
@@ -481,7 +496,9 @@ async def recalculate_billing(
             "deleted_simulations": deleted_sims,
             "regenerated_snapshots": regenerated_count,
             "failed_dates": failed_dates,
-            "message": f"Deleted {total_deleted} records and regenerated {regenerated_count} daily snapshots with corrected timezone-aware data from System B."
+            "period_start": str(period_start),
+            "period_end": str(effective_end_date),
+            "message": f"Deleted {total_deleted} records and regenerated {regenerated_count} daily snapshots from {period_start} to {effective_end_date} (capped at today)."
         }
     except Exception as e:
         logger.error("Recalculate billing failed: %s", e, exc_info=True)
