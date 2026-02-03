@@ -83,11 +83,7 @@ def upgrade() -> None:
             -- These are metrics like pv_energy_kwh, load_energy_kwh, etc.
             SUM(tr.metric_value) FILTER (
                 WHERE tr.metric_name LIKE '%_energy_%' OR tr.metric_name LIKE '%_kwh'
-            ) as total_energy,
-
-            -- TOU classification metadata
-            -- Store hour in local timezone for verification
-            EXTRACT(HOUR FROM (tr.time AT TIME ZONE s.timezone))::int as local_hour
+            ) as total_energy
 
         FROM telemetry_raw tr
         INNER JOIN sites_metadata s ON tr.site_id = s.id

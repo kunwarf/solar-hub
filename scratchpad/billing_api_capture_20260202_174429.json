@@ -1,0 +1,1077 @@
+{
+  "http://182.180.150.107:8000/api/v1/dashboard/device-status": {
+    "endpoint": "dashboard/device-status",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/device-status",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "devices_online": 1,
+      "devices_offline": 0,
+      "devices_total": 1,
+      "total_faults": 0,
+      "total_warnings": 0,
+      "grid_connected": true,
+      "devices": [
+        {
+          "serial_number": "SH01IN9A423V4CU0",
+          "status": "online",
+          "last_seen": 1770036173,
+          "working_mode": null,
+          "faults": [],
+          "warnings": [],
+          "online": true
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/load-shedding": {
+    "endpoint": "dashboard/load-shedding",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/load-shedding",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "stage": 0,
+      "active": false,
+      "current_window": null,
+      "next_window": null,
+      "battery_reserve": 98,
+      "estimated_coverage": 10.4
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/weather": {
+    "endpoint": "dashboard/weather",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/weather",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "temperature": 25.0,
+      "condition": "rainy",
+      "humidity": 55,
+      "wind_speed": 10,
+      "solar_forecast": 0,
+      "sunrise": "06:15",
+      "sunset": "18:00"
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/environmental": {
+    "endpoint": "dashboard/environmental",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/environmental",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "co2_avoided_kg": 25.41,
+      "trees_equivalent": 438.1,
+      "coal_avoided_kg": 14.52
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/peak-demand": {
+    "endpoint": "dashboard/peak-demand",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/peak-demand",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "peak_hour": "06:00",
+      "peak_demand_kw": 2.85,
+      "average_demand_kw": 1.14,
+      "current_demand_kw": 1.27,
+      "hourly_profile": [
+        {
+          "hour": "12:00",
+          "demand_kw": 1.32
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 1.29
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 1.26
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 1.32
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 1.24
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.98
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.7
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.69
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.68
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.52
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.49
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.55
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.66
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.71
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 1.21
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 1.12
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 2.85
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 2.02
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 1.76
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 1.06
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 1.35
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 1.12
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 1.21
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/power-flow": {
+    "endpoint": "dashboard/power-flow",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/power-flow",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "timestamp": "2026-02-02T12:42:53.237762+00:00",
+      "pv_power_w": 7.0,
+      "grid_power_w": 26.0,
+      "load_power_w": 1268.0,
+      "battery_power_w": 1314.0,
+      "battery_soc_pct": 98.0,
+      "is_charging": true,
+      "grid_connected": true,
+      "online": true,
+      "stale": false,
+      "devices_online": 1,
+      "devices_total": 1,
+      "devices": [
+        {
+          "serial_number": "SH01IN9A423V4CU0",
+          "pv_power_w": 7.0,
+          "grid_power_w": 26.0,
+          "load_power_w": 1268.0,
+          "battery_power_w": 1314.0,
+          "battery_soc_pct": 98.0,
+          "is_charging": true,
+          "online": true,
+          "raw": {
+            "inverter_type": 5,
+            "modbus_address": 1,
+            "protocol_version_raw": 260,
+            "device_serial_number": "2406130092",
+            "grid_power_w": 26,
+            "load_power_w": 1268,
+            "load_l1_power_w": 904,
+            "load_l2_power_w": 0,
+            "load_l3_power_w": 357,
+            "load_l1_voltage_v": 218.4,
+            "load_l2_voltage_v": 219.8,
+            "load_l3_voltage_v": 222.4,
+            "pv1_power_w": 7,
+            "pv2_power_w": 0,
+            "grid_frequency_hz": 49.83,
+            "grid_l1_power_w": 24,
+            "grid_l2_power_w": 4,
+            "grid_l3_power_w": 4,
+            "grid_voltage_v": 220.4,
+            "grid_l1_voltage_v": 220.4,
+            "grid_l2_voltage_v": 220.0,
+            "grid_l3_voltage_v": 222.9,
+            "grid_l1_current_a": 2.11,
+            "grid_l2_current_a": 0.34,
+            "grid_l3_current_a": 1.34,
+            "grid_ct_l1_power_w": 2,
+            "grid_ct_l2_power_w": 2,
+            "grid_ct_l3_power_w": 3,
+            "grid_ct_power_w": 7,
+            "battery_voltage_v": 53.120000000000005,
+            "battery_current_a": 24.740000000000002,
+            "battery_power_w": 1314,
+            "battery_soc_pct": 98,
+            "inverter_temp_c": 125.0,
+            "battery_temp_c": 22.1,
+            "pv_energy_today_kwh": 36.300000000000004,
+            "load_energy_today_kwh": 19.200000000000003,
+            "grid_import_energy_today_kwh": 5.1000000000000005,
+            "grid_export_energy_today_kwh": 14.4,
+            "battery_charge_energy_today_kwh": 8.3,
+            "battery_discharge_energy_today_kwh": 2.4000000000000004,
+            "day_gen_energy_kwh": 0.0,
+            "day_active_energy_kwh": 0.0,
+            "total_active_energy_kwh": 0.0,
+            "battery_charge_energy_total_kwh": 135443251.20000002,
+            "battery_discharge_energy_total_kwh": 148792934.4,
+            "export_energy_total_kwh": 268166758.4,
+            "import_energy_total_kwh": 217042124.8,
+            "load_energy_total_kwh": 124852633.7,
+            "pv_energy_total_kwh": 189497344.10000002,
+            "heat_sink_temp_c": 145.6,
+            "grid_connection_time_today_s": 0,
+            "reactive_energy_today_kvarh": 0.0,
+            "reactive_energy_total_kvarh": 0.0,
+            "pv1_voltage_v": 138.1,
+            "pv1_current_a": 0.0,
+            "pv2_voltage_v": 205.0,
+            "pv2_current_a": 0.0,
+            "pv3_power_w": 0,
+            "pv3_voltage_v": 0.0,
+            "pv3_current_a": 0.0,
+            "pv4_power_w": 0,
+            "pv4_voltage_v": 0.0,
+            "pv4_current_a": 0.0,
+            "working_mode_raw": 2,
+            "fault_word_0": 0,
+            "fault_word_1": 0,
+            "fault_word_2": 0,
+            "fault_word_3": 0,
+            "grid_status_raw": 5,
+            "warning_word_1": 0,
+            "warning_word_2": 0,
+            "power_on_off_status": 1,
+            "battery_type": 1,
+            "battery_absorption_voltage_v": 51.0,
+            "battery_absorption_voltage": 51.0,
+            "battery_equalization_voltage_v": 51.0,
+            "battery_equalization_voltage": 51.0,
+            "battery_floating_voltage_v": 51.0,
+            "battery_floating_voltage": 51.0,
+            "battery_capacity_ah": 1010,
+            "zero_export_power_w": 20,
+            "battery_equalization_day_cycle": 1,
+            "battery_equalization_time": 20,
+            "battery_mode_source": 1,
+            "battery_max_charge_current_a": 75,
+            "battery_max_discharge_current_a": 100,
+            "battery_shutdown_capacity_pct": 10,
+            "battery_restart_capacity_pct": 40,
+            "battery_low_capacity_pct": 30,
+            "battery_shutdown_voltage_v": 46.0,
+            "battery_restart_voltage_v": 49.0,
+            "battery_low_voltage_v": 47.5,
+            "grid_charging_start_voltage_v": 49.0,
+            "grid_charging_start_capacity_pct": 30,
+            "grid_charge_battery_current_a": 20,
+            "generator_max_run_time_h": 24.0,
+            "generator_down_time_h": 0.0,
+            "generator_charging_start_voltage_v": 49.0,
+            "generator_charging_start_capacity_pct": 30,
+            "generator_charge_battery_current_a": 0,
+            "generator_charge_enabled": 0,
+            "ac_charge_battery": 1,
+            "generator_port_usage": 0,
+            "smartload_off_voltage_v": 51.0,
+            "smartload_off_capacity_pct": 95,
+            "smartload_on_voltage_v": 54.0,
+            "smartload_on_capacity_pct": 100,
+            "solar_priority": 1,
+            "limit_control_function": 1,
+            "max_export_power_w": 13000,
+            "solar_sell": 1,
+            "tou_selling": 255,
+            "prog1_time": 0,
+            "prog2_time": 600,
+            "prog3_time": 900,
+            "prog4_time": 1500,
+            "prog5_time": 1700,
+            "prog6_time": 2300,
+            "prog1_power_w": 100,
+            "prog2_power_w": 1000,
+            "prog3_power_w": 3992,
+            "prog4_power_w": 1000,
+            "prog5_power_w": 4000,
+            "prog6_power_w": 3000,
+            "prog1_voltage_v": 49.0,
+            "prog2_voltage_v": 49.0,
+            "prog3_voltage_v": 51.0,
+            "prog4_voltage_v": 51.0,
+            "prog5_voltage_v": 49.0,
+            "prog6_voltage_v": 49.0,
+            "prog1_capacity_pct": 50,
+            "prog2_capacity_pct": 60,
+            "prog3_capacity_pct": 98,
+            "prog4_capacity_pct": 98,
+            "prog5_capacity_pct": 80,
+            "prog6_capacity_pct": 50,
+            "prog1_charge_mode": 0,
+            "prog2_charge_mode": 0,
+            "prog3_charge_mode": 1,
+            "prog4_charge_mode": 1,
+            "prog5_charge_mode": 0,
+            "prog6_charge_mode": 0,
+            "energy_management_mode": 1,
+            "external_ct_direction": 11,
+            "grid_phase_sequence": 0,
+            "solar_arc_fault_mode": 0,
+            "grid_standard": 0,
+            "grid_type_setting": 1,
+            "generator_connected_to_grid_input": 0,
+            "gen_peak_shaving_power_w": 8000,
+            "grid_peak_shaving_power_w": 8000,
+            "max_solar_sell_power_w": 15600,
+            "mppt_number_and_phases": 515,
+            "parallel_1": 2022,
+            "grid_voltage_high_v": 265.0,
+            "grid_voltage_low_v": 185.0,
+            "grid_frequency_high_hz": 51.5,
+            "grid_frequency_low_hz": 48.0,
+            "control_board_special_function_1": 10410
+          }
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/all": {
+    "endpoint": "dashboard/all",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/all",
+    "status": 200,
+    "body": {
+      "power_flow": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "timestamp": "2026-02-02T12:42:53.237762+00:00",
+        "pv_power_w": 7.0,
+        "grid_power_w": 26.0,
+        "load_power_w": 1268.0,
+        "battery_power_w": 1314.0,
+        "battery_soc_pct": 98.0,
+        "is_charging": true,
+        "grid_connected": true,
+        "online": true,
+        "stale": false,
+        "devices_online": 1,
+        "devices_total": 1,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "pv_power_w": 7.0,
+            "grid_power_w": 26.0,
+            "load_power_w": 1268.0,
+            "battery_power_w": 1314.0,
+            "battery_soc_pct": 98.0,
+            "is_charging": true,
+            "online": true,
+            "raw": null
+          }
+        ]
+      },
+      "stats": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "energy_today_kwh": 36.300000000000004,
+        "energy_month_kwh": 81.90844297877638,
+        "peak_power_kw": 0.0,
+        "co2_saved_kg": 25.41,
+        "online": true,
+        "devices_online": 1,
+        "devices_total": 1,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "energy_today_kwh": 36.300000000000004,
+            "peak_power_kw": 0.0,
+            "online": true
+          }
+        ]
+      },
+      "battery": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "avg_soc_pct": 98.0,
+        "total_power_w": 1314.0,
+        "is_charging": true,
+        "online": true,
+        "devices_online": 1,
+        "devices_total": 1,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "soc_pct": 98.0,
+            "power_w": 1314.0,
+            "is_charging": true,
+            "online": true
+          }
+        ]
+      },
+      "device_status": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "devices_online": 1,
+        "devices_offline": 0,
+        "devices_total": 1,
+        "total_faults": 0,
+        "total_warnings": 0,
+        "grid_connected": true,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "status": "online",
+            "last_seen": 1770036173,
+            "working_mode": null,
+            "faults": [],
+            "warnings": [],
+            "online": true
+          }
+        ]
+      },
+      "alerts": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "active_alerts": [],
+        "total_count": 0,
+        "critical_count": 0
+      },
+      "environmental": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "co2_avoided_kg": 25.41,
+        "trees_equivalent": 438.1,
+        "coal_avoided_kg": 14.52
+      },
+      "billing": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "estimated_savings_today": 1089.0,
+        "estimated_savings_month": 2457.25,
+        "grid_import_cost": 0.0,
+        "grid_export_credit": 0.0,
+        "import_rate_pkr": 30.0,
+        "export_rate_pkr": 15.0
+      }
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=day": {
+    "endpoint": "dashboard/energy-chart",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=day",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "period": "day",
+      "data": [
+        {
+          "timestamp": "2026-02-01T12:00:00Z",
+          "pv_kwh": 0.0025714285714285717,
+          "load_kwh": 1.31572972972973,
+          "grid_import_kwh": 5.800000000000003,
+          "grid_export_kwh": 14.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.290811764705882,
+          "grid_import_kwh": 5.799999999999983,
+          "grid_export_kwh": 14.5,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.2579814814814814,
+          "grid_import_kwh": 5.799999999999984,
+          "grid_export_kwh": 14.5,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3219864864864865,
+          "grid_import_kwh": 5.83378378378377,
+          "grid_export_kwh": 14.5,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.23875625,
+          "grid_import_kwh": 6.6049999999999915,
+          "grid_export_kwh": 14.5,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T19:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.9795448717948718,
+          "grid_import_kwh": 4.183974358974352,
+          "grid_export_kwh": 8.737179487179487,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6981523178807948,
+          "grid_import_kwh": 0.5728476821192073,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 17.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6944337349397589,
+          "grid_import_kwh": 1.1813253012048188,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6836746987951807,
+          "grid_import_kwh": 1.7536144578313233,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.524867469879518,
+          "grid_import_kwh": 2.255421686746995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.49027522935779816,
+          "grid_import_kwh": 2.723853211009172,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T01:00:00Z",
+          "pv_kwh": 0.004913043478260869,
+          "load_kwh": 0.5489680851063831,
+          "grid_import_kwh": 3.0627659574468065,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T02:00:00Z",
+          "pv_kwh": 0.4895263157894737,
+          "load_kwh": 0.6626753246753246,
+          "grid_import_kwh": 3.1999999999999953,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T03:00:00Z",
+          "pv_kwh": 2.2849655172413796,
+          "load_kwh": 0.7076896551724138,
+          "grid_import_kwh": 3.2051724137931012,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 48.9,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T04:00:00Z",
+          "pv_kwh": 4.1285,
+          "load_kwh": 1.2116,
+          "grid_import_kwh": 3.3000000000000003,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 70.5,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T05:00:00Z",
+          "pv_kwh": 3.1501025641025637,
+          "load_kwh": 1.1169743589743588,
+          "grid_import_kwh": 4.0897435897435885,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T06:00:00Z",
+          "pv_kwh": 3.8622439024390243,
+          "load_kwh": 2.85,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:00:00Z",
+          "pv_kwh": 3.7014084507042253,
+          "load_kwh": 2.0188333333333333,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.4197183098591551,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:00:00Z",
+          "pv_kwh": 7.372294871794872,
+          "load_kwh": 1.7593974358974358,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 3.0285714285714294,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:00:00Z",
+          "pv_kwh": 6.2402678571428565,
+          "load_kwh": 1.063125,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 9.816071428571423,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:00:00Z",
+          "pv_kwh": 3.6296785714285718,
+          "load_kwh": 1.346321428571429,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 12.71785714285714,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:00:00Z",
+          "pv_kwh": 1.1094411764705883,
+          "load_kwh": 1.12,
+          "grid_import_kwh": 4.545454545454546,
+          "grid_export_kwh": 14.327272727272726,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:00:00Z",
+          "pv_kwh": 0.11544444444444445,
+          "load_kwh": 1.2053333333333334,
+          "grid_import_kwh": 7.333333333333333,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/comparison?period=week": {
+    "endpoint": "dashboard/comparison",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/comparison?period=week",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "period": "week",
+      "data": [
+        {
+          "label": "Mon",
+          "current": 83.5,
+          "previous": 0.0
+        },
+        {
+          "label": "Tue",
+          "current": 69.5,
+          "previous": 0.0
+        },
+        {
+          "label": "Wed",
+          "current": 124.9,
+          "previous": 0.0
+        },
+        {
+          "label": "Thu",
+          "current": 117.0,
+          "previous": 0.0
+        },
+        {
+          "label": "Fri",
+          "current": 117.7,
+          "previous": 0.0
+        },
+        {
+          "label": "Sat",
+          "current": 100.4,
+          "previous": 0.0
+        },
+        {
+          "label": "Sun",
+          "current": 99.7,
+          "previous": 0.0
+        }
+      ],
+      "current_total": 712.7,
+      "previous_total": 0.0,
+      "percent_change": 0.0
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/stats": {
+    "endpoint": "dashboard/stats",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/stats",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "energy_today_kwh": 36.09135814360769,
+      "energy_month_kwh": 1015.0897099031872,
+      "peak_power_kw": 7.372294871794872,
+      "co2_saved_kg": 25.263950700525385,
+      "online": true,
+      "devices_online": 1,
+      "devices_total": 1,
+      "devices": [
+        {
+          "serial_number": "SH01IN9A423V4CU0",
+          "energy_today_kwh": 36.300000000000004,
+          "peak_power_kw": 0.0,
+          "online": true
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/config/271edc3f-f8e8-4aac-acae-78ffd8bf4643": {
+    "endpoint": "billing/config/271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "url": "http://182.180.150.107:8000/api/v1/billing/config/271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "status": 200,
+    "body": {
+      "id": "7cc91f5e-93d6-45d8-b8d9-ffb4d7837d8d",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "anchor_day": 16,
+      "tou_config": {
+        "peak_windows": [
+          {
+            "start_hour": 17,
+            "end_hour": 22
+          }
+        ],
+        "timezone": "Asia/Karachi"
+      },
+      "prices": {
+        "price_offpeak_import": 50.0,
+        "price_peak_import": 60.0,
+        "price_offpeak_settlement": 22.0,
+        "price_peak_settlement": 22.0,
+        "fixed_charge_per_billing_month": 1000.0
+      },
+      "fixed_proration_mode": "none",
+      "net_metering_enabled": true,
+      "created_at": "2026-02-02T09:47:12.951440Z",
+      "updated_at": null
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/running?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643": {
+    "endpoint": "billing/running",
+    "url": "http://182.180.150.107:8000/api/v1/billing/running?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "status": 200,
+    "body": {
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "date": "2026-02-01",
+      "billing_month_id": "2f20598d-e96f-4b0d-b017-ce12bc5e7c0d",
+      "billing_period_start": "2026-01-16",
+      "billing_period_end": "2026-02-15",
+      "days_elapsed": 17,
+      "total_days_in_month": 31,
+      "progress_percent": 54.83870967741935,
+      "import_off_kwh": 706.234,
+      "export_off_kwh": 1798.822,
+      "import_peak_kwh": 154.674,
+      "export_peak_kwh": 545.564,
+      "solar_generation_kwh": 398.612,
+      "load_consumption_kwh": 265.2,
+      "net_import_off_kwh": 0.0,
+      "net_import_peak_kwh": 0.0,
+      "credits_off_cycle_kwh_balance": 1092.588,
+      "credits_peak_cycle_kwh_balance": 390.89,
+      "bill_off_energy_rs": 0.0,
+      "bill_peak_energy_rs": 0.0,
+      "fixed_prorated_rs": 1000.0,
+      "expected_cycle_credit_rs": 32636.51,
+      "bill_raw_rs_to_date": 1000.0,
+      "bill_credit_balance_rs_to_date": 0.0,
+      "bill_final_rs_to_date": 1000.0,
+      "surplus_deficit_flag": "SURPLUS",
+      "net_kwh_position": 1483.478,
+      "generated_at": "2026-02-02T10:40:04.380860Z"
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/trend?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643&months=12": {
+    "endpoint": "billing/trend",
+    "url": "http://182.180.150.107:8000/api/v1/billing/trend?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643&months=12",
+    "status": 200,
+    "body": {
+      "trend": [
+        {
+          "year": 2026,
+          "month": 1,
+          "period_start": "2026-01-16",
+          "period_end": "2026-02-15",
+          "import_off_kwh": 0.0,
+          "import_peak_kwh": 0.0,
+          "export_off_kwh": 0.0,
+          "export_peak_kwh": 0.0,
+          "bill_final_rs": 0.0,
+          "status": "active"
+        },
+        {
+          "year": 2025,
+          "month": 12,
+          "period_start": "2025-12-16",
+          "period_end": "2026-01-15",
+          "import_off_kwh": 0.0,
+          "import_peak_kwh": 0.0,
+          "export_off_kwh": 0.0,
+          "export_peak_kwh": 0.0,
+          "bill_final_rs": 0.0,
+          "status": "finalized"
+        }
+      ],
+      "months": 2
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/summary?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643": {
+    "endpoint": "billing/summary",
+    "url": "http://182.180.150.107:8000/api/v1/billing/summary?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "status": 200,
+    "body": {
+      "billing_month": 1,
+      "year": 2026,
+      "billing_period_start": "2026-01-16",
+      "billing_period_end": "2026-02-15",
+      "import_off_kwh": 706.234,
+      "import_peak_kwh": 154.674,
+      "export_off_kwh": 1798.822,
+      "export_peak_kwh": 545.564,
+      "fixed_charge": 1000.0,
+      "bill_amount": 1000.0,
+      "credit_balance": 0.0,
+      "days_elapsed": 17,
+      "days_remaining": 14,
+      "progress_percent": 54.83870967741935
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=month": {
+    "endpoint": "dashboard/energy-chart",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=month",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "period": "month",
+      "data": [
+        {
+          "timestamp": "2026-01-22T00:00:00Z",
+          "pv_kwh": 25.56016589861751,
+          "load_kwh": 24.814495971351832,
+          "grid_import_kwh": 4.097268248992243,
+          "grid_export_kwh": 11.813434841020765,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 83.5,
+          "temperature_c": 124.8
+        },
+        {
+          "timestamp": "2026-01-23T00:00:00Z",
+          "pv_kwh": 87.876,
+          "load_kwh": 30.64692879914984,
+          "grid_import_kwh": 4.040701381509028,
+          "grid_export_kwh": 0.3199787460148777,
+          "efficiency_pct": 36.7,
+          "self_sufficiency_pct": 86.8,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-24T00:00:00Z",
+          "pv_kwh": 7.682301369863014,
+          "load_kwh": 21.129584705257564,
+          "grid_import_kwh": 2.3582890541976362,
+          "grid_export_kwh": 15.314505844846211,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 88.8,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-25T00:00:00Z",
+          "pv_kwh": 135.74056123662308,
+          "load_kwh": 26.348370232061882,
+          "grid_import_kwh": 2.344571885836054,
+          "grid_export_kwh": 18.70586823152873,
+          "efficiency_pct": 37.1,
+          "self_sufficiency_pct": 91.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T00:00:00Z",
+          "pv_kwh": 45.44413636363636,
+          "load_kwh": 28.25311196454948,
+          "grid_import_kwh": 4.063722304283456,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 72.1,
+          "self_sufficiency_pct": 85.6,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T00:00:00Z",
+          "pv_kwh": 69.53921495327103,
+          "load_kwh": 26.117317021276595,
+          "grid_import_kwh": 5.93346634743285,
+          "grid_export_kwh": 2.8980047885075586,
+          "efficiency_pct": 52.7,
+          "self_sufficiency_pct": 77.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T00:00:00Z",
+          "pv_kwh": 124.86792166771953,
+          "load_kwh": 31.35138762214984,
+          "grid_import_kwh": 2.520613796849531,
+          "grid_export_kwh": 16.44060293318835,
+          "efficiency_pct": 42.0,
+          "self_sufficiency_pct": 92.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T00:00:00Z",
+          "pv_kwh": 117.04963295880151,
+          "load_kwh": 31.961016286644952,
+          "grid_import_kwh": 4.032120553896077,
+          "grid_export_kwh": 13.58816182459943,
+          "efficiency_pct": 43.7,
+          "self_sufficiency_pct": 87.4,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T00:00:00Z",
+          "pv_kwh": 117.71122950819672,
+          "load_kwh": 26.7286013986014,
+          "grid_import_kwh": 3.670974329054781,
+          "grid_export_kwh": 15.539702450408617,
+          "efficiency_pct": 40.4,
+          "self_sufficiency_pct": 86.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T00:00:00Z",
+          "pv_kwh": 100.38002807017543,
+          "load_kwh": 28.06395334040297,
+          "grid_import_kwh": 3.8506231768761388,
+          "grid_export_kwh": 9.614558472553709,
+          "efficiency_pct": 44.0,
+          "self_sufficiency_pct": 86.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T00:00:00Z",
+          "pv_kwh": 99.70614356435644,
+          "load_kwh": 30.15542211652794,
+          "grid_import_kwh": 4.544305679452899,
+          "grid_export_kwh": 6.105828129646153,
+          "efficiency_pct": 44.0,
+          "self_sufficiency_pct": 84.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T00:00:00Z",
+          "pv_kwh": 83.5323743119266,
+          "load_kwh": 27.363659340659343,
+          "grid_import_kwh": 3.8131761442440912,
+          "grid_export_kwh": 2.9345833333333418,
+          "efficiency_pct": 41.2,
+          "self_sufficiency_pct": 86.1,
+          "temperature_c": 125.0
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,71 @@
+    METRIC_MAPPINGS = [
+        # PV Power Metrics
+        ('pv1_power_w', ('pv1_power_w', 'W', 'power')),
+        ('pv2_power_w', ('pv2_power_w', 'W', 'power')),
+        ('pv3_power_w', ('pv3_power_w', 'W', 'power')),
+        ('pv4_power_w', ('pv4_power_w', 'W', 'power')),
+
+        # Power Metrics
+        ('grid_power_w', ('grid_w', 'W', 'power')),
+        ('load_power_w', ('load_w', 'W', 'power')),
+        ('battery_power_w', ('battery_w', 'W', 'power')),
+
+        # Battery Metrics
+        ('battery_soc_pct', ('battery_soc_pct', '%', 'battery')),
+        ('battery_voltage_v', ('battery_voltage_v', 'V', 'battery')),
+        ('battery_current_a', ('battery_current_a', 'A', 'battery')),
+
+        # Energy Metrics (Daily kWh)
+        ('pv_energy_today_kwh', ('pv_energy_today_kwh', 'kWh', 'energy')),
+        ('load_energy_today_kwh', ('load_energy_today_kwh', 'kWh', 'energy')),
+        ('grid_export_energy_today_kwh', ('grid_export_energy_today_kwh', 'kWh', 'energy')),
+        ('grid_import_energy_today_kwh', ('grid_import_energy_today_kwh', 'kWh', 'energy')),
+        ('battery_charge_energy_today_kwh', ('battery_charge_energy_today_kwh', 'kWh', 'energy')),
+        ('battery_discharge_energy_today_kwh', ('battery_discharge_energy_today_kwh', 'kWh', 'energy')),
+
+        # Temperature Metrics
+        ('inverter_temp_c', ('inverter_temp_c', 'C', 'temperature')),
+        ('battery_temp_c', ('battery_temp_c', 'C', 'temperature')),
+        ('heat_sink_temp_c', ('heat_sink_temp_c', 'C', 'temperature')),
+
+        # Grid Metrics
+        ('grid_voltage_v', ('grid_voltage_v', 'V', 'grid')),
+        ('grid_frequency_hz', ('grid_frequency_hz', 'Hz', 'grid')),
+        ('grid_l1_voltage_v', ('grid_l1_voltage_v', 'V', 'grid')),
+        ('grid_l2_voltage_v', ('grid_l2_voltage_v', 'V', 'grid')),
+        ('grid_l3_voltage_v', ('grid_l3_voltage_v', 'V', 'grid')),
+        ('grid_l1_current_a', ('grid_l1_current_a', 'A', 'grid')),
+        ('grid_l2_current_a', ('grid_l2_current_a', 'A', 'grid')),
+        ('grid_l3_current_a', ('grid_l3_current_a', 'A', 'grid')),
+        ('grid_l1_power_w', ('grid_l1_power_w', 'W', 'grid')),
+        ('grid_l2_power_w', ('grid_l2_power_w', 'W', 'grid')),
+        ('grid_l3_power_w', ('grid_l3_power_w', 'W', 'grid')),
+
+        # Load Metrics
+        ('load_l1_power_w', ('load_l1_power_w', 'W', 'load')),
+        ('load_l2_power_w', ('load_l2_power_w', 'W', 'load')),
+        ('load_l3_power_w', ('load_l3_power_w', 'W', 'load')),
+
+        # PV String Details
+        ('pv1_voltage_v', ('pv1_voltage_v', 'V', 'pv')),
+        ('pv1_current_a', ('pv1_current_a', 'A', 'pv')),
+        ('pv2_voltage_v', ('pv2_voltage_v', 'V', 'pv')),
+        ('pv2_current_a', ('pv2_current_a', 'A', 'pv')),
+        ('pv3_voltage_v', ('pv3_voltage_v', 'V', 'pv')),
+        ('pv3_current_a', ('pv3_current_a', 'A', 'pv')),
+        ('pv4_voltage_v', ('pv4_voltage_v', 'V', 'pv')),
+        ('pv4_current_a', ('pv4_current_a', 'A', 'pv')),
+
+        # Grid CT Metrics
+        ('grid_ct_power_w', ('grid_ct_power_w', 'W', 'grid')),
+
+        # Status Metrics
+        ('grid_status_raw', ('grid_status_raw', 'enum', 'status')),
+        ('working_mode_raw', ('working_mode_raw', 'enum', 'status')),
+        ('power_on_off_status', ('power_on_off_status', 'bool', 'status')),
+
+        # Configuration/Settings
+        ('battery_capacity_ah', ('battery_capacity_ah', 'Ah', 'config')),
+        ('battery_type', ('battery_type', 'enum', 'config')),
+        ('inverter_type', ('inverter_type', 'enum', 'config')),
+    ]

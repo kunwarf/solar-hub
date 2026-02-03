@@ -1,0 +1,142 @@
+{
+  "timestamp": "2026-02-02T17:41:20.329896",
+  "url": "http://182.180.150.107:8050/billing?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+  "displayed_values": {
+    "Energy Produced": "Unable to extract automatically",
+    "Energy Consumed": "Unable to extract automatically",
+    "Grid Earnings": "Unable to extract automatically",
+    "Grid Costs": "Unable to extract automatically",
+    "Net Balance": "Unable to extract automatically",
+    "Estimated Monthly Savings": "Unable to extract automatically"
+  },
+  "api_responses": {},
+  "console_logs": [
+    {
+      "type": "error",
+      "text": "404 Error: User attempted to access non-existent route: /login",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 975,
+        "columnNumber": 78613
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Polling disabled: not authenticated or auth error",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 35275
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users/me/dashboard/preferences",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load dashboard preferences from API: Me",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 49799
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Polling disabled: not authenticated or auth error",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 35275
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users/me/dashboard/preferences",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load dashboard preferences from API: Me",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 49799
+      }
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://182.180.150.107:8050/auth",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users/me/dashboard/preferences",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Polling disabled: not authenticated or auth error",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 35275
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users/me/dashboard/preferences",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load dashboard preferences from API: Me",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 49799
+      }
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://182.180.150.107:8050/auth",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users/me/dashboard/preferences",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "screenshot_path": "C:\\Users\\kunwa\\PycharmProjects\\solar-hub\\scratchpad\\billing_page_20260202_174118.png"
+}

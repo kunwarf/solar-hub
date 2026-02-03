@@ -1,0 +1,510 @@
+{
+  "timestamp": "2026-02-02T17:43:27.298465",
+  "url": "http://182.180.150.107:8050/billing?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+  "displayed_values": {
+    "_raw_page_text": "Skip to main content\nSolarSync\nEnergy Monitor\nDashboard\nDevices\nOutages\nAlert Center\nSmart Scheduler\nSettings\nDark Mode\nSystem Online\nAll devices operational\nBilling\nBilling & Capacity Dashboard\n\nMonitor your electricity bills, capacity, and forecasts\n\nMonday, February 2, 2026\nRefresh Data\nConfigure Billing\n\nCurrent Billing Period\n\n2026-01-31 - 2026-02-27\n\nView Statement\nExport Data\nEnergy Produced\n\n36.3kWh\n\nEnergy Consumed\n\n36.3kWh\n\nGrid Earnings\n\n₨0.00\n\n0.0 kWh @ ₨15/kWh\n\nGrid Costs\n\n₨0.00\n\n0.0 kWh @ ₨30/kWh\n\nNet Balance This Period\n\n+₨0.00\n\nYou're earning more than you're spending!\n\nEstimated Monthly Savings\n\n₨0.00\n\nBased on current export/import rates\n\nRunning Bill (Month-to-Date)\nSURPLUS\n\nBilling Progress\n\n55%\n\nDay 17 of 31\n\nBill To-Date\n\n₨1000.00\n\nCredit Balance\n\n₨0.00\n\nNet kWh Position\n\n+1483.5 kWh\n\nPeak Import\n\n154.7 kWh\n\nOff-Peak Import\n\n706.2 kWh\n\nPeak Export\n\n545.6 kWh\n\nOff-Peak Export\n\n1798.8 kWh\n\nCredit Pools (3-Month Cycle)\n\nOff-Peak Credits\n1092.6 kWh\nPeak Credits\n390.9 kWh\nMonthly Bill Trend\n2026-01\n2025-12\n₨0\n₨1\n₨2\n₨3\n₨4\nBill (Rs)\nEnergy History\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nFeb\nFeb\n0\n35\n70\n105\n140\nProduced (kWh)Consumed (kWh)Exported (kWh)\nGrid Import vs Export\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nFeb\nFeb\n0 kWh\n5 kWh\n10 kWh\n15 kWh\n20 kWh\nExportedImported\nSelf-Sufficiency Rate\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nJan\nFeb\nFeb\n0%\n25%\n50%\n75%\n100%\nWhat-If Scenario Calculator\n\nExplore different system configurations and their impact\n\nAdd Panels\nAdd Battery\nChange Tariff\nIncrease Load\nAdditional Solar Capacity\n5 kW\n1 kW\n20 kW\nExtra Generation\n\n+600 kWh/mo\n\nMonthly Savings\n\nRs. 0\n\nPayback Period\n\n0.0 years\n\nInstallation Cost\n\nRs. 400,000\n\nCurrent\nProjected\nMonthly Generation\n960 kWh\n1560 kWh\nGrid Export\n510 kWh\n910 kWh\nGrid Import\n250 kWh\n0 kWh\nMonthly Bill\nRs. 0\nRs. 0\nCurrent\nProjected\n\nAnnual Savings\n\nRs. 0\n\nSave Scenario\nCurrent Tariff Rates\n\nGrid Import Rate\n\n₨30/kWh\n\nFeed-in Tariff (Export)\n\n₨15/kWh\n\nCurrent",
+    "Energy Produced": "36.3",
+    "Energy Consumed": "36.3",
+    "Grid Earnings": "Not found on page",
+    "Grid Costs": "Not found on page",
+    "Net Balance": "Not found on page",
+    "Estimated Monthly Savings": "0.00"
+  },
+  "api_responses": {
+    "energy_chart": {
+      "url": "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=month",
+      "status": 200,
+      "headers": {
+        "access-control-allow-origin": "http://182.180.150.107:8050",
+        "content-length": "2993",
+        "date": "Mon, 02 Feb 2026 12:43:16 GMT",
+        "content-type": "application/json",
+        "vary": "Origin",
+        "server": "uvicorn",
+        "access-control-allow-credentials": "true"
+      },
+      "body": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "period": "month",
+        "data": [
+          {
+            "timestamp": "2026-01-22T00:00:00Z",
+            "pv_kwh": 25.56016589861751,
+            "load_kwh": 24.814495971351832,
+            "grid_import_kwh": 4.097268248992243,
+            "grid_export_kwh": 11.813434841020765,
+            "efficiency_pct": 100.0,
+            "self_sufficiency_pct": 83.5,
+            "temperature_c": 124.8
+          },
+          {
+            "timestamp": "2026-01-23T00:00:00Z",
+            "pv_kwh": 87.876,
+            "load_kwh": 30.64692879914984,
+            "grid_import_kwh": 4.040701381509028,
+            "grid_export_kwh": 0.3199787460148777,
+            "efficiency_pct": 36.7,
+            "self_sufficiency_pct": 86.8,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-24T00:00:00Z",
+            "pv_kwh": 7.682301369863014,
+            "load_kwh": 21.129584705257564,
+            "grid_import_kwh": 2.3582890541976362,
+            "grid_export_kwh": 15.314505844846211,
+            "efficiency_pct": 100.0,
+            "self_sufficiency_pct": 88.8,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-25T00:00:00Z",
+            "pv_kwh": 135.74056123662308,
+            "load_kwh": 26.348370232061882,
+            "grid_import_kwh": 2.344571885836054,
+            "grid_export_kwh": 18.70586823152873,
+            "efficiency_pct": 37.1,
+            "self_sufficiency_pct": 91.1,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-26T00:00:00Z",
+            "pv_kwh": 45.44413636363636,
+            "load_kwh": 28.25311196454948,
+            "grid_import_kwh": 4.063722304283456,
+            "grid_export_kwh": 0.0,
+            "efficiency_pct": 72.1,
+            "self_sufficiency_pct": 85.6,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-27T00:00:00Z",
+            "pv_kwh": 69.53921495327103,
+            "load_kwh": 26.117317021276595,
+            "grid_import_kwh": 5.93346634743285,
+            "grid_export_kwh": 2.8980047885075586,
+            "efficiency_pct": 52.7,
+            "self_sufficiency_pct": 77.3,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-28T00:00:00Z",
+            "pv_kwh": 124.86792166771953,
+            "load_kwh": 31.35138762214984,
+            "grid_import_kwh": 2.520613796849531,
+            "grid_export_kwh": 16.44060293318835,
+            "efficiency_pct": 42.0,
+            "self_sufficiency_pct": 92.0,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-29T00:00:00Z",
+            "pv_kwh": 117.04963295880151,
+            "load_kwh": 31.961016286644952,
+            "grid_import_kwh": 4.032120553896077,
+            "grid_export_kwh": 13.58816182459943,
+            "efficiency_pct": 43.7,
+            "self_sufficiency_pct": 87.4,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-30T00:00:00Z",
+            "pv_kwh": 117.71122950819672,
+            "load_kwh": 26.7286013986014,
+            "grid_import_kwh": 3.670974329054781,
+            "grid_export_kwh": 15.539702450408617,
+            "efficiency_pct": 40.4,
+            "self_sufficiency_pct": 86.3,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-01-31T00:00:00Z",
+            "pv_kwh": 100.38002807017543,
+            "load_kwh": 28.06395334040297,
+            "grid_import_kwh": 3.8506231768761388,
+            "grid_export_kwh": 9.614558472553709,
+            "efficiency_pct": 44.0,
+            "self_sufficiency_pct": 86.3,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-02-01T00:00:00Z",
+            "pv_kwh": 99.70614356435644,
+            "load_kwh": 30.15542211652794,
+            "grid_import_kwh": 4.544305679452899,
+            "grid_export_kwh": 6.105828129646153,
+            "efficiency_pct": 44.0,
+            "self_sufficiency_pct": 84.9,
+            "temperature_c": 125.0
+          },
+          {
+            "timestamp": "2026-02-02T00:00:00Z",
+            "pv_kwh": 83.5323743119266,
+            "load_kwh": 27.363659340659343,
+            "grid_import_kwh": 3.8131761442440912,
+            "grid_export_kwh": 2.9345833333333418,
+            "efficiency_pct": 41.2,
+            "self_sufficiency_pct": 86.1,
+            "temperature_c": 125.0
+          }
+        ]
+      }
+    }
+  },
+  "console_logs": [
+    {
+      "type": "log",
+      "text": "[Telemetry] Polling disabled: not authenticated or auth error",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 35275
+      }
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://182.180.150.107:8050/auth",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users/me/dashboard/preferences",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load dashboard preferences from API: Me",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 49799
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users/me/dashboard/preferences",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] listSites called",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 23979
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] filters: undefined",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 24026
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] pagination: undefined",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 24067
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] API endpoint: /sites",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 24111
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Starting HTTP polling (interval: 10000 ms)",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 35359
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Fetching power flow from API...",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 33618
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] API response: {data: Object, status: 200, statusText: OK, headers: Wn, config: Object}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 24237
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] Response data: {items: Array(1), total: 1, page: 1, page_size: 20, pages: 1}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 24283
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] Response data type: object",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 24335
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SitesService] Response data structure: {hasItems: true, items: Array(1), itemsLength: 1}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 24399
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch users: {detail: Insufficient permissions}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 42220
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Received power flow: {organization_id: 525dd23e-7dfb-452f-b7ca-4557e447ca27, site_id: 271edc3f-f8e8-4aac-acae-78ffd8bf4643, site_name: My Home, timestamp: 2026-02-02T12:42:53.237762+00:00, pv_power_w: 7}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 33717
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Updated with real data: {timestamp: 2026-02-02T12:42:53.237762+00:00, solarPower: 0.007, batteryPower: 1.314, batteryLevel: 98, isCharging: true}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 33846
+      }
+    },
+    {
+      "type": "error",
+      "text": "`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.\n\nIf you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.\n\nFor more information, see https://radix-ui.com/primitives/docs/components/dialog",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 869,
+        "columnNumber": 153
+      }
+    },
+    {
+      "type": "warning",
+      "text": "Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 869,
+        "columnNumber": 499
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Polling disabled: not authenticated or auth error",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 35275
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] useEffect triggered",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 340017
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] urlSiteId from URL params: 271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 340062
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] Current siteId state: 271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 340116
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] isLoadingSite: false",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 340165
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] Using urlSiteId from URL: 271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 340230
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Starting HTTP polling (interval: 10000 ms)",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 35359
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Fetching power flow from API...",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 33618
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Received power flow: {organization_id: 525dd23e-7dfb-452f-b7ca-4557e447ca27, site_id: 271edc3f-f8e8-4aac-acae-78ffd8bf4643, site_name: My Home, timestamp: 2026-02-02T12:42:53.237762+00:00, pv_power_w: 7}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 33717
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Updated with real data: {timestamp: 2026-02-02T12:42:53.237762+00:00, solarPower: 0.007, batteryPower: 1.314, batteryLevel: 98, isCharging: true}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 33846
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "location": {
+        "url": "http://182.180.150.107:8000/api/v1/users",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to fetch users: {detail: Insufficient permissions}",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 42220
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] Render - siteId: 271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 342389
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] Render - siteId type: string",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 342433
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] Render - siteId truthy?: true",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 342489
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] Render - isLoadingSite: false",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 342543
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Billing] Render - Configure Billing button disabled: false",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 960,
+        "columnNumber": 342594
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Telemetry] Fetching power flow from API...",
+      "location": {
+        "url": "http://182.180.150.107:8050/assets/index-sO7VymF6.js",
+        "lineNumber": 817,
+        "columnNumber": 33618
+      }
+    }
+  ],
+  "screenshot_path": "C:\\Users\\kunwa\\PycharmProjects\\solar-hub\\scratchpad\\billing_page_20260202_174324.png"
+}
