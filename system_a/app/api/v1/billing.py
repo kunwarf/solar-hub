@@ -317,31 +317,38 @@ async def recalculate_billing(
     """
     from sqlalchemy import text
 
-    # Delete existing billing simulations for this period
-    query = text("""
-        DELETE FROM billing_simulations
-        WHERE site_id = :site_id
-          AND period_start >= :period_start
-          AND period_end <= :period_end
-        RETURNING id
-    """)
+    try:
+        # Delete existing billing simulations for this period
+        query = text("""
+            DELETE FROM billing_simulations
+            WHERE site_id = :site_id
+              AND period_start >= :period_start
+              AND period_end <= :period_end
+            RETURNING id
+        """)
 
-    result = await uow._session.execute(query, {
-        "site_id": str(site_id),
-        "period_start": period_start,
-        "period_end": period_end
-    })
+        result = await uow._session.execute(query, {
+            "site_id": str(site_id),
+            "period_start": period_start,
+            "period_end": period_end
+        })
 
-    deleted_ids = [row[0] for row in result]
-    deleted_count = len(deleted_ids)
+        deleted_ids = [row[0] for row in result]
+        deleted_count = len(deleted_ids)
 
-    await uow.commit()
+        await uow.commit()
 
-    return {
-        "status": "success",
-        "deleted_count": deleted_count,
-        "message": f"Deleted {deleted_count} billing record(s). The system will regenerate them automatically using timezone-aware data."
-    }
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "message": f"Deleted {deleted_count} billing record(s). The system will regenerate them automatically using timezone-aware data."
+        }
+    except Exception as e:
+        await uow.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to recalculate billing: {str(e)}"
+        )
 
 
 # =========================================================================
