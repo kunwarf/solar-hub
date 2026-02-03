@@ -295,9 +295,10 @@ const InsightCard = ({ insight, onFeedback, feedbackGiven }: InsightCardProps) =
 
 interface AIInsightsWidgetProps {
   widgetsData?: AllWidgetsData | null;
+  weeklyEnergyData?: { totalGenerated: number; totalSaved: number } | null;
 }
 
-export const AIInsightsWidget = ({ widgetsData }: AIInsightsWidgetProps) => {
+export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData }: AIInsightsWidgetProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const [showAnomalies, setShowAnomalies] = useState(true);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
@@ -307,7 +308,20 @@ export const AIInsightsWidget = ({ widgetsData }: AIInsightsWidgetProps) => {
   // Generate insights (memoized, regenerated when widgetsData changes)
   const dailyInsights = useMemo(() => generateDailyInsights(energyInput), [energyInput]);
   const anomalyAlerts = useMemo(() => generateAnomalyAlerts(energyInput), [energyInput]);
-  const weeklyDigest = useMemo(() => generateWeeklyDigest(energyInput), [energyInput]);
+
+  // Use actual 7-day data if available, otherwise estimate from today
+  const weeklyDigest = useMemo(() => {
+    if (weeklyEnergyData) {
+      return {
+        totalGenerated: weeklyEnergyData.totalGenerated,
+        totalSaved: weeklyEnergyData.totalSaved,
+        selfSufficiency: energyInput.selfConsumption || 0,
+        comparedToLastWeek: { generated: 0, saved: 0, selfSufficiency: 0 },
+        tipOfTheWeek: 'Pre-cool your home before peak hours to reduce AC load during expensive evening rates.',
+      };
+    }
+    return generateWeeklyDigest(energyInput);
+  }, [energyInput, weeklyEnergyData]);
 
   const handleFeedback = (id: string, positive: boolean) => {
     setFeedback(prev => ({

@@ -94,7 +94,8 @@ export function convertAlertToUI(alert: ApiAlert): UIAlert {
       minute: '2-digit',
       second: '2-digit',
       hour12: false,
-    }).replace(',', ''),
+      timeZone: 'Asia/Karachi', // Display in site timezone (TODO: get from site config)
+    }).replace(',', '') + ' PKT', // Add timezone indicator
     title: alert.title,
     message: alert.message,
     severity: uiSeverity,

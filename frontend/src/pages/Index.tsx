@@ -33,6 +33,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { devicesService } from "@/api/services/devices.service";
 import { sitesService } from "@/api/services/sites.service";
+import { dashboardService } from "@/api/services/dashboard.service";
 import { useNetMetering } from "@/hooks/use-net-metering";
 
 // Default billing data (used when API data is not yet loaded)
@@ -66,6 +67,7 @@ const Index = () => {
   const [activeId, setActiveId] = useState<WidgetId | null>(null);
   const [firstDeviceId, setFirstDeviceId] = useState<string | undefined>();
   const [siteId, setSiteId] = useState<string>("");
+  const [weeklyEnergyData, setWeeklyEnergyData] = useState<{ totalGenerated: number; totalSaved: number } | null>(null);
 
   // Fetch site ID on mount
   useEffect(() => {
@@ -80,6 +82,29 @@ const Index = () => {
       }
     };
     fetchSiteId();
+  }, []);
+
+  // Fetch 7-day historical data for weekly digest
+  useEffect(() => {
+    const fetchWeeklyData = async () => {
+      try {
+        const weekChart = await dashboardService.getEnergyChart("week");
+        if (weekChart?.data) {
+          const totalGenerated = weekChart.data.reduce((sum, point) => sum + point.pv_kwh, 0);
+          // Approximate savings (would need rates from config for accuracy)
+          const avgRate = 30; // PKR per kWh (TODO: get from billing config)
+          const totalSaved = Math.round(totalGenerated * avgRate);
+          setWeeklyEnergyData({ totalGenerated: Math.round(totalGenerated), totalSaved });
+        }
+      } catch (error) {
+        console.error('[Dashboard] Failed to fetch weekly data:', error);
+        // Fall back to estimation in AIInsightsWidget
+      }
+    };
+    fetchWeeklyData();
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchWeeklyData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // Use net metering hook for real billing data
@@ -391,7 +416,7 @@ const Index = () => {
       case "system-diagram":
         return <VisualSystemDiagram />;
       case "ai-insights":
-        return <AIInsightsWidget widgetsData={widgetsData} />;
+        return <AIInsightsWidget widgetsData={widgetsData} weeklyEnergyData={weeklyEnergyData} />;
       case "peak-demand":
         return <PeakDemandWidget />;
       default:

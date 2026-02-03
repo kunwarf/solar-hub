@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { dashboardService } from "@/api/services/dashboard.service";
 import type { AllWidgetsData, EnergyChartResponse } from "@/api/services/dashboard.service";
+import { getHourInSiteTimezone } from "@/lib/timezone-utils";
 
 export interface EnergyAggregates {
   solarPower: number;
@@ -114,13 +115,17 @@ function mapWidgetsToStats(data: AllWidgetsData): EnergyAggregates {
   };
 }
 
-function mapChartResponse(response: EnergyChartResponse): ChartDataPoint[] {
+function mapChartResponse(
+  response: EnergyChartResponse,
+  siteTimezone: string = "Asia/Karachi" // Default for backward compatibility
+): ChartDataPoint[] {
   return response.data.map((point) => {
-    // Extract hour from ISO timestamp for display
+    // Extract hour from ISO timestamp in SITE timezone (not browser local time)
     let timeLabel: string;
     try {
       const dt = new Date(point.timestamp);
-      timeLabel = `${dt.getHours().toString().padStart(2, "0")}:00`;
+      const hour = getHourInSiteTimezone(dt, siteTimezone);
+      timeLabel = `${hour.toString().padStart(2, "0")}:00`;
     } catch {
       timeLabel = point.timestamp;
     }
@@ -160,7 +165,9 @@ export function useEnergyData() {
       ]);
 
       setStats(mapWidgetsToStats(widgets));
-      setChartData(mapChartResponse(chartResponse));
+      // TODO: Get site timezone from site config API for accurate hour display
+      // For now, defaulting to "Asia/Karachi" which is correct for most deployments
+      setChartData(mapChartResponse(chartResponse, "Asia/Karachi"));
       setWidgetsData(widgets);
       setError(null);
     } catch (err) {
