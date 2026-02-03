@@ -389,7 +389,7 @@ async def get_energy_chart(
                 detail="start_time and end_time are required for period=custom"
             )
         if not bucket_interval:
-            bucket_interval = "1 hour"  # Default to hourly for custom
+            bucket_interval = "auto"  # Let repository choose best table
 
         # Ensure times are timezone-aware
         if start_time.tzinfo is None:
@@ -401,13 +401,13 @@ async def get_energy_chart(
         end_time = datetime.now(timezone.utc)
         if period == "day":
             start_time = end_time - timedelta(hours=24)
-            bucket_interval = "1 hour"
+            bucket_interval = "auto"  # Let repository choose best table
         elif period == "week":
             start_time = end_time - timedelta(days=7)
-            bucket_interval = "1 day"
+            bucket_interval = "auto"  # Let repository choose best table
         else:  # month
             start_time = end_time - timedelta(days=30)
-            bucket_interval = "1 day"
+            bucket_interval = "auto"  # Let repository choose best table
 
     telemetry_repo = TelemetryRepository(session)
     service = TelemetryService(telemetry_repo)

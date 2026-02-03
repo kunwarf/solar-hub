@@ -540,13 +540,17 @@ class TelemetryRepository:
         # Auto-select best table and bucket interval
         if bucket_interval == "auto":
             table_name, bucket_interval = self._select_aggregate_table(start_time, end_time)
-            logger.debug(
-                f"Auto-selected {table_name} with {bucket_interval} bucket "
+            logger.info(
+                f"✓ Auto-selected {table_name} with {bucket_interval} bucket "
                 f"for range {start_time} to {end_time}"
             )
         else:
             # Use specified interval with raw table
             table_name = "telemetry_raw"
+            logger.info(
+                f"Using telemetry_raw with {bucket_interval} bucket "
+                f"(explicit interval, not auto-selected)"
+            )
 
         # Parse interval to seconds for energy calculations
         interval_seconds = 3600  # Default to 1 hour
