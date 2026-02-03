@@ -41,6 +41,7 @@ import { WhatIfCalculator } from "@/components/billing/WhatIfCalculator";
 import { dashboardService } from "@/api/services/dashboard.service";
 import type { AllWidgetsData, EnergyChartResponse } from "@/api/services/dashboard.service";
 import { sitesService } from "@/api/services/sites.service";
+import { billingService } from "@/api/services/billing.service";
 
 interface BillingPageData {
   currentPeriod: {
@@ -295,6 +296,59 @@ const BillingPage = () => {
     }
   };
 
+  const handleRecalculateBilling = async () => {
+    if (!siteId) {
+      toast({
+        title: "Error",
+        description: "No site selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Calculate current month period
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    toast({
+      title: "Recalculating billing",
+      description: "Deleting old records and regenerating with timezone-aware data...",
+    });
+
+    try {
+      const result = await billingService.recalculateBilling({
+        site_id: siteId,
+        period_start: periodStart.toISOString().split('T')[0],
+        period_end: periodEnd.toISOString().split('T')[0],
+      });
+
+      toast({
+        title: "Billing recalculated",
+        description: `${result.message}. Refreshing data...`,
+      });
+
+      // Refresh all data after recalculation
+      await Promise.all([
+        dashboardService.getAllWidgets(),
+        fetchData(),
+        refetchNetMetering(),
+      ]);
+
+      toast({
+        title: "Complete",
+        description: "Billing data has been recalculated and refreshed.",
+      });
+    } catch (error) {
+      console.error("Recalculation failed:", error);
+      toast({
+        title: "Recalculation failed",
+        description: "Could not recalculate billing data. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading || !billingData) {
     return (
       <AppLayout>
@@ -338,6 +392,14 @@ const BillingPage = () => {
           <Button onClick={handleRunScheduler} className="gap-2 bg-green-600 hover:bg-green-700">
             <RefreshCw className="w-4 h-4" />
             Refresh Data
+          </Button>
+          <Button
+            onClick={handleRecalculateBilling}
+            className="gap-2 bg-blue-600 hover:bg-blue-700"
+            disabled={!siteId}
+          >
+            <Calendar className="w-4 h-4" />
+            Recalculate Billing
           </Button>
           <Button
             onClick={() => {

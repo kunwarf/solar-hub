@@ -515,6 +515,23 @@ class BillingService {
     );
     return response.data;
   }
+
+  /**
+   * Recalculate billing for a specific period
+   * Deletes old billing records so they can be regenerated with timezone-aware data
+   */
+  async recalculateBilling(params: {
+    site_id: string;
+    period_start: string;
+    period_end: string;
+  }): Promise<{ status: string; deleted_count: number; message: string }> {
+    const response = await apiClient.post<{ status: string; deleted_count: number; message: string }>(
+      API_ENDPOINTS.billing.recalculate,
+      null,
+      { params }
+    );
+    return response.data;
+  }
 }
 
 export const billingService = new BillingService();

@@ -130,6 +130,7 @@ export const API_ENDPOINTS = {
     simulationById: (id: string) => `/billing/simulations/${id}`,
     compareTariffs: '/billing/compare-tariffs',
     yearlySummary: (siteId: string) => `/billing/yearly-summary/${siteId}`,
+    recalculate: '/billing/recalculate',
   },
 
   // Net Metering Billing (3-month netting cycle)

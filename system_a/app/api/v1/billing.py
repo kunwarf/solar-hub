@@ -297,6 +297,53 @@ async def get_yearly_summary(
     return YearlySummaryResponse(**summary)
 
 
+@router.post(
+    "/recalculate",
+    status_code=status.HTTP_200_OK,
+    summary="Recalculate billing for a period",
+)
+async def recalculate_billing(
+    site_id: UUID = Query(..., description="Site ID"),
+    period_start: date = Query(..., description="Period start date"),
+    period_end: date = Query(..., description="Period end date"),
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """
+    Delete and recalculate billing for a specific period.
+
+    This is useful for regenerating billing data with corrected values
+    (e.g., after timezone migration).
+    """
+    from sqlalchemy import text
+
+    # Delete existing billing simulations for this period
+    query = text("""
+        DELETE FROM billing_simulations
+        WHERE site_id = :site_id
+          AND period_start >= :period_start
+          AND period_end <= :period_end
+        RETURNING id
+    """)
+
+    result = await uow._session.execute(query, {
+        "site_id": str(site_id),
+        "period_start": period_start,
+        "period_end": period_end
+    })
+
+    deleted_ids = [row[0] for row in result]
+    deleted_count = len(deleted_ids)
+
+    await uow.commit()
+
+    return {
+        "status": "success",
+        "deleted_count": deleted_count,
+        "message": f"Deleted {deleted_count} billing record(s). The system will regenerate them automatically using timezone-aware data."
+    }
+
+
 # =========================================================================
 # Comparison Endpoints
 # =========================================================================
