@@ -330,10 +330,14 @@ async def main():
         logger.error("USE_TIMESCALEDB must be 'true' to run this script")
         sys.exit(1)
 
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        logger.error("DATABASE_URL environment variable not set")
-        sys.exit(1)
+    # Build System B connection string
+    timescale_host = os.getenv("TIMESCALE_HOST", "127.0.0.1")
+    timescale_port = os.getenv("TIMESCALE_PORT", "5432")
+    timescale_user = os.getenv("TIMESCALE_USER", "solarhub_telemetry")
+    timescale_password = os.getenv("TIMESCALE_PASSWORD", "")
+    timescale_db = os.getenv("TIMESCALE_DATABASE", "solar_hub_telemetry")
+
+    database_url = f"postgresql://{timescale_user}:{timescale_password}@{timescale_host}:{timescale_port}/{timescale_db}"
 
     # Determine date range
     if args.days:
