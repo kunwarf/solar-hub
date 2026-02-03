@@ -42,6 +42,14 @@ import { dashboardService } from "@/api/services/dashboard.service";
 import type { AllWidgetsData, EnergyChartResponse } from "@/api/services/dashboard.service";
 import { sitesService } from "@/api/services/sites.service";
 import { billingService } from "@/api/services/billing.service";
+import {
+  getSiteNow,
+  getStartOfMonth,
+  getEndOfMonth,
+  formatInSiteTimezone,
+  toDateString,
+  getBillingPeriod
+} from "@/lib/timezone-utils";
 
 interface BillingPageData {
   currentPeriod: {
@@ -74,11 +82,13 @@ interface BillingPageData {
 
 function buildBillingData(
   widgets: AllWidgetsData,
-  chartData: EnergyChartResponse
+  chartData: EnergyChartResponse,
+  siteTimezone: string = "Asia/Karachi" // Default for backward compatibility
 ): BillingPageData {
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  // Use site timezone for date calculations (not browser local time)
+  const now = getSiteNow(siteTimezone);
+  const startOfMonth = getStartOfMonth(now, siteTimezone);
+  const endOfMonth = getEndOfMonth(now, siteTimezone);
   const daysRemaining = Math.max(0, endOfMonth.getDate() - now.getDate());
 
   const { billing, stats } = widgets;
@@ -99,7 +109,8 @@ function buildBillingData(
   // Build monthly history from chart data points
   const monthlyHistory = chartData.data.map((point) => {
     const dt = new Date(point.timestamp);
-    const monthName = dt.toLocaleString("en", { month: "short" });
+    // Format in site timezone, not browser local time
+    const monthName = formatInSiteTimezone(dt, siteTimezone, { month: "short" });
     const produced = point.pv_kwh;
     const imported = point.grid_import_kwh;
     const exported = point.grid_export_kwh;
@@ -216,13 +227,15 @@ const BillingPage = () => {
         dashboardService.getAllWidgets(),
         dashboardService.getEnergyChart("month"),
       ]);
-      setBillingData(buildBillingData(widgets, chartResponse));
+      // Pass site timezone from config (with fallback for backward compatibility)
+      const siteTimezone = netMeteringConfig?.tou_config?.timezone || "Asia/Karachi";
+      setBillingData(buildBillingData(widgets, chartResponse, siteTimezone));
     } catch {
       // Keep previous data on error
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [netMeteringConfig]);
 
   useEffect(() => {
     fetchData();
@@ -307,33 +320,27 @@ const BillingPage = () => {
     }
 
     // Calculate billing period based on anchor_day from config
+    // IMPORTANT: Use site timezone, not browser local time
+    const siteTimezone = netMeteringConfig?.tou_config?.timezone || "Asia/Karachi";
     const now = new Date();
     const anchorDay = netMeteringConfig?.anchor_day || 16; // Default to 16th
 
-    // Determine current billing month based on anchor day
-    let periodStart: Date;
-    let periodEnd: Date;
+    // Get billing period in site timezone
+    const { periodStart, periodEnd: initialPeriodEnd } = getBillingPeriod(
+      now,
+      anchorDay,
+      siteTimezone
+    );
 
-    if (now.getDate() >= anchorDay) {
-      // We're in the current billing month (e.g., Feb 16 - Mar 15)
-      periodStart = new Date(now.getFullYear(), now.getMonth(), anchorDay);
-      periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, anchorDay - 1);
-    } else {
-      // We're still in the previous billing month (e.g., Jan 16 - Feb 15)
-      periodStart = new Date(now.getFullYear(), now.getMonth() - 1, anchorDay);
-      periodEnd = new Date(now.getFullYear(), now.getMonth(), anchorDay - 1);
-    }
-
-    // Cap periodEnd at today to avoid requesting future dates
+    // Cap periodEnd at today (in site timezone) to avoid requesting future dates
     // (Backend will also cap it, but we do it here for better UX)
-    const today = new Date();
+    const today = getSiteNow(siteTimezone);
     today.setHours(0, 0, 0, 0);
-    if (periodEnd > today) {
-      periodEnd = today;
-    }
+    const periodEnd = initialPeriodEnd > today ? today : initialPeriodEnd;
 
-    const periodStartStr = periodStart.toISOString().split('T')[0];
-    const periodEndStr = periodEnd.toISOString().split('T')[0];
+    // Convert to YYYY-MM-DD strings in site timezone
+    const periodStartStr = toDateString(periodStart, siteTimezone);
+    const periodEndStr = toDateString(periodEnd, siteTimezone);
 
     toast({
       title: "Recalculating billing",

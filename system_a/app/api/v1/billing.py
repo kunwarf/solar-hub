@@ -438,7 +438,15 @@ async def recalculate_billing(
 
         # Run billing calculation for each day in the period
         # IMPORTANT: Do not calculate future dates
-        today = date.today()
+        # Get today's date in the site's timezone (not server timezone)
+        from datetime import timezone as dt_timezone
+        from ...domain.services.timezone_utils import TimezoneUtils
+
+        # Get site timezone from billing config (falls back to UTC if not available)
+        site_timezone = config.tou_config.timezone if config.tou_config else "Asia/Karachi"
+        today_utc = datetime.now(dt_timezone.utc)
+        today = TimezoneUtils.get_date_in_timezone(today_utc, site_timezone)
+
         effective_end_date = min(period_end, today)
 
         if period_end > today:
