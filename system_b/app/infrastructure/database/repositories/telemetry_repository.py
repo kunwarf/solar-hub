@@ -475,8 +475,8 @@ class TelemetryRepository:
         """
         Select the most appropriate table and bucket interval based on time range.
 
-        Strategy:
-        - Last 90 days: telemetry_raw (highest resolution)
+        Strategy (aligned with retention policy):
+        - Last 7 days: telemetry_raw (highest resolution, retained for 7 days)
         - Last 1 year: telemetry_hourly_local (timezone-aware hourly aggregate)
         - Last 3 years: telemetry_daily
         - 3-5 years: telemetry_monthly
@@ -487,12 +487,10 @@ class TelemetryRepository:
         """
         time_range = end_time - start_time
 
-        if time_range <= timedelta(days=90):
-            # Recent data - use raw table
+        if time_range <= timedelta(days=7):
+            # Recent data (< 7 days) - use raw table
             if time_range <= timedelta(hours=24):
                 return ("telemetry_raw", "5 minutes")
-            elif time_range <= timedelta(days=7):
-                return ("telemetry_raw", "1 hour")
             else:
                 return ("telemetry_raw", "1 hour")
 
