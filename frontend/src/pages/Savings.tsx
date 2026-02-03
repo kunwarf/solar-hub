@@ -1,3 +1,21 @@
+/**
+ * ⚠️ WARNING: DEMO PAGE WITH MOCK DATA ⚠️
+ *
+ * This page uses HARDCODED VALUES for demonstration:
+ * - System cost: Rs. 850,000
+ * - Install date: 2023-06-15
+ * - Monthly savings: Rs. 12,500
+ * - Degradation rate: 0.5% per year
+ * - Inflation rate: 10% per year
+ * - All financial projections are simulated with Math.random() variance
+ *
+ * TODO: Replace with real billing data integration
+ * - Connect to actual billing history API
+ * - Use real tariff plans for calculations
+ * - Fetch actual system installation details from site configuration
+ * - Calculate savings from real net metering data
+ */
+
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { format, differenceInMonths, differenceInDays, addMonths, addYears } from 'date-fns';

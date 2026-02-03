@@ -112,11 +112,17 @@ export function ComparisonChart({ className, title = "Production Comparison" }: 
               tickLine={false}
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
             />
-            <YAxis 
+            <YAxis
               axisLine={false}
               tickLine={false}
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
               width={35}
+              label={{
+                value: "kWh",
+                angle: -90,
+                position: "insideLeft",
+                style: { fill: "hsl(var(--muted-foreground))", fontSize: 11 }
+              }}
             />
             <Tooltip
               contentStyle={{

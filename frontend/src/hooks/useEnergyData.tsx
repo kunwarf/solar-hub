@@ -129,7 +129,9 @@ function mapChartResponse(response: EnergyChartResponse): ChartDataPoint[] {
       time: timeLabel,
       solar: parseFloat(point.pv_kwh.toFixed(1)),
       consumption: parseFloat(point.load_kwh.toFixed(1)),
-      battery: 0, // battery chart data not in energy-chart endpoint
+      // TODO: Battery data not available in energy-chart API endpoint
+      // Backend needs to add battery charge/discharge kWh per hour to EnergyChartPoint
+      battery: 0,
       grid: parseFloat((point.grid_import_kwh - point.grid_export_kwh).toFixed(1)),
     };
   });

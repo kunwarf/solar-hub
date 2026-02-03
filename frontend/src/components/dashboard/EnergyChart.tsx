@@ -66,7 +66,13 @@ const EnergyChartComponent = ({ data, title, className }: EnergyChartProps) => {
               fontSize={12}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `${value}kW`}
+              tickFormatter={(value) => `${value} kWh`}
+              label={{
+                value: "Energy (kWh)",
+                angle: -90,
+                position: "insideLeft",
+                style: { fill: "hsl(215 14% 55%)", fontSize: 12 }
+              }}
             />
             <Tooltip
               content={({ active, payload, label }) => {
@@ -86,7 +92,7 @@ const EnergyChartComponent = ({ data, title, className }: EnergyChartProps) => {
                               <span className="text-xs text-muted-foreground">{entry.name}</span>
                             </div>
                             <span className="text-xs font-medium text-foreground">
-                              {Math.round(entry.value || 0)} kW
+                              {Math.round(entry.value || 0)} kWh
                             </span>
                           </div>
                         ))}
@@ -94,7 +100,7 @@ const EnergyChartComponent = ({ data, title, className }: EnergyChartProps) => {
                       <div className="border-t border-border mt-2 pt-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">Total</span>
-                          <span className="text-xs font-semibold text-foreground">{Math.round(total)} kW</span>
+                          <span className="text-xs font-semibold text-foreground">{Math.round(total)} kWh</span>
                         </div>
                       </div>
                     </div>

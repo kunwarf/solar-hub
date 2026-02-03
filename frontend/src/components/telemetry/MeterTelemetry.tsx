@@ -1,3 +1,17 @@
+/**
+ * ⚠️ WARNING: MOCK DATA COMPONENT ⚠️
+ *
+ * This component uses 100% HARDCODED/GENERATED MOCK DATA:
+ * - Phase data (Voltage, Current, Power, PF) is completely fabricated
+ * - Historical data is generated using sine wave formulas
+ * - Today's cumulative stats are hardcoded values
+ *
+ * TODO: Replace with real meter API integration
+ * - Connect to actual meter telemetry endpoints
+ * - Use real-time phase measurements
+ * - Fetch historical import/export data from System B
+ */
+
 import { motion } from "framer-motion";
 import { Zap, ArrowUpRight, ArrowDownLeft, Activity, Gauge, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
