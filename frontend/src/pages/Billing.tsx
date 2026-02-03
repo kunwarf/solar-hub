@@ -306,10 +306,23 @@ const BillingPage = () => {
       return;
     }
 
-    // Calculate current month period
+    // Calculate billing period based on anchor_day from config
     const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const anchorDay = netMeteringConfig?.anchor_day || 16; // Default to 16th
+
+    // Determine current billing month based on anchor day
+    let periodStart: Date;
+    let periodEnd: Date;
+
+    if (now.getDate() >= anchorDay) {
+      // We're in the current billing month (e.g., Feb 16 - Mar 15)
+      periodStart = new Date(now.getFullYear(), now.getMonth(), anchorDay);
+      periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, anchorDay - 1);
+    } else {
+      // We're still in the previous billing month (e.g., Jan 16 - Feb 15)
+      periodStart = new Date(now.getFullYear(), now.getMonth() - 1, anchorDay);
+      periodEnd = new Date(now.getFullYear(), now.getMonth(), anchorDay - 1);
+    }
 
     toast({
       title: "Recalculating billing",
