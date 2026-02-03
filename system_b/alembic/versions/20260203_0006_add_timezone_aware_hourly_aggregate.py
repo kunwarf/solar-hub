@@ -25,7 +25,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "0006"
-down_revision: Union[str, None] = "0005"
+down_revision: Union[str, None] = "0007"  # Depends on sites_metadata table
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -51,9 +51,9 @@ def upgrade() -> None:
     # 2. TOU (Time of Use) classification
     # 3. Multi-timezone support for global expansion
     #
-    # Note: We JOIN with sites table to get timezone, so this aggregate has
-    # a dependency on sites table. The bucket_timezone column allows validation
-    # and handling of timezone changes.
+    # Note: We JOIN with sites_metadata table (System B) to get timezone.
+    # sites_metadata is a lookup table synced from System A's sites table.
+    # The bucket_timezone column allows validation and handling of timezone changes.
     op.execute("""
         CREATE MATERIALIZED VIEW IF NOT EXISTS telemetry_hourly_local
         WITH (timescaledb.continuous) AS
@@ -90,7 +90,7 @@ def upgrade() -> None:
             EXTRACT(HOUR FROM (tr.time AT TIME ZONE s.timezone))::int as local_hour
 
         FROM telemetry_raw tr
-        INNER JOIN sites s ON tr.site_id = s.id
+        INNER JOIN sites_metadata s ON tr.site_id = s.id
         GROUP BY bucket_local, bucket_timezone, tr.site_id, tr.device_id, tr.metric_name
         WITH NO DATA;
     """)
