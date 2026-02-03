@@ -270,15 +270,30 @@ class DateRange:
         return cls(start_date=start, end_date=end)
 
     @classmethod
-    def last_days(cls, days: int) -> 'DateRange':
-        """Create range for last N days."""
-        today = date.today()
+    def last_days(cls, days: int, tz: Optional[timezone] = None) -> 'DateRange':
+        """
+        Create range for last N days.
+
+        Args:
+            days: Number of days
+            tz: Timezone to determine "today" (default: UTC)
+        """
+        tz = tz or timezone.utc
+        now = datetime.now(tz)
+        today = now.date()
         return cls(start_date=today - timedelta(days=days - 1), end_date=today)
 
     @classmethod
-    def this_month(cls) -> 'DateRange':
-        """Create range for current month."""
-        today = date.today()
+    def this_month(cls, tz: Optional[timezone] = None) -> 'DateRange':
+        """
+        Create range for current month.
+
+        Args:
+            tz: Timezone to determine current month (default: UTC)
+        """
+        tz = tz or timezone.utc
+        now = datetime.now(tz)
+        today = now.date()
         start = today.replace(day=1)
         if today.month == 12:
             end = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)

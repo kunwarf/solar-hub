@@ -58,14 +58,29 @@ class TelemetryService:
             device_id: Device UUID.
             site_id: Site UUID.
             metrics: Dict of metric_name: value pairs.
-            timestamp: Reading timestamp (defaults to now).
+            timestamp: Reading timestamp (defaults to now). Must be timezone-aware UTC.
             source: Data source identifier.
             validate: Whether to validate against metric definitions.
 
         Returns:
             Number of metrics ingested.
+
+        Raises:
+            ValueError: If timestamp is not timezone-aware or not in UTC.
         """
-        timestamp = timestamp or datetime.now(timezone.utc)
+        # Validate timestamp is UTC timezone-aware
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+        else:
+            if timestamp.tzinfo is None:
+                raise ValueError(
+                    "Timestamp must be timezone-aware. "
+                    "System B requires all timestamps in UTC timezone."
+                )
+            # Convert to UTC if not already (standardize all telemetry to UTC)
+            if timestamp.tzinfo != timezone.utc:
+                timestamp = timestamp.astimezone(timezone.utc)
+
         points: List[TelemetryPoint] = []
 
         for metric_name, value in metrics.items():
