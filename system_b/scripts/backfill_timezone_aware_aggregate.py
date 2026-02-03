@@ -230,7 +230,7 @@ async def validate_backfill(
         """
         SELECT COUNT(*)
         FROM telemetry_hourly_local
-        WHERE bucket_local::date BETWEEN $1 AND $2
+        WHERE bucket::date BETWEEN $1 AND $2
         """,
         start_date,
         end_date
