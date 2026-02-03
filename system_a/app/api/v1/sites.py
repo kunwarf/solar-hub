@@ -397,18 +397,34 @@ async def update_site(
         site.description = request.description
 
     if request.address is not None:
+        # Preserve existing geo_location if not provided separately
+        geo_loc = site.address.geo_location if hasattr(site, 'address') and site.address else None
+
         site.address = Address(
-            street=request.address.street,
+            street_address=request.address.street or "",
             city=request.address.city,
-            state=request.address.state,
+            province=request.address.state or "Punjab",  # Map 'state' to 'province'
             postal_code=request.address.postal_code,
             country=request.address.country,
+            geo_location=geo_loc,
         )
 
     if request.geo_location is not None:
-        site.geo_location = GeoLocation(
+        # Update geo_location within address (not a separate field)
+        new_geo = GeoLocation(
             latitude=request.geo_location.latitude,
             longitude=request.geo_location.longitude,
+        )
+        # Create new Address with updated geo_location
+        site.address = Address(
+            street_address=site.address.street_address,
+            city=site.address.city,
+            province=site.address.province,
+            postal_code=site.address.postal_code,
+            country=site.address.country,
+            district=site.address.district,
+            area=site.address.area,
+            geo_location=new_geo,
         )
 
     if request.timezone is not None:

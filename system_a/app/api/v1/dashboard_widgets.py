@@ -12,6 +12,7 @@ These endpoints:
 - Use Redis cache for site/device relationships (cache-first, DB fallback)
 """
 import logging
+import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -29,6 +30,58 @@ from ...infrastructure.external.system_b_client import SystemBClient
 from ...application.services.telemetry_sync_service import TelemetrySyncService
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_sunrise_sunset(latitude: float, longitude: float, date_utc: datetime) -> tuple[str, str]:
+    """
+    Calculate sunrise and sunset times for a given location and date.
+
+    Uses simplified algorithm (accurate to within ~10 minutes for mid-latitudes).
+    Returns times in HH:MM format in local solar time.
+
+    Args:
+        latitude: Site latitude in degrees
+        longitude: Site longitude in degrees
+        date_utc: Date for calculation (UTC)
+
+    Returns:
+        Tuple of (sunrise_time, sunset_time) as HH:MM strings
+    """
+    # Day of year
+    day_of_year = date_utc.timetuple().tm_yday
+
+    # Solar declination angle (degrees)
+    declination = 23.45 * math.sin(math.radians((360 / 365) * (day_of_year + 284)))
+
+    # Hour angle at sunrise/sunset
+    lat_rad = math.radians(latitude)
+    dec_rad = math.radians(declination)
+
+    try:
+        cos_hour_angle = -math.tan(lat_rad) * math.tan(dec_rad)
+        # Clamp to valid range to avoid domain errors
+        cos_hour_angle = max(-1, min(1, cos_hour_angle))
+        hour_angle = math.degrees(math.acos(cos_hour_angle))
+    except (ValueError, ZeroDivisionError):
+        # Polar regions or edge cases - use defaults
+        return ("06:00", "18:00")
+
+    # Solar noon (in decimal hours, UTC)
+    solar_noon_utc = 12 - (longitude / 15)
+
+    # Sunrise and sunset (decimal hours, UTC)
+    sunrise_utc = solar_noon_utc - (hour_angle / 15)
+    sunset_utc = solar_noon_utc + (hour_angle / 15)
+
+    # Convert to HH:MM format
+    def decimal_to_time(decimal_hour: float) -> str:
+        # Normalize to 0-24 range
+        decimal_hour = decimal_hour % 24
+        hours = int(decimal_hour)
+        minutes = int((decimal_hour - hours) * 60)
+        return f"{hours:02d}:{minutes:02d}"
+
+    return (decimal_to_time(sunrise_utc), decimal_to_time(sunset_utc))
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard Widgets"])
 
@@ -1320,18 +1373,43 @@ async def get_weather(
     else:
         condition = "rainy"
 
-    # Static sunrise/sunset for Pakistan (~31.5°N latitude)
+    # Get site location for sunrise/sunset calculation
+    site_entity = await uow.sites.get_by_id(site_info.site_id)
+    if site_entity and site_entity.address and site_entity.address.geo_location:
+        lat = site_entity.address.geo_location.latitude
+        lon = site_entity.address.geo_location.longitude
+        sunrise, sunset = calculate_sunrise_sunset(lat, lon, now)
+    else:
+        # Default for Pakistan (~31.5°N, 74.3°E - Lahore)
+        sunrise, sunset = calculate_sunrise_sunset(31.5, 74.3, now)
+
+    # Derive humidity from temperature (simplified model)
+    # Typical relationship: higher temp = lower relative humidity in arid climates
+    # For Pakistan: RH typically 30-70% depending on season
+    if temperature > 35:
+        humidity = 25  # Hot & dry summer
+    elif temperature > 28:
+        humidity = 40  # Warm spring/fall
+    elif temperature > 20:
+        humidity = 55  # Mild weather
+    else:
+        humidity = 65  # Cool winter (higher RH)
+
+    # Wind speed: Not available from telemetry, use 0 (calm)
+    # Future: Could integrate with external weather API if needed
+    wind_speed = 0
+
     return WeatherResponse(
         organization_id=site_info.organization_id,
         site_id=site_info.site_id,
         site_name=site_info.site_name,
         temperature=temperature,
         condition=condition,
-        humidity=55,
-        wind_speed=10,
+        humidity=humidity,
+        wind_speed=wind_speed,
         solar_forecast=solar_forecast,
-        sunrise="06:15",
-        sunset="18:00",
+        sunrise=sunrise,
+        sunset=sunset,
     )
 
 

@@ -24,6 +24,7 @@ from ..models.telemetry_model import (
 )
 from ...external.system_b_client import SystemBClient
 from ....config import settings
+from ....domain.services.timezone_utils import TimezoneUtils
 
 logger = logging.getLogger(__name__)
 
@@ -385,18 +386,27 @@ class SQLAlchemyTelemetryRepository:
             logger.error(f"Failed to fetch daily summaries from System B: {e}")
             return []
 
-    async def get_today_energy(self, site_id: UUID) -> Dict[str, float]:
+    async def get_today_energy(self, site_id: UUID, site_timezone: str = "Asia/Karachi") -> Dict[str, float]:
         """
         Get today's energy totals for a site.
 
         Now queries System B for today's data.
+
+        Args:
+            site_id: Site UUID
+            site_timezone: Site timezone (default: Asia/Karachi for backward compatibility)
         """
-        today = date.today()
+        # Get "today" in site's timezone
+        now_utc = datetime.now(timezone.utc)
+        today = TimezoneUtils.get_date_in_timezone(now_utc, site_timezone)
+
         try:
             client = await self._get_system_b_client()
 
-            start_time = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
-            end_time = datetime.now(timezone.utc)
+            # Get UTC range for "today" in site timezone
+            start_time, end_time_eod = TimezoneUtils.get_local_date_range(today, site_timezone)
+            # Use current time if still today, otherwise end of day
+            end_time = min(now_utc, end_time_eod)
 
             data_points = await client.get_hourly_energy_summary(
                 site_id=site_id,
@@ -523,9 +533,17 @@ class SQLAlchemyTelemetryRepository:
             logger.error(f"Failed to fetch monthly summary from System B: {e}")
             return None
 
-    async def get_this_month_energy(self, site_id: UUID) -> float:
-        """Get total energy generated this month."""
-        today = date.today()
+    async def get_this_month_energy(self, site_id: UUID, site_timezone: str = "Asia/Karachi") -> float:
+        """
+        Get total energy generated this month.
+
+        Args:
+            site_id: Site UUID
+            site_timezone: Site timezone (default: Asia/Karachi for backward compatibility)
+        """
+        # Get current month in site's timezone
+        now_utc = datetime.now(timezone.utc)
+        today = TimezoneUtils.get_date_in_timezone(now_utc, site_timezone)
         summary = await self.get_monthly_summary(site_id, today.year, today.month)
         return summary.energy_generated_kwh if summary else 0.0
 
@@ -601,8 +619,15 @@ class SQLAlchemyTelemetryRepository:
     async def aggregate_org_totals(
         self,
         site_ids: List[UUID],
+        org_timezone: str = "Asia/Karachi",
     ) -> Dict[str, float]:
-        """Aggregate today's energy totals across multiple sites."""
+        """
+        Aggregate today's energy totals across multiple sites.
+
+        Args:
+            site_ids: List of site UUIDs
+            org_timezone: Organization timezone (default: Asia/Karachi for backward compatibility)
+        """
         if not site_ids:
             return {
                 "energy_today_kwh": 0.0,
@@ -610,7 +635,9 @@ class SQLAlchemyTelemetryRepository:
                 "current_power_kw": 0.0,
             }
 
-        today = date.today()
+        # Get "today" in organization's timezone
+        now_utc = datetime.now(timezone.utc)
+        today = TimezoneUtils.get_date_in_timezone(now_utc, org_timezone)
 
         # Today's energy
         daily_query = select(
