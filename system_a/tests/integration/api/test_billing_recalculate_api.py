@@ -42,19 +42,43 @@ class TestBillingRecalculateEndpoint:
 
     @pytest.mark.asyncio
     async def test_recalculate_billing_success(self, mock_uow, mock_current_user):
-        """Test successful billing recalculation."""
+        """Test successful billing recalculation from all tables."""
         from fastapi.testclient import TestClient
         from system_a.app.main import app
         from system_a.app.api.dependencies import get_current_user, get_unit_of_work
 
-        # Mock the execute result
-        mock_result = MagicMock()
-        mock_result.__iter__ = MagicMock(return_value=iter([
-            (uuid4(),),
-            (uuid4(),),
-            (uuid4(),),
+        # Mock execute results for all 4 DELETE queries
+        # 1. billing_daily (5 records)
+        mock_daily_result = MagicMock()
+        mock_daily_result.__iter__ = MagicMock(return_value=iter([
+            (uuid4(),) for _ in range(5)
         ]))
-        mock_uow._session.execute.return_value = mock_result
+
+        # 2. billing_months (2 records)
+        mock_months_result = MagicMock()
+        mock_months_result.__iter__ = MagicMock(return_value=iter([
+            (uuid4(),) for _ in range(2)
+        ]))
+
+        # 3. billing_cycles (1 record)
+        mock_cycles_result = MagicMock()
+        mock_cycles_result.__iter__ = MagicMock(return_value=iter([
+            (uuid4(),)
+        ]))
+
+        # 4. billing_simulations (3 records)
+        mock_sims_result = MagicMock()
+        mock_sims_result.__iter__ = MagicMock(return_value=iter([
+            (uuid4(),) for _ in range(3)
+        ]))
+
+        # Return different results for each execute call in order
+        mock_uow._session.execute.side_effect = [
+            mock_daily_result,
+            mock_months_result,
+            mock_cycles_result,
+            mock_sims_result,
+        ]
 
         # Override dependencies
         app.dependency_overrides[get_current_user] = lambda: mock_current_user
@@ -76,11 +100,15 @@ class TestBillingRecalculateEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
-        assert data["deleted_count"] == 3
-        assert "regenerate them automatically" in data["message"]
+        assert data["deleted_count"] == 11  # 5 + 2 + 1 + 3
+        assert data["deleted_daily"] == 5
+        assert data["deleted_months"] == 2
+        assert data["deleted_cycles"] == 1
+        assert data["deleted_simulations"] == 3
+        assert "billing scheduler will regenerate" in data["message"]
 
-        # Verify database operations
-        mock_uow._session.execute.assert_called_once()
+        # Verify database operations - should call execute 4 times (4 DELETE queries)
+        assert mock_uow._session.execute.call_count == 4
         mock_uow.commit.assert_called_once()
 
         # Clean up
@@ -88,15 +116,22 @@ class TestBillingRecalculateEndpoint:
 
     @pytest.mark.asyncio
     async def test_recalculate_billing_no_records(self, mock_uow, mock_current_user):
-        """Test recalculation when no billing records exist."""
+        """Test recalculation when no billing records exist in any table."""
         from fastapi.testclient import TestClient
         from system_a.app.main import app
         from system_a.app.api.dependencies import get_current_user, get_unit_of_work
 
-        # Mock empty result
-        mock_result = MagicMock()
-        mock_result.__iter__ = MagicMock(return_value=iter([]))
-        mock_uow._session.execute.return_value = mock_result
+        # Mock empty results for all 4 DELETE queries
+        mock_empty_result = MagicMock()
+        mock_empty_result.__iter__ = MagicMock(return_value=iter([]))
+
+        # All 4 queries return empty results
+        mock_uow._session.execute.side_effect = [
+            mock_empty_result,  # billing_daily
+            mock_empty_result,  # billing_months
+            mock_empty_result,  # billing_cycles
+            mock_empty_result,  # billing_simulations
+        ]
 
         # Override dependencies
         app.dependency_overrides[get_current_user] = lambda: mock_current_user
@@ -119,7 +154,11 @@ class TestBillingRecalculateEndpoint:
         data = response.json()
         assert data["status"] == "success"
         assert data["deleted_count"] == 0
-        assert "0 billing record(s)" in data["message"]
+        assert data["deleted_daily"] == 0
+        assert data["deleted_months"] == 0
+        assert data["deleted_cycles"] == 0
+        assert data["deleted_simulations"] == 0
+        assert "0 total records" in data["message"]
 
         # Clean up
         app.dependency_overrides.clear()
@@ -277,12 +316,29 @@ class TestBillingRecalculateEndpoint:
         from system_a.app.main import app
         from system_a.app.api.dependencies import get_current_user, get_unit_of_work
 
-        # Mock result with many records
-        mock_result = MagicMock()
-        mock_result.__iter__ = MagicMock(return_value=iter([
-            (uuid4(),) for _ in range(10)
-        ]))
-        mock_uow._session.execute.return_value = mock_result
+        # Mock results for 3-month period (more records expected)
+        # billing_daily: 90 days
+        mock_daily = MagicMock()
+        mock_daily.__iter__ = MagicMock(return_value=iter([(uuid4(),) for _ in range(90)]))
+
+        # billing_months: 3 months
+        mock_months = MagicMock()
+        mock_months.__iter__ = MagicMock(return_value=iter([(uuid4(),) for _ in range(3)]))
+
+        # billing_cycles: 1 cycle (3 months = 1 cycle)
+        mock_cycles = MagicMock()
+        mock_cycles.__iter__ = MagicMock(return_value=iter([(uuid4(),)]))
+
+        # billing_simulations: assume some simulations exist
+        mock_sims = MagicMock()
+        mock_sims.__iter__ = MagicMock(return_value=iter([(uuid4(),) for _ in range(5)]))
+
+        mock_uow._session.execute.side_effect = [
+            mock_daily,
+            mock_months,
+            mock_cycles,
+            mock_sims,
+        ]
 
         # Override dependencies
         app.dependency_overrides[get_current_user] = lambda: mock_current_user
@@ -304,38 +360,69 @@ class TestBillingRecalculateEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
-        assert data["deleted_count"] == 10
+        assert data["deleted_count"] == 99  # 90 + 3 + 1 + 5
+        assert data["deleted_daily"] == 90
+        assert data["deleted_months"] == 3
+        assert data["deleted_cycles"] == 1
+        assert data["deleted_simulations"] == 5
 
         # Clean up
         app.dependency_overrides.clear()
 
 
 class TestBillingRecalculateSQLQuery:
-    """Test that the SQL query is constructed correctly."""
+    """Test that the SQL queries are constructed correctly."""
 
-    def test_sql_query_parameters(self):
-        """Test that SQL query uses correct parameters."""
+    def test_sql_query_parameters_all_tables(self):
+        """Test that all 4 DELETE queries use correct parameters."""
         from sqlalchemy import text
 
-        # The query from the endpoint
-        query = text("""
-            DELETE FROM billing_simulations
-            WHERE site_id = :site_id
-              AND period_start >= :period_start
-              AND period_end <= :period_end
-            RETURNING id
-        """)
-
-        # Test that it can be bound with parameters
+        # Test parameters
         params = {
             "site_id": str(SITE_ID),
             "period_start": date(2026, 1, 1),
             "period_end": date(2026, 1, 31)
         }
 
-        # Should not raise exception
-        bound_query = query.bindparams(**params)
-        assert bound_query is not None
+        # Query 1: billing_daily
+        daily_query = text("""
+            DELETE FROM billing_daily
+            WHERE site_id = :site_id
+              AND date >= :period_start
+              AND date <= :period_end
+            RETURNING id
+        """)
+        assert daily_query.bindparams(**params) is not None
+
+        # Query 2: billing_months
+        months_query = text("""
+            DELETE FROM billing_months
+            WHERE site_id = :site_id
+              AND period_start_date <= :period_end
+              AND period_end_date >= :period_start
+            RETURNING id
+        """)
+        assert months_query.bindparams(**params) is not None
+
+        # Query 3: billing_cycles
+        cycles_query = text("""
+            DELETE FROM billing_cycles
+            WHERE site_id = :site_id
+              AND cycle_start_date <= :period_end
+              AND cycle_end_date >= :period_start
+            RETURNING id
+        """)
+        assert cycles_query.bindparams(**params) is not None
+
+        # Query 4: billing_simulations
+        sims_query = text("""
+            DELETE FROM billing_simulations
+            WHERE site_id = :site_id
+              AND period_start >= :period_start
+              AND period_end <= :period_end
+            RETURNING id
+        """)
+        assert sims_query.bindparams(**params) is not None
 
     def test_sql_query_date_range_logic(self):
         """Test that date range filtering logic is correct."""
