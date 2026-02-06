@@ -191,6 +191,14 @@ class DeviceManager:
 
         logger.info(f"Updated connection for device {device_id}")
 
+        # Trigger device added callback to restart polling
+        # This is critical for reconnections - polling must be restarted
+        if self._on_device_added:
+            try:
+                await self._on_device_added(device_id, device_state)
+            except Exception as e:
+                logger.error(f"Error in on_device_added callback during reconnection: {e}")
+
     async def remove_device(self, device_id: UUID) -> None:
         """
         Remove a device.
