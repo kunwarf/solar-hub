@@ -442,8 +442,11 @@ async def recalculate_billing(
         from datetime import timezone as dt_timezone
         from ...domain.services.timezone_utils import TimezoneUtils
 
+        # Fetch billing configuration to get site timezone
+        config = await nm_repo.get_billing_config_by_site(site_id)
+
         # Get site timezone from billing config (falls back to UTC if not available)
-        site_timezone = config.tou_config.timezone if config.tou_config else "Asia/Karachi"
+        site_timezone = config.tou_config.timezone if config and config.tou_config else "Asia/Karachi"
         today_utc = datetime.now(dt_timezone.utc)
         today = TimezoneUtils.get_date_in_timezone(today_utc, site_timezone)
 
