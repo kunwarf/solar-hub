@@ -439,7 +439,7 @@ async def recalculate_billing(
         # Run billing calculation for each day in the period
         # IMPORTANT: Do not calculate future dates
         # Get today's date in the site's timezone (not server timezone)
-        from datetime import timezone as dt_timezone
+        from datetime import datetime, timezone as dt_timezone
         from ...domain.services.timezone_utils import TimezoneUtils
 
         # Fetch billing configuration to get site timezone
