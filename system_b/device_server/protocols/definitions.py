@@ -108,6 +108,32 @@ class CommandConfig:
 
 
 @dataclass
+class TelemetryConfig:
+    """
+    Telemetry interpretation configuration.
+
+    Handles manufacturer-specific interpretation of telemetry values,
+    particularly for battery power sign conventions.
+    """
+    # Battery power sign convention
+    # - "negative_charging": negative power = charging (e.g., Powdrive, Deye)
+    # - "positive_charging": positive power = charging (e.g., Senergy, SMA)
+    battery_power_sign_convention: str = "positive_charging"
+
+    def should_invert_battery_power(self) -> bool:
+        """
+        Check if battery power should be inverted for standard representation.
+
+        Standard convention: positive = charging, negative = discharging
+        If manufacturer uses negative = charging, we need to invert.
+
+        Returns:
+            True if battery power values should be inverted.
+        """
+        return self.battery_power_sign_convention == "negative_charging"
+
+
+@dataclass
 class ProtocolDefinition:
     """
     Complete protocol definition for a device type.
@@ -141,6 +167,7 @@ class ProtocolDefinition:
     # Protocol-specific config
     modbus: Optional[ModbusConfig] = None
     command: Optional[CommandConfig] = None
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
 
     # Adapter class name (for dynamic loading)
     adapter_class: Optional[str] = None

@@ -20,6 +20,10 @@ class PowdriveParser(TelemetryParser):
 
     Extracts power, energy, battery, grid, and temperature metrics
     from the flat JSON telemetry format into normalized rows.
+
+    NOTE: Powdrive uses negative values for battery charging.
+    Standard convention: positive = charging, negative = discharging.
+    Battery power values are inverted during parsing to match standard convention.
     """
 
     # Metric mappings: json_field -> (metric_name, unit, category)
@@ -110,6 +114,12 @@ class PowdriveParser(TelemetryParser):
         ('inverter_type', ('inverter_type', 'enum', 'config')),
     ]
 
+    # Metrics that need sign inversion (Powdrive uses negative = charging)
+    INVERT_SIGN_METRICS = {
+        'battery_power_w',  # Powdrive: negative = charging, we want positive = charging
+        'battery_current_a',  # Powdrive: negative = charging current
+    }
+
     def parse(
         self,
         telemetry_data: Dict[str, Any],
@@ -179,6 +189,16 @@ class PowdriveParser(TelemetryParser):
             else:
                 try:
                     numeric_value = float(value)
+
+                    # Invert sign for Powdrive battery metrics
+                    # Powdrive uses negative values for charging, we use positive = charging
+                    if json_field in self.INVERT_SIGN_METRICS:
+                        numeric_value = -numeric_value
+                        logger.debug(
+                            f"Inverted {json_field}: {value} -> {numeric_value} "
+                            f"(Powdrive convention: negative = charging)"
+                        )
+
                     metric = TelemetryMetric(
                         time=timestamp,
                         device_id=device_id,

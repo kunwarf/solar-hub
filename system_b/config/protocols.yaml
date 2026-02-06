@@ -41,6 +41,10 @@ protocols:
       timeout: 5.0
       retries: 3
 
+    telemetry:
+      # Powdrive uses negative values for charging
+      battery_power_sign_convention: "negative_charging"
+
   - id: senergy
     name: "Senergy Hybrid Inverter"
     description: "Senergy series hybrid inverters"
@@ -72,6 +76,10 @@ protocols:
       unit_id: 1
       timeout: 5.0
       retries: 3
+
+    telemetry:
+      # Senergy uses standard convention: positive = charging
+      battery_power_sign_convention: "positive_charging"
 
   # ============================================
   # ENERGY METERS
