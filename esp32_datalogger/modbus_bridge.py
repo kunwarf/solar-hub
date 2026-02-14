@@ -82,8 +82,12 @@ def http_post_json(url, data, timeout=10):
 
         sock.close()
 
-        # Parse response
-        response = response.decode("utf-8", errors="ignore")
+        # Parse response (MicroPython doesn't support errors parameter)
+        try:
+            response = response.decode("utf-8")
+        except:
+            # If decode fails, try latin-1 which accepts all byte values
+            response = response.decode("latin-1")
 
         # Split headers and body
         if "\r\n\r\n" in response:
