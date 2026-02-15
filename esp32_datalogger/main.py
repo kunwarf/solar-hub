@@ -16,10 +16,14 @@ Usage:
 import time
 import _thread
 
-# Import log_print and override built-in print to capture logs
-from log_buffer import log_print
-import builtins
-builtins.print = log_print
+# Import log_print and override built-in print to capture logs (optional)
+try:
+    from log_buffer import log_print
+    import builtins
+    builtins.print = log_print
+    print("[Main] Log buffer enabled - logs available on web interface")
+except ImportError:
+    print("[Main] Log buffer not available - upload log_buffer.py for web logging")
 
 from config import get_config, get_device_id, AP_PASSWORD, get_ap_ssid
 from wifi_manager import WiFiManager

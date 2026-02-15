@@ -11,7 +11,16 @@ from config import (
     load_config, save_config, load_wifi, save_wifi,
     get_config, get_device_id, DEFAULT_CONFIG
 )
-from log_buffer import get_log_buffer
+
+# Optional log buffer for web interface logging
+try:
+    from log_buffer import get_log_buffer
+    _LOG_BUFFER_AVAILABLE = True
+except ImportError:
+    _LOG_BUFFER_AVAILABLE = False
+    def get_log_buffer():
+        """Dummy function when log_buffer not available."""
+        return None
 
 
 # HTML Templates
@@ -163,7 +172,9 @@ class WebServer:
                 since_id = int(since_id) if since_id else None
                 return self._json_response(self._get_logs_json(since_id))
             elif path == "/api/logs/clear":
-                get_log_buffer().clear()
+                log_buffer = get_log_buffer()
+                if log_buffer:
+                    log_buffer.clear()
                 return self._json_response({"success": True})
             elif path == "/wifi":
                 if method == "POST":
@@ -262,7 +273,7 @@ class WebServer:
 
         # Recent Logs
         log_buffer = get_log_buffer()
-        recent_logs = log_buffer.get_recent(count=10)
+        recent_logs = log_buffer.get_recent(count=10) if log_buffer else []
 
         html += '<div class="card"><h2>Recent Logs</h2>'
         if recent_logs:
@@ -448,6 +459,18 @@ class WebServer:
 
     def _page_logs(self):
         """Console logs page with real-time updates."""
+        # Check if log buffer is available
+        if not _LOG_BUFFER_AVAILABLE:
+            return '''
+<div class="card">
+    <h2>Console Logs</h2>
+    <div class="status status-err">
+        Log buffer not available. Please upload <code>log_buffer.py</code> to enable web logging.
+    </div>
+    <p>The log buffer module is required for viewing logs through the web interface.</p>
+</div>
+'''
+
         html = '''
 <div class="card">
     <h2>Console Logs</h2>
@@ -606,6 +629,9 @@ refreshLogs();
     def _get_logs_json(self, since_id=None):
         """Get logs as JSON."""
         log_buffer = get_log_buffer()
+
+        if not log_buffer:
+            return {"logs": [], "count": 0, "last_id": 0}
 
         if since_id is not None:
             logs = log_buffer.get_recent(count=100, since_id=since_id)
