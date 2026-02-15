@@ -16,6 +16,11 @@ Usage:
 import time
 import _thread
 
+# Import log_print and override built-in print to capture logs
+from log_buffer import log_print
+import builtins
+builtins.print = log_print
+
 from config import get_config, get_device_id, AP_PASSWORD, get_ap_ssid
 from wifi_manager import WiFiManager
 from modbus_rtu import ModbusRTU
