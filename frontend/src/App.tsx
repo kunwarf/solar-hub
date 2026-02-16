@@ -13,8 +13,10 @@ import { TelemetryProvider } from "@/contexts/TelemetryContext";
 import { TariffProvider } from "@/contexts/TariffContext";
 import { UserRoleProvider } from "@/contexts/UserRoleContext";
 import { DashboardLayoutProvider } from "@/contexts/DashboardLayoutContext";
+import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { AdminGuard } from "@/components/admin/AdminGuard";
 import Auth from "./pages/Auth";
 import Index from "./pages/Index";
 import Devices from "./pages/Devices";
@@ -38,6 +40,14 @@ import Commissioning from "./pages/Commissioning";
 import Install from "./pages/Install";
 import ClaimDevice from "./pages/ClaimDevice";
 import NotFound from "./pages/NotFound";
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminDashboard from "./pages/admin/Index";
+import AuditLog from "./pages/admin/AuditLog";
+import ElectricityProviders from "./pages/admin/ElectricityProviders";
+import TariffManagement from "./pages/admin/TariffManagement";
+import FirmwareVersions from "./pages/admin/FirmwareVersions";
+import OTACampaigns from "./pages/admin/OTACampaigns";
+import SystemSettings from "./pages/admin/SystemSettings";
 
 const queryClient = new QueryClient();
 
@@ -49,11 +59,12 @@ const App = () => (
           <AuthProvider>
             <UserModeProvider>
               <UserRoleProvider>
-                <SetupWizardProvider>
-                  <TelemetryProvider>
-                    <TariffProvider>
-                      <DashboardLayoutProvider>
-                        <TooltipProvider>
+                <AdminAuthProvider>
+                  <SetupWizardProvider>
+                    <TelemetryProvider>
+                      <TariffProvider>
+                        <DashboardLayoutProvider>
+                          <TooltipProvider>
                           {/* Skip to main content link for accessibility */}
                           <a href="#main-content" className="skip-link">
                             Skip to main content
@@ -83,14 +94,26 @@ const App = () => (
                               <Route path="/commissioning" element={<ProtectedRoute><Commissioning /></ProtectedRoute>} />
                               <Route path="/devices/claim" element={<ProtectedRoute><ClaimDevice /></ProtectedRoute>} />
                               <Route path="/install" element={<Install />} />
+
+                              {/* Admin Routes */}
+                              <Route path="/admin/login" element={<AdminLogin />} />
+                              <Route path="/admin" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
+                              <Route path="/admin/audit-log" element={<AdminGuard requiredPermission="view_audit_log"><AuditLog /></AdminGuard>} />
+                              <Route path="/admin/providers" element={<AdminGuard requiredPermission="manage_providers"><ElectricityProviders /></AdminGuard>} />
+                              <Route path="/admin/tariffs" element={<AdminGuard requiredPermission="manage_tariffs"><TariffManagement /></AdminGuard>} />
+                              <Route path="/admin/firmware-versions" element={<AdminGuard requiredPermission="manage_firmware"><FirmwareVersions /></AdminGuard>} />
+                              <Route path="/admin/ota-campaigns" element={<AdminGuard requiredPermission="manage_campaigns"><OTACampaigns /></AdminGuard>} />
+                              <Route path="/admin/system-settings" element={<AdminGuard><SystemSettings /></AdminGuard>} />
+
                               <Route path="*" element={<NotFound />} />
                             </Routes>
                           </BrowserRouter>
-                        </TooltipProvider>
-                      </DashboardLayoutProvider>
-                    </TariffProvider>
-                  </TelemetryProvider>
-                </SetupWizardProvider>
+                          </TooltipProvider>
+                        </DashboardLayoutProvider>
+                      </TariffProvider>
+                    </TelemetryProvider>
+                  </SetupWizardProvider>
+                </AdminAuthProvider>
               </UserRoleProvider>
             </UserModeProvider>
           </AuthProvider>

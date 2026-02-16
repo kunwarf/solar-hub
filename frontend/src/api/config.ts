@@ -185,6 +185,45 @@ export const API_ENDPOINTS = {
     scanStatus: (id: string) => `/discovery/scans/${id}/status`,
     scanResults: (id: string) => `/discovery/scans/${id}/results`,
   },
+
+  // Admin (System A)
+  admin: {
+    // Auth
+    login: '/admin/auth/login',
+    logout: '/admin/auth/logout',
+    me: '/admin/auth/me',
+    // Providers
+    providers: '/admin/providers',
+    providerById: (id: string) => `/admin/providers/${id}`,
+    // Tariffs
+    tariffs: '/admin/tariffs',
+    tariffById: (id: string) => `/admin/tariffs/${id}`,
+    // Load Shedding
+    loadShedding: '/admin/load-shedding',
+    loadSheddingById: (id: string) => `/admin/load-shedding/${id}`,
+    // Subscription Tiers
+    subscriptionTiers: '/admin/subscription-tiers',
+    subscriptionTierById: (id: string) => `/admin/subscription-tiers/${id}`,
+    // Features
+    features: '/admin/features',
+    featureById: (id: string) => `/admin/features/${id}`,
+    featureTiers: (id: string) => `/admin/features/${id}/tiers`,
+    // Device Catalog
+    deviceCatalog: '/admin/device-catalog',
+    deviceCatalogById: (id: string) => `/admin/device-catalog/${id}`,
+    // Protocol Adapters
+    protocolAdapters: '/admin/protocol-adapters',
+    protocolAdapterById: (id: string) => `/admin/protocol-adapters/${id}`,
+    // Weather Stations
+    weatherStations: '/admin/weather-stations',
+    weatherStationById: (id: string) => `/admin/weather-stations/${id}`,
+    // Admin Users
+    adminUsers: '/admin/users',
+    adminUserById: (id: string) => `/admin/users/${id}`,
+    // Audit Log
+    auditLog: '/admin/audit-log',
+    auditLogById: (id: string) => `/admin/audit-log/${id}`,
+  },
 };
 
 // System B API Configuration (Telemetry/Device Server)
@@ -200,6 +239,32 @@ export const SYSTEM_B_ENDPOINTS = {
     release: (deviceId: string) => `/devices/${deviceId}/release`,
     orphans: '/devices/orphan',
     validateSerial: '/devices/serial/validate',
+  },
+
+  // Firmware (OTA Management)
+  firmware: {
+    // Versions
+    versions: '/firmware/versions',
+    versionById: (id: string) => `/firmware/versions/${id}`,
+    toggleVersion: (id: string) => `/firmware/versions/${id}/toggle`,
+    // Files
+    files: (versionId: string) => `/firmware/versions/${versionId}/files`,
+    fileById: (versionId: string, fileId: string) => `/firmware/versions/${versionId}/files/${fileId}`,
+    downloadFile: (versionId: string, fileId: string) => `/firmware/versions/${versionId}/files/${fileId}/download`,
+    // Campaigns
+    campaigns: '/firmware/campaigns',
+    campaignById: (id: string) => `/firmware/campaigns/${id}`,
+    activateCampaign: (id: string) => `/firmware/campaigns/${id}/activate`,
+    pauseCampaign: (id: string) => `/firmware/campaigns/${id}/pause`,
+    resumeCampaign: (id: string) => `/firmware/campaigns/${id}/resume`,
+    cancelCampaign: (id: string) => `/firmware/campaigns/${id}/cancel`,
+    campaignStatus: (id: string) => `/firmware/campaigns/${id}/status`,
+    // Device Status
+    deviceStatuses: '/firmware/devices/status',
+    deviceStatusBySerial: (serial: string) => `/firmware/devices/${serial}/status`,
+    // History
+    history: '/firmware/history',
+    historyById: (id: string) => `/firmware/history/${id}`,
   },
 };
 
