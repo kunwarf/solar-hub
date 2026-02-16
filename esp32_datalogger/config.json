@@ -1,16 +1,16 @@
 {
   "mode": "modbus_bridge",
   "rtu": {
-    "uart_id": 1,
+    "uart_id": 2,
     "tx_pin": 17,
-    "rx_pin": 18,
+    "rx_pin": 16,
     "de_pin": 0,
     "unit_id": 1,
     "baudrate": 9600,
     "parity": "N",
     "stop_bits": 1,
     "data_bits": 8,
-    "timeout_ms": 800
+    "timeout_ms": 1000
   },
   "modbus_bridge": {
     "server_host": "182.180.150.107",
@@ -23,7 +23,7 @@
     "register_endpoint": "/api/v1/devices/self-register"
   },
   "device": {
-    "serial": "SH01IN9A423V4CU0",
+    "serial": "SH01INWWAJJSCKX0",
     "name": "SolarLogger-ESP32",
     "type": "inverter",
     "manufacturer": "SolarHub",

@@ -11,6 +11,7 @@ from config import (
     load_config, save_config, load_wifi, save_wifi,
     get_config, get_device_id, DEFAULT_CONFIG
 )
+from file_manager import FileManager
 
 # Optional log buffer for web interface logging
 try:
@@ -55,6 +56,7 @@ td:first-child{font-weight:bold;width:40%}
 <div class="nav">
 <a href="/">Status</a>
 <a href="/logs">Logs</a>
+<a href="/files">Files</a>
 <a href="/wifi">WiFi</a>
 <a href="/modbus">Modbus</a>
 <a href="/server">Server</a>
@@ -149,17 +151,35 @@ class WebServer:
                         k, v = pair.split("=", 1)
                         query[k] = self._url_decode(v)
 
+            # Get Content-Type header
+            content_type = ""
+            for line in lines[1:]:
+                if line.lower().startswith("content-type:"):
+                    content_type = line.split(":", 1)[1].strip()
+                    break
+
             # Parse POST body
             body = {}
+            body_raw = ""
             if method == "POST":
                 # Find body after empty line
                 body_start = request.find("\r\n\r\n")
                 if body_start > 0:
                     body_str = request[body_start + 4:]
-                    for pair in body_str.split("&"):
-                        if "=" in pair:
-                            k, v = pair.split("=", 1)
-                            body[k] = self._url_decode(v)
+                    body_raw = body_str
+
+                    # Parse based on content type
+                    if "application/json" in content_type:
+                        try:
+                            body = json.loads(body_str)
+                        except:
+                            pass
+                    else:
+                        # URL-encoded form data
+                        for pair in body_str.split("&"):
+                            if "=" in pair:
+                                k, v = pair.split("=", 1)
+                                body[k] = self._url_decode(v)
 
             # Route request
             if path == "/" or path == "/status":
@@ -176,6 +196,21 @@ class WebServer:
                 if log_buffer:
                     log_buffer.clear()
                 return self._json_response({"success": True})
+            elif path == "/files":
+                content = self._page_files()
+            elif path == "/api/files/list":
+                return self._json_response(self._get_files_json())
+            elif path == "/api/files/upload":
+                if method == "POST":
+                    return self._handle_file_upload(body_raw, content_type)
+                return self._json_response({"error": "Method not allowed"}, status=405)
+            elif path == "/api/files/delete":
+                if method == "POST":
+                    return self._handle_file_delete(body)
+                return self._json_response({"error": "Method not allowed"}, status=405)
+            elif path == "/api/files/reboot":
+                import machine
+                machine.reset()
             elif path == "/wifi":
                 if method == "POST":
                     content = self._handle_wifi_save(body)
@@ -657,4 +692,158 @@ refreshLogs();
                 "stats": bridge_stats,
             }
         }
+
+    def _page_files(self):
+        """File manager page."""
+        files = FileManager.list_files()
+        disk = FileManager.get_disk_usage()
+
+        html = '<div class="card"><h2>File Manager</h2>'
+
+        # Disk usage
+        if disk:
+            html += '<div style="margin-bottom:20px;">'
+            html += '<strong>Disk Usage:</strong> {} / {} ({}\% used)'.format(
+                FileManager.format_size(disk['used']),
+                FileManager.format_size(disk['total']),
+                disk['percent']
+            )
+            html += '</div>'
+
+        # Upload form
+        html += '''
+<div style="margin-bottom:20px;padding:15px;background:#f9f9f9;border-radius:4px;">
+    <h3 style="margin-top:0;">Upload File</h3>
+    <input type="text" id="filename" placeholder="Filename (e.g., main.py)" style="margin-bottom:10px;">
+    <textarea id="filecontent" rows="10" placeholder="Paste file content here..." style="width:100%;margin-bottom:10px;font-family:monospace;"></textarea>
+    <button onclick="uploadFile()">📤 Upload File</button>
+    <span id="uploadStatus" style="margin-left:15px;"></span>
+</div>
+'''
+
+        # File list
+        html += '<h3>Files</h3>'
+        if files:
+            html += '<table><tr><th>Name</th><th>Size</th><th>Action</th></tr>'
+            for f in files:
+                if f['type'] == 'file':
+                    html += '<tr><td>{}</td><td>{}</td><td>'.format(
+                        f['name'],
+                        FileManager.format_size(f['size'])
+                    )
+                    if f['name'] not in FileManager.PROTECTED_FILES:
+                        html += '<button class="btn-danger" onclick="deleteFile(\'{}\')">Delete</button>'.format(f['name'])
+                    else:
+                        html += '<span style="color:#999;">Protected</span>'
+                    html += '</td></tr>'
+            html += '</table>'
+        else:
+            html += '<p>No files found</p>'
+
+        html += '''
+</div>
+<script>
+async function uploadFile() {
+    const filename = document.getElementById('filename').value;
+    const content = document.getElementById('filecontent').value;
+    const status = document.getElementById('uploadStatus');
+
+    if (!filename) {
+        status.innerHTML = '<span style="color:red;">Please enter a filename</span>';
+        return;
+    }
+
+    if (!content) {
+        status.innerHTML = '<span style="color:red;">Please enter file content</span>';
+        return;
+    }
+
+    status.innerHTML = 'Uploading...';
+
+    try {
+        const response = await fetch('/api/files/upload', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename: filename, content: content})
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            status.innerHTML = '<span style="color:green;">✓ Upload successful!</span>';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            status.innerHTML = '<span style="color:red;">Error: ' + (result.error || 'Unknown error') + '</span>';
+        }
+    } catch (e) {
+        status.innerHTML = '<span style="color:red;">Upload failed: ' + e + '</span>';
+    }
+}
+
+async function deleteFile(filename) {
+    if (!confirm('Delete ' + filename + '?')) return;
+
+    try {
+        const response = await fetch('/api/files/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename: filename})
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Delete failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Delete failed: ' + e);
+    }
+}
+</script>
+'''
+        return html
+
+    def _get_files_json(self):
+        """Get file list as JSON."""
+        files = FileManager.list_files()
+        disk = FileManager.get_disk_usage()
+        return {"files": files, "disk": disk}
+
+    def _handle_file_upload(self, body_raw, content_type):
+        """Handle file upload."""
+        try:
+            # Parse JSON body
+            data = json.loads(body_raw) if body_raw else {}
+            filename = data.get('filename', '')
+            content = data.get('content', '')
+
+            if not filename or not content:
+                return self._json_response({"success": False, "error": "Missing filename or content"})
+
+            # Save file
+            if FileManager.save_file(filename, content):
+                return self._json_response({"success": True})
+            else:
+                return self._json_response({"success": False, "error": "Failed to save file"})
+
+        except Exception as e:
+            return self._json_response({"success": False, "error": str(e)})
+
+    def _handle_file_delete(self, body):
+        """Handle file deletion."""
+        try:
+            filename = body.get('filename', '')
+
+            if not filename:
+                return self._json_response({"success": False, "error": "Missing filename"})
+
+            if FileManager.delete_file(filename):
+                return self._json_response({"success": True})
+            else:
+                return self._json_response({"success": False, "error": "Failed to delete file"})
+
+        except Exception as e:
+            return self._json_response({"success": False, "error": str(e)})
 
