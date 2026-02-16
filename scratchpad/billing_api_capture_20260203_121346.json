@@ -1,0 +1,6391 @@
+{
+  "http://182.180.150.107:8000/api/v1/dashboard/device-status": {
+    "endpoint": "dashboard/device-status",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/device-status",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "devices_online": 1,
+      "devices_offline": 0,
+      "devices_total": 1,
+      "total_faults": 0,
+      "total_warnings": 0,
+      "grid_connected": true,
+      "devices": [
+        {
+          "serial_number": "SH01IN9A423V4CU0",
+          "status": "online",
+          "last_seen": 1770102792,
+          "working_mode": null,
+          "faults": [],
+          "warnings": [],
+          "online": true
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/environmental": {
+    "endpoint": "dashboard/environmental",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/environmental",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "co2_avoided_kg": 17.36,
+      "trees_equivalent": 299.31,
+      "coal_avoided_kg": 9.92
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/weather": {
+    "endpoint": "dashboard/weather",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/weather",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "temperature": 25.0,
+      "condition": "sunny",
+      "humidity": 55,
+      "wind_speed": 10,
+      "solar_forecast": 100,
+      "sunrise": "06:15",
+      "sunset": "18:00"
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/load-shedding": {
+    "endpoint": "dashboard/load-shedding",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/load-shedding",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "stage": 0,
+      "active": false,
+      "current_window": null,
+      "next_window": null,
+      "battery_reserve": 99,
+      "estimated_coverage": 11.7
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/power-flow": {
+    "endpoint": "dashboard/power-flow",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/power-flow",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "timestamp": "2026-02-03T07:13:12.767689+00:00",
+      "pv_power_w": 8708.0,
+      "grid_power_w": -7108.0,
+      "load_power_w": 1142.0,
+      "battery_power_w": -216.0,
+      "battery_soc_pct": 99.0,
+      "is_charging": false,
+      "grid_connected": true,
+      "online": true,
+      "stale": false,
+      "devices_online": 1,
+      "devices_total": 1,
+      "devices": [
+        {
+          "serial_number": "SH01IN9A423V4CU0",
+          "pv_power_w": 8708.0,
+          "grid_power_w": -7108.0,
+          "load_power_w": 1142.0,
+          "battery_power_w": -216.0,
+          "battery_soc_pct": 99.0,
+          "is_charging": false,
+          "online": true,
+          "raw": {
+            "inverter_type": 5,
+            "modbus_address": 1,
+            "protocol_version_raw": 260,
+            "device_serial_number": "2406130092",
+            "grid_power_w": -7108,
+            "load_power_w": 1142,
+            "load_l1_power_w": 859,
+            "load_l2_power_w": 38,
+            "load_l3_power_w": 245,
+            "load_l1_voltage_v": 219.8,
+            "load_l2_voltage_v": 221.60000000000002,
+            "load_l3_voltage_v": 225.8,
+            "pv1_power_w": 6520,
+            "pv2_power_w": 2188,
+            "grid_frequency_hz": 50.04,
+            "grid_l1_power_w": -2368,
+            "grid_l2_power_w": -2366,
+            "grid_l3_power_w": -2374,
+            "grid_voltage_v": 221.8,
+            "grid_l1_voltage_v": 221.8,
+            "grid_l2_voltage_v": 221.8,
+            "grid_l3_voltage_v": 226.60000000000002,
+            "grid_l1_current_a": 11.18,
+            "grid_l2_current_a": 10.77,
+            "grid_l3_current_a": 10.72,
+            "grid_ct_l1_power_w": -10,
+            "grid_ct_l2_power_w": 2,
+            "grid_ct_l3_power_w": 1,
+            "grid_ct_power_w": -7,
+            "battery_voltage_v": 55.11,
+            "battery_current_a": -3.92,
+            "battery_power_w": -216,
+            "battery_soc_pct": 99,
+            "inverter_temp_c": 125.0,
+            "battery_temp_c": 23.5,
+            "pv_energy_today_kwh": 24.8,
+            "load_energy_today_kwh": 12.600000000000001,
+            "grid_import_energy_today_kwh": 5.0,
+            "grid_export_energy_today_kwh": 6.300000000000001,
+            "battery_charge_energy_today_kwh": 11.100000000000001,
+            "battery_discharge_energy_today_kwh": 2.0,
+            "day_gen_energy_kwh": 0.0,
+            "day_active_energy_kwh": 0.0,
+            "total_active_energy_kwh": 0.0,
+            "battery_charge_energy_total_kwh": 136177254.4,
+            "battery_discharge_energy_total_kwh": 149487616.0,
+            "export_energy_total_kwh": 268586188.8,
+            "import_energy_total_kwh": 217376358.4,
+            "load_energy_total_kwh": 126228889.7,
+            "pv_energy_total_kwh": 191122636.9,
+            "heat_sink_temp_c": 150.3,
+            "grid_connection_time_today_s": 0,
+            "reactive_energy_today_kvarh": 0.0,
+            "reactive_energy_total_kvarh": 0.0,
+            "pv1_voltage_v": 438.3,
+            "pv1_current_a": 14.600000000000001,
+            "pv2_voltage_v": 289.90000000000003,
+            "pv2_current_a": 7.4,
+            "pv3_power_w": 0,
+            "pv3_voltage_v": 0.0,
+            "pv3_current_a": 0.0,
+            "pv4_power_w": 0,
+            "pv4_voltage_v": 0.0,
+            "pv4_current_a": 0.0,
+            "working_mode_raw": 2,
+            "fault_word_0": 0,
+            "fault_word_1": 0,
+            "fault_word_2": 0,
+            "fault_word_3": 0,
+            "grid_status_raw": 5,
+            "warning_word_1": 0,
+            "warning_word_2": 0,
+            "power_on_off_status": 1,
+            "battery_type": 1,
+            "battery_absorption_voltage_v": 51.0,
+            "battery_absorption_voltage": 51.0,
+            "battery_equalization_voltage_v": 51.0,
+            "battery_equalization_voltage": 51.0,
+            "battery_floating_voltage_v": 51.0,
+            "battery_floating_voltage": 51.0,
+            "battery_capacity_ah": 1010,
+            "zero_export_power_w": 20,
+            "battery_equalization_day_cycle": 1,
+            "battery_equalization_time": 20,
+            "battery_mode_source": 1,
+            "battery_max_charge_current_a": 75,
+            "battery_max_discharge_current_a": 100,
+            "battery_shutdown_capacity_pct": 10,
+            "battery_restart_capacity_pct": 40,
+            "battery_low_capacity_pct": 30,
+            "battery_shutdown_voltage_v": 46.0,
+            "battery_restart_voltage_v": 49.0,
+            "battery_low_voltage_v": 47.5,
+            "grid_charging_start_voltage_v": 49.0,
+            "grid_charging_start_capacity_pct": 30,
+            "grid_charge_battery_current_a": 20,
+            "generator_max_run_time_h": 24.0,
+            "generator_down_time_h": 0.0,
+            "generator_charging_start_voltage_v": 49.0,
+            "generator_charging_start_capacity_pct": 30,
+            "generator_charge_battery_current_a": 0,
+            "generator_charge_enabled": 0,
+            "ac_charge_battery": 1,
+            "generator_port_usage": 0,
+            "smartload_off_voltage_v": 51.0,
+            "smartload_off_capacity_pct": 95,
+            "smartload_on_voltage_v": 54.0,
+            "smartload_on_capacity_pct": 100,
+            "solar_priority": 1,
+            "limit_control_function": 1,
+            "max_export_power_w": 13000,
+            "solar_sell": 1,
+            "tou_selling": 255,
+            "prog1_time": 0,
+            "prog2_time": 600,
+            "prog3_time": 900,
+            "prog4_time": 1500,
+            "prog5_time": 1700,
+            "prog6_time": 2300,
+            "prog1_power_w": 100,
+            "prog2_power_w": 1000,
+            "prog3_power_w": 3992,
+            "prog4_power_w": 1000,
+            "prog5_power_w": 4000,
+            "prog6_power_w": 3000,
+            "prog1_voltage_v": 49.0,
+            "prog2_voltage_v": 49.0,
+            "prog3_voltage_v": 51.0,
+            "prog4_voltage_v": 51.0,
+            "prog5_voltage_v": 49.0,
+            "prog6_voltage_v": 49.0,
+            "prog1_capacity_pct": 50,
+            "prog2_capacity_pct": 60,
+            "prog3_capacity_pct": 98,
+            "prog4_capacity_pct": 98,
+            "prog5_capacity_pct": 80,
+            "prog6_capacity_pct": 50,
+            "prog1_charge_mode": 0,
+            "prog2_charge_mode": 0,
+            "prog3_charge_mode": 1,
+            "prog4_charge_mode": 1,
+            "prog5_charge_mode": 0,
+            "prog6_charge_mode": 0,
+            "energy_management_mode": 1,
+            "external_ct_direction": 11,
+            "grid_phase_sequence": 0,
+            "solar_arc_fault_mode": 0,
+            "grid_standard": 0,
+            "grid_type_setting": 1,
+            "generator_connected_to_grid_input": 0,
+            "gen_peak_shaving_power_w": 8000,
+            "grid_peak_shaving_power_w": 8000,
+            "max_solar_sell_power_w": 15600,
+            "mppt_number_and_phases": 515,
+            "parallel_1": 2022,
+            "grid_voltage_high_v": 265.0,
+            "grid_voltage_low_v": 185.0,
+            "grid_frequency_high_hz": 51.5,
+            "grid_frequency_low_hz": 48.0,
+            "control_board_special_function_1": 10410
+          }
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/all": {
+    "endpoint": "dashboard/all",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/all",
+    "status": 200,
+    "body": {
+      "power_flow": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "timestamp": "2026-02-03T07:13:12.767689+00:00",
+        "pv_power_w": 8708.0,
+        "grid_power_w": -7108.0,
+        "load_power_w": 1142.0,
+        "battery_power_w": -216.0,
+        "battery_soc_pct": 99.0,
+        "is_charging": false,
+        "grid_connected": true,
+        "online": true,
+        "stale": false,
+        "devices_online": 1,
+        "devices_total": 1,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "pv_power_w": 8708.0,
+            "grid_power_w": -7108.0,
+            "load_power_w": 1142.0,
+            "battery_power_w": -216.0,
+            "battery_soc_pct": 99.0,
+            "is_charging": false,
+            "online": true,
+            "raw": null
+          }
+        ]
+      },
+      "stats": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "energy_today_kwh": 24.8,
+        "energy_month_kwh": 8.4,
+        "peak_power_kw": 0.0,
+        "co2_saved_kg": 17.36,
+        "online": true,
+        "devices_online": 1,
+        "devices_total": 1,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "energy_today_kwh": 24.8,
+            "peak_power_kw": 0.0,
+            "online": true
+          }
+        ]
+      },
+      "battery": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "avg_soc_pct": 99.0,
+        "total_power_w": -216.0,
+        "is_charging": false,
+        "online": true,
+        "devices_online": 1,
+        "devices_total": 1,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "soc_pct": 99.0,
+            "power_w": -216.0,
+            "is_charging": false,
+            "online": true
+          }
+        ]
+      },
+      "device_status": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "devices_online": 1,
+        "devices_offline": 0,
+        "devices_total": 1,
+        "total_faults": 0,
+        "total_warnings": 0,
+        "grid_connected": true,
+        "devices": [
+          {
+            "serial_number": "SH01IN9A423V4CU0",
+            "status": "online",
+            "last_seen": 1770102792,
+            "working_mode": null,
+            "faults": [],
+            "warnings": [],
+            "online": true
+          }
+        ]
+      },
+      "alerts": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "active_alerts": [],
+        "total_count": 0,
+        "critical_count": 0
+      },
+      "environmental": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "co2_avoided_kg": 17.36,
+        "trees_equivalent": 299.31,
+        "coal_avoided_kg": 9.92
+      },
+      "billing": {
+        "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+        "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+        "site_name": "My Home",
+        "estimated_savings_today": 744.0,
+        "estimated_savings_month": 252.0,
+        "grid_import_cost": 0.0,
+        "grid_export_credit": 0.0,
+        "import_rate_pkr": 30.0,
+        "export_rate_pkr": 15.0
+      }
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/peak-demand": {
+    "endpoint": "dashboard/peak-demand",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/peak-demand",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "peak_hour": "06:00",
+      "peak_demand_kw": 0.26,
+      "average_demand_kw": 0.1,
+      "current_demand_kw": 1.14,
+      "hourly_profile": [
+        {
+          "hour": "07:00",
+          "demand_kw": 0.25
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.25
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.25
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.23
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.2
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.18
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.13
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.22
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.21
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "08:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "09:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.23
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.16
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "10:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.23
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "11:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.0
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.0
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "12:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "13:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.12
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.0
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "14:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "15:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.21
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.21
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.21
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "16:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "17:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "18:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.12
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "19:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.18
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.14
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.17
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.18
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "20:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "21:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "22:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.04
+        },
+        {
+          "hour": "23:00",
+          "demand_kw": 0.16
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "00:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.05
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.12
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.18
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.19
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.2
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.21
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "01:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.06
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.18
+        },
+        {
+          "hour": "02:00",
+          "demand_kw": 0.13
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.07
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "03:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.08
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.2
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.22
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "04:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "05:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.12
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.23
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.22
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.13
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.23
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.24
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.24
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.26
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.11
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "06:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.1
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.09
+        },
+        {
+          "hour": "07:00",
+          "demand_kw": 0.09
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/stats": {
+    "endpoint": "dashboard/stats",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/stats",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "energy_today_kwh": 45.81244147727271,
+      "energy_month_kwh": 8.400000000000004,
+      "peak_power_kw": 0.7732708333333334,
+      "co2_saved_kg": 32.0687090340909,
+      "online": true,
+      "devices_online": 1,
+      "devices_total": 1,
+      "devices": [
+        {
+          "serial_number": "SH01IN9A423V4CU0",
+          "energy_today_kwh": 24.8,
+          "peak_power_kw": 0.0,
+          "online": true
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/config/271edc3f-f8e8-4aac-acae-78ffd8bf4643": {
+    "endpoint": "billing/config/271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "url": "http://182.180.150.107:8000/api/v1/billing/config/271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "status": 200,
+    "body": {
+      "id": "7cc91f5e-93d6-45d8-b8d9-ffb4d7837d8d",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "anchor_day": 16,
+      "tou_config": {
+        "peak_windows": [
+          {
+            "start_hour": 17,
+            "end_hour": 22
+          }
+        ],
+        "timezone": "Asia/Karachi"
+      },
+      "prices": {
+        "price_offpeak_import": 50.0,
+        "price_peak_import": 60.0,
+        "price_offpeak_settlement": 22.0,
+        "price_peak_settlement": 22.0,
+        "fixed_charge_per_billing_month": 1000.0
+      },
+      "fixed_proration_mode": "none",
+      "net_metering_enabled": true,
+      "created_at": "2026-02-02T09:47:12.951440Z",
+      "updated_at": null
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/comparison?period=week": {
+    "endpoint": "dashboard/comparison",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/comparison?period=week",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "period": "week",
+      "data": [
+        {
+          "label": "Mon",
+          "current": 36.1,
+          "previous": 0.0
+        },
+        {
+          "label": "Tue",
+          "current": 46.9,
+          "previous": 1.9
+        },
+        {
+          "label": "Wed",
+          "current": 58.8,
+          "previous": 0.0
+        },
+        {
+          "label": "Thu",
+          "current": 54.0,
+          "previous": 0.0
+        },
+        {
+          "label": "Fri",
+          "current": 55.6,
+          "previous": 0.0
+        },
+        {
+          "label": "Sat",
+          "current": 45.6,
+          "previous": 0.0
+        },
+        {
+          "label": "Sun",
+          "current": 45.8,
+          "previous": 0.0
+        }
+      ],
+      "current_total": 342.8,
+      "previous_total": 1.9,
+      "percent_change": 17942.1
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/trend?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643&months=12": {
+    "endpoint": "billing/trend",
+    "url": "http://182.180.150.107:8000/api/v1/billing/trend?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643&months=12",
+    "status": 200,
+    "body": {
+      "trend": [
+        {
+          "year": 2026,
+          "month": 2,
+          "period_start": "2026-02-16",
+          "period_end": "2026-03-15",
+          "import_off_kwh": 0.0,
+          "import_peak_kwh": 0.0,
+          "export_off_kwh": 0.0,
+          "export_peak_kwh": 0.0,
+          "bill_final_rs": 0.0,
+          "status": "active"
+        },
+        {
+          "year": 2026,
+          "month": 1,
+          "period_start": "2026-01-16",
+          "period_end": "2026-02-15",
+          "import_off_kwh": -0.6,
+          "import_peak_kwh": 2.9,
+          "export_off_kwh": 0.7,
+          "export_peak_kwh": 0.0,
+          "bill_final_rs": 1174.0,
+          "status": "finalized"
+        }
+      ],
+      "months": 2
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/summary?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643": {
+    "endpoint": "billing/summary",
+    "url": "http://182.180.150.107:8000/api/v1/billing/summary?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "status": 200,
+    "body": {
+      "billing_month": 2,
+      "year": 2026,
+      "billing_period_start": "2026-02-16",
+      "billing_period_end": "2026-03-15",
+      "import_off_kwh": 0.0,
+      "import_peak_kwh": 0.0,
+      "export_off_kwh": 0.0,
+      "export_peak_kwh": 0.0,
+      "fixed_charge": 1000.0,
+      "bill_amount": 0.0,
+      "credit_balance": 0.0,
+      "days_elapsed": 12,
+      "days_remaining": 16,
+      "progress_percent": 42.857142857142854,
+      "estimated_savings_month": 0.0,
+      "total_savings_since_install": 0.0
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/billing/running?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643": {
+    "endpoint": "billing/running",
+    "url": "http://182.180.150.107:8000/api/v1/billing/running?site_id=271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+    "status": 200,
+    "body": {
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "date": "2026-02-03",
+      "billing_month_id": "d972091b-2e27-45a6-ab6d-40977eea1fba",
+      "billing_period_start": "2026-01-16",
+      "billing_period_end": "2026-02-15",
+      "days_elapsed": 19,
+      "total_days_in_month": 31,
+      "progress_percent": 61.29032258064516,
+      "import_off_kwh": -0.6,
+      "export_off_kwh": 0.7,
+      "import_peak_kwh": 2.9,
+      "export_peak_kwh": 0.0,
+      "solar_generation_kwh": 8.4,
+      "load_consumption_kwh": 2.0,
+      "net_import_off_kwh": 0.0,
+      "net_import_peak_kwh": 2.9,
+      "credits_off_cycle_kwh_balance": 1.3,
+      "credits_peak_cycle_kwh_balance": 0.0,
+      "bill_off_energy_rs": 0.0,
+      "bill_peak_energy_rs": 174.0,
+      "fixed_prorated_rs": 1000.0,
+      "expected_cycle_credit_rs": 28.6,
+      "bill_raw_rs_to_date": 1174.0,
+      "bill_credit_balance_rs_to_date": 0.0,
+      "bill_final_rs_to_date": 1174.0,
+      "surplus_deficit_flag": "NEUTRAL",
+      "net_kwh_position": -1.6,
+      "generated_at": "2026-02-03T07:02:21.637170Z"
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=day": {
+    "endpoint": "dashboard/energy-chart",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=day",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "period": "day",
+      "data": [
+        {
+          "timestamp": "2026-02-02T07:15:00Z",
+          "pv_kwh": 0.3106083333333333,
+          "load_kwh": 0.25125,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.16999999999999998,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:20:00Z",
+          "pv_kwh": 0.29247222222222224,
+          "load_kwh": 0.24990277777777778,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.19999999999999998,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:25:00Z",
+          "pv_kwh": 0.30233333333333334,
+          "load_kwh": 0.2536,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.27,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:30:00Z",
+          "pv_kwh": 0.311675,
+          "load_kwh": 0.225125,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.3,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:35:00Z",
+          "pv_kwh": 0.3333055555555556,
+          "load_kwh": 0.08511111111111111,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.43333333333333335,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:40:00Z",
+          "pv_kwh": 0.3013645833333333,
+          "load_kwh": 0.08026041666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:45:00Z",
+          "pv_kwh": 0.29205555555555557,
+          "load_kwh": 0.07525,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.7666666666666668,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:50:00Z",
+          "pv_kwh": 0.31655555555555553,
+          "load_kwh": 0.07511111111111111,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.9,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:55:00Z",
+          "pv_kwh": 0.3335,
+          "load_kwh": 0.07658333333333334,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 0.9,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:00:00Z",
+          "pv_kwh": 0.37990625,
+          "load_kwh": 0.20460416666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 1.4000000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:05:00Z",
+          "pv_kwh": 0.46625833333333333,
+          "load_kwh": 0.18139166666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 1.6400000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:10:00Z",
+          "pv_kwh": 0.6078703703703704,
+          "load_kwh": 0.08987962962962963,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 1.8000000000000003,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:15:00Z",
+          "pv_kwh": 0.669325,
+          "load_kwh": 0.13306666666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 2.34,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:20:00Z",
+          "pv_kwh": 0.7316296296296296,
+          "load_kwh": 0.2229814814814815,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 2.6999999999999997,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:25:00Z",
+          "pv_kwh": 0.7732708333333334,
+          "load_kwh": 0.20959375,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 3.1999999999999997,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:30:00Z",
+          "pv_kwh": 0.6491333333333333,
+          "load_kwh": 0.10355,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 3.7,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:35:00Z",
+          "pv_kwh": 0.6761666666666667,
+          "load_kwh": 0.08504166666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 3.7,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:40:00Z",
+          "pv_kwh": 0.5786388888888889,
+          "load_kwh": 0.08672222222222223,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 4.800000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:45:00Z",
+          "pv_kwh": 0.6587166666666666,
+          "load_kwh": 0.08636666666666666,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 5.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:50:00Z",
+          "pv_kwh": 0.6551666666666667,
+          "load_kwh": 0.08686111111111111,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 5.800000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:55:00Z",
+          "pv_kwh": 0.6514166666666666,
+          "load_kwh": 0.08719444444444445,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 6.900000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:00:00Z",
+          "pv_kwh": 0.5555277777777777,
+          "load_kwh": 0.08663888888888889,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 6.900000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:05:00Z",
+          "pv_kwh": 0.6311041666666667,
+          "load_kwh": 0.08704166666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 7.45,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:10:00Z",
+          "pv_kwh": 0.71765,
+          "load_kwh": 0.08601666666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 8.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:15:00Z",
+          "pv_kwh": 0.6333854166666667,
+          "load_kwh": 0.08464583333333334,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 9.050000000000002,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:20:00Z",
+          "pv_kwh": 0.6606041666666667,
+          "load_kwh": 0.10180208333333333,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 9.200000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:25:00Z",
+          "pv_kwh": 0.6396041666666666,
+          "load_kwh": 0.10145833333333333,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 9.950000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:35:00Z",
+          "pv_kwh": 0.29883333333333334,
+          "load_kwh": 0.09827777777777778,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 10.800000000000002,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:40:00Z",
+          "pv_kwh": 0.4554375,
+          "load_kwh": 0.0948125,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 10.8,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:45:00Z",
+          "pv_kwh": 0.3746111111111111,
+          "load_kwh": 0.08191666666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 11.266666666666666,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:50:00Z",
+          "pv_kwh": 0.32925,
+          "load_kwh": 0.07988541666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 11.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:55:00Z",
+          "pv_kwh": 0.32593055555555556,
+          "load_kwh": 0.07779166666666666,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 12.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:00:00Z",
+          "pv_kwh": 0.3460925925925926,
+          "load_kwh": 0.07727777777777778,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 12.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:05:00Z",
+          "pv_kwh": 0.23755833333333334,
+          "load_kwh": 0.07695833333333334,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 12.3,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:10:00Z",
+          "pv_kwh": 0.2943,
+          "load_kwh": 0.07870833333333334,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 12.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:15:00Z",
+          "pv_kwh": 0.35025,
+          "load_kwh": 0.07975,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 12.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:20:00Z",
+          "pv_kwh": 0.3339479166666667,
+          "load_kwh": 0.23080208333333332,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 12.900000000000002,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:25:00Z",
+          "pv_kwh": 0.3678666666666667,
+          "load_kwh": 0.15688333333333335,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 13.020000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:30:00Z",
+          "pv_kwh": 0.3029722222222222,
+          "load_kwh": 0.11033333333333334,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 13.100000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:40:00Z",
+          "pv_kwh": 0.27708333333333335,
+          "load_kwh": 0.10919444444444444,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 13.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:50:00Z",
+          "pv_kwh": 0.2795,
+          "load_kwh": 0.09888333333333334,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 13.8,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:55:00Z",
+          "pv_kwh": 0.156,
+          "load_kwh": 0.08733333333333333,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 14.100000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:05:00Z",
+          "pv_kwh": 0.14330555555555555,
+          "load_kwh": 0.08176388888888889,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 14.183333333333335,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:10:00Z",
+          "pv_kwh": 0.1441388888888889,
+          "load_kwh": 0.08172222222222222,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 14.200000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:15:00Z",
+          "pv_kwh": 0.12177777777777778,
+          "load_kwh": 0.08141666666666666,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 14.266666666666666,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:25:00Z",
+          "pv_kwh": 0.10625,
+          "load_kwh": 0.09933333333333333,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 14.350000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:30:00Z",
+          "pv_kwh": 0.07741666666666666,
+          "load_kwh": 0.23225,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": null
+        },
+        {
+          "timestamp": "2026-02-02T11:40:00Z",
+          "pv_kwh": 0.06408333333333334,
+          "load_kwh": 0.09979166666666667,
+          "grid_import_kwh": 4.5,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:45:00Z",
+          "pv_kwh": 0.07192708333333334,
+          "load_kwh": 0.09922916666666666,
+          "grid_import_kwh": 4.575000000000001,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:50:00Z",
+          "pv_kwh": 0.05756666666666667,
+          "load_kwh": 0.08308333333333333,
+          "grid_import_kwh": 4.6000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:55:00Z",
+          "pv_kwh": 0.051125,
+          "load_kwh": 0.08839583333333334,
+          "grid_import_kwh": 4.6000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:00:00Z",
+          "pv_kwh": 0.0445,
+          "load_kwh": 0.08591666666666667,
+          "grid_import_kwh": 4.6000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:05:00Z",
+          "pv_kwh": 0.02525,
+          "load_kwh": 0.08708333333333333,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": null
+        },
+        {
+          "timestamp": "2026-02-02T12:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0,
+          "grid_import_kwh": 25.900000000000002,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": null
+        },
+        {
+          "timestamp": "2026-02-02T12:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": null
+        },
+        {
+          "timestamp": "2026-02-02T12:25:00Z",
+          "pv_kwh": 0.007916666666666667,
+          "load_kwh": 0.10266666666666667,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:30:00Z",
+          "pv_kwh": 0.005166666666666667,
+          "load_kwh": 0.10216666666666667,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:35:00Z",
+          "pv_kwh": 0.0009583333333333333,
+          "load_kwh": 0.10404166666666667,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:40:00Z",
+          "pv_kwh": 0.0006111111111111111,
+          "load_kwh": 0.10602777777777778,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09202777777777778,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09336666666666667,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09372222222222222,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09629166666666666,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09563095238095239,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10333333333333333,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.11421296296296297,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.11443333333333333,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.11291666666666667,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.11158333333333334,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.1054,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0950625,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0947,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09654166666666666,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09725,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09841666666666667,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10016666666666667,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09918055555555555,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.11622916666666666,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0,
+          "grid_import_kwh": 25.900000000000002,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": null
+        },
+        {
+          "timestamp": "2026-02-02T14:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0865,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08754166666666667,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08716666666666667,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08634722222222223,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08319444444444445,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08175,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08105555555555556,
+          "grid_import_kwh": 5.1000000000000005,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08104166666666666,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08166666666666667,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08836111111111111,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09283333333333334,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09758333333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.20555555555555555,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.20608333333333334,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0725,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.07383333333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.21216666666666667,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08344444444444445,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08855555555555555,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08733333333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08661111111111111,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10117708333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10420833333333333,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10229761904761905,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10125833333333334,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09375,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08241666666666667,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0825,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08417708333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08301666666666667,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08292857142857143,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0830625,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08308333333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08273809523809524,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0826875,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10054166666666667,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09954166666666667,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09916666666666667,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09498333333333334,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09208333333333334,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09351515151515152,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000004,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0921,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09835416666666667,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000004,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09576190476190477,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09264583333333333,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000004,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09246666666666667,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09262121212121212,
+          "grid_import_kwh": 5.200000000000001,
+          "grid_export_kwh": 14.400000000000004,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10161458333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.400000000000002,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10188888888888889,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09658333333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.09808333333333333,
+          "grid_import_kwh": 5.2,
+          "grid_export_kwh": 14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.11518333333333333,
+          "grid_import_kwh": 4.16,
+          "grid_export_kwh": 11.52,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10664814814814816,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.10558333333333333,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08688888888888889,
+          "grid_import_kwh": 0.20000000000000004,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.086,
+          "grid_import_kwh": 0.2,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.08669444444444445,
+          "grid_import_kwh": 0.26666666666666666,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0861875,
+          "grid_import_kwh": 0.30000000000000004,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.07727272727272727,
+          "grid_import_kwh": 0.4272727272727273,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.17863636363636362,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.13791666666666666,
+          "grid_import_kwh": 0.6999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.07389583333333333,
+          "grid_import_kwh": 0.7999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06796527777777778,
+          "grid_import_kwh": 0.8666666666666668,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.17223611111111112,
+          "grid_import_kwh": 0.9000000000000002,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.1816875,
+          "grid_import_kwh": 1.0999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06755303030303031,
+          "grid_import_kwh": 1.2,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.053875,
+          "grid_import_kwh": 1.3333333333333337,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05385,
+          "grid_import_kwh": 1.4000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06837878787878787,
+          "grid_import_kwh": 1.4636363636363638,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0715,
+          "grid_import_kwh": 1.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.07146875,
+          "grid_import_kwh": 1.5499999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.065375,
+          "grid_import_kwh": 1.5999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05368939393939394,
+          "grid_import_kwh": 1.6636363636363634,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.052159090909090905,
+          "grid_import_kwh": 1.6999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0530530303030303,
+          "grid_import_kwh": 1.7636363636363641,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05327564102564102,
+          "grid_import_kwh": 1.8000000000000005,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05252564102564102,
+          "grid_import_kwh": 1.8692307692307688,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.052230769230769226,
+          "grid_import_kwh": 1.8999999999999997,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05357638888888889,
+          "grid_import_kwh": 1.9666666666666668,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.052897435897435896,
+          "grid_import_kwh": 2.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.057479166666666665,
+          "grid_import_kwh": 2.066666666666667,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.057590277777777775,
+          "grid_import_kwh": 2.1000000000000005,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05788461538461539,
+          "grid_import_kwh": 2.169230769230769,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.058354166666666665,
+          "grid_import_kwh": 2.1999999999999997,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.058055555555555555,
+          "grid_import_kwh": 2.266666666666667,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05749242424242424,
+          "grid_import_kwh": 2.3000000000000003,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06865277777777777,
+          "grid_import_kwh": 2.3666666666666667,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.07475694444444445,
+          "grid_import_kwh": 2.4,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0746923076923077,
+          "grid_import_kwh": 2.4692307692307693,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0715448717948718,
+          "grid_import_kwh": 2.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.057102564102564105,
+          "grid_import_kwh": 2.6384615384615384,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05601388888888889,
+          "grid_import_kwh": 2.6999999999999997,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.056363636363636366,
+          "grid_import_kwh": 2.763636363636364,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.042208333333333334,
+          "grid_import_kwh": 2.8000000000000003,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.041916666666666665,
+          "grid_import_kwh": 2.8000000000000003,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.04194230769230769,
+          "grid_import_kwh": 2.8,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.041729166666666664,
+          "grid_import_kwh": 2.866666666666666,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.04154861111111111,
+          "grid_import_kwh": 2.9,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.04187820512820513,
+          "grid_import_kwh": 2.9692307692307693,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.04126388888888889,
+          "grid_import_kwh": 3.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.04174358974358974,
+          "grid_import_kwh": 3.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.04138461538461539,
+          "grid_import_kwh": 3.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.04128333333333333,
+          "grid_import_kwh": 3.02,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.041758333333333335,
+          "grid_import_kwh": 3.1000000000000005,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.15923076923076923,
+          "grid_import_kwh": 3.1692307692307695,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06029166666666667,
+          "grid_import_kwh": 3.2,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06115277777777778,
+          "grid_import_kwh": 3.3333333333333326,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06717307692307693,
+          "grid_import_kwh": 3.399999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.06921794871794873,
+          "grid_import_kwh": 3.5384615384615397,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.055794871794871796,
+          "grid_import_kwh": 3.600000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05536111111111111,
+          "grid_import_kwh": 3.6666666666666674,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05495833333333333,
+          "grid_import_kwh": 3.7000000000000006,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0544375,
+          "grid_import_kwh": 3.7000000000000006,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:40:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05392307692307693,
+          "grid_import_kwh": 3.7000000000000006,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:45:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05406818181818182,
+          "grid_import_kwh": 3.7636363636363637,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:50:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05412878787878787,
+          "grid_import_kwh": 3.8,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:55:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0536439393939394,
+          "grid_import_kwh": 3.863636363636363,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05374305555555556,
+          "grid_import_kwh": 3.899999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:05:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05327083333333334,
+          "grid_import_kwh": 3.966666666666667,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:10:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05304629629629629,
+          "grid_import_kwh": 4.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:15:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.05373611111111111,
+          "grid_import_kwh": 4.066666666666667,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:20:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.11559615384615385,
+          "grid_import_kwh": 4.1000000000000005,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:25:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.18304861111111112,
+          "grid_import_kwh": 4.2333333333333325,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:30:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.18936805555555555,
+          "grid_import_kwh": 4.299999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:35:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.19871527777777778,
+          "grid_import_kwh": 4.500000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:40:00Z",
+          "pv_kwh": 8.333333333333333e-05,
+          "load_kwh": 0.21128333333333332,
+          "grid_import_kwh": 4.6000000000000005,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:45:00Z",
+          "pv_kwh": 0.00023148148148148146,
+          "load_kwh": 0.09331666666666667,
+          "grid_import_kwh": 4.81,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:50:00Z",
+          "pv_kwh": 0.0006944444444444445,
+          "load_kwh": 0.0920138888888889,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:55:00Z",
+          "pv_kwh": 0.001608974358974359,
+          "load_kwh": 0.07987179487179488,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:00:00Z",
+          "pv_kwh": 0.003861111111111111,
+          "load_kwh": 0.07424074074074075,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:05:00Z",
+          "pv_kwh": 0.008083333333333333,
+          "load_kwh": 0.06998611111111111,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:10:00Z",
+          "pv_kwh": 0.015346153846153848,
+          "load_kwh": 0.06474358974358974,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:15:00Z",
+          "pv_kwh": 0.024153846153846154,
+          "load_kwh": 0.06508333333333334,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:20:00Z",
+          "pv_kwh": 0.03288541666666667,
+          "load_kwh": 0.07215625,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:25:00Z",
+          "pv_kwh": 0.04518055555555556,
+          "load_kwh": 0.07363888888888889,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:30:00Z",
+          "pv_kwh": 0.05665909090909091,
+          "load_kwh": 0.07574242424242424,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:35:00Z",
+          "pv_kwh": 0.06541666666666666,
+          "load_kwh": 0.07548809523809523,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:40:00Z",
+          "pv_kwh": 0.08235833333333334,
+          "load_kwh": 0.07646666666666667,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 92.8,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:45:00Z",
+          "pv_kwh": 0.096,
+          "load_kwh": 0.07557142857142857,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 78.7,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:50:00Z",
+          "pv_kwh": 0.10952083333333333,
+          "load_kwh": 0.18354166666666666,
+          "grid_import_kwh": 4.9,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:55:00Z",
+          "pv_kwh": 0.12414166666666666,
+          "load_kwh": 0.13306666666666667,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:00:00Z",
+          "pv_kwh": 0.1453939393939394,
+          "load_kwh": 0.09396969696969698,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 64.6,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:05:00Z",
+          "pv_kwh": 0.16220833333333334,
+          "load_kwh": 0.09298333333333333,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 94.3,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:10:00Z",
+          "pv_kwh": 0.18029166666666666,
+          "load_kwh": 0.07476041666666666,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 96.9,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:15:00Z",
+          "pv_kwh": 0.19314814814814815,
+          "load_kwh": 0.07788888888888888,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:20:00Z",
+          "pv_kwh": 0.20386458333333332,
+          "load_kwh": 0.08177083333333333,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:25:00Z",
+          "pv_kwh": 0.21932142857142856,
+          "load_kwh": 0.08077380952380954,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:30:00Z",
+          "pv_kwh": 0.23920833333333333,
+          "load_kwh": 0.07784722222222222,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:35:00Z",
+          "pv_kwh": 0.2559166666666667,
+          "load_kwh": 0.07839583333333333,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:40:00Z",
+          "pv_kwh": 0.2740952380952381,
+          "load_kwh": 0.0784047619047619,
+          "grid_import_kwh": 4.8999999999999995,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:45:00Z",
+          "pv_kwh": 0.28357638888888886,
+          "load_kwh": 0.07809027777777777,
+          "grid_import_kwh": 4.966666666666667,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:50:00Z",
+          "pv_kwh": 0.3003402777777778,
+          "load_kwh": 0.07784027777777777,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:55:00Z",
+          "pv_kwh": 0.3156145833333333,
+          "load_kwh": 0.07926041666666667,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:00:00Z",
+          "pv_kwh": 0.33084848484848484,
+          "load_kwh": 0.07873484848484849,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:05:00Z",
+          "pv_kwh": 0.347375,
+          "load_kwh": 0.07781666666666667,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:10:00Z",
+          "pv_kwh": 0.363280303030303,
+          "load_kwh": 0.0835909090909091,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:15:00Z",
+          "pv_kwh": 0.3857083333333333,
+          "load_kwh": 0.20426666666666668,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:20:00Z",
+          "pv_kwh": 0.4032023809523809,
+          "load_kwh": 0.2200357142857143,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:25:00Z",
+          "pv_kwh": 0.41575,
+          "load_kwh": 0.10657575757575759,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:30:00Z",
+          "pv_kwh": 0.4402152777777778,
+          "load_kwh": 0.10567361111111111,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:35:00Z",
+          "pv_kwh": 0.4549479166666667,
+          "load_kwh": 0.08992708333333334,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:40:00Z",
+          "pv_kwh": 0.46218055555555554,
+          "load_kwh": 0.08927083333333333,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:45:00Z",
+          "pv_kwh": 0.48513636363636364,
+          "load_kwh": 0.09025,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:50:00Z",
+          "pv_kwh": 0.49716666666666665,
+          "load_kwh": 0.09157575757575759,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:55:00Z",
+          "pv_kwh": 0.5136666666666667,
+          "load_kwh": 0.09155303030303032,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.06363636363636363,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:00:00Z",
+          "pv_kwh": 0.5232424242424243,
+          "load_kwh": 0.09187878787878788,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.09999999999999999,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:05:00Z",
+          "pv_kwh": 0.5427708333333333,
+          "load_kwh": 0.0919375,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.2333333333333333,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:10:00Z",
+          "pv_kwh": 0.5528819444444445,
+          "load_kwh": 0.09363194444444445,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.3,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:15:00Z",
+          "pv_kwh": 0.5750909090909091,
+          "load_kwh": 0.08916666666666667,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.4454545454545455,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:20:00Z",
+          "pv_kwh": 0.5903611111111111,
+          "load_kwh": 0.09986805555555556,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:25:00Z",
+          "pv_kwh": 0.5971858974358975,
+          "load_kwh": 0.10510897435897436,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.7076923076923076,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:30:00Z",
+          "pv_kwh": 0.6103472222222223,
+          "load_kwh": 0.10647222222222222,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 0.7999999999999999,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:35:00Z",
+          "pv_kwh": 0.6147045454545453,
+          "load_kwh": 0.10404545454545454,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 1.018181818181818,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:40:00Z",
+          "pv_kwh": 0.621974358974359,
+          "load_kwh": 0.09444230769230769,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 1.0999999999999999,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:45:00Z",
+          "pv_kwh": 0.6169166666666667,
+          "load_kwh": 0.09359615384615386,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 1.376923076923077,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:50:00Z",
+          "pv_kwh": 0.6320694444444445,
+          "load_kwh": 0.08697222222222223,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 1.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:55:00Z",
+          "pv_kwh": 0.6436025641025641,
+          "load_kwh": 0.09458333333333334,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 1.7769230769230768,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:00:00Z",
+          "pv_kwh": 0.6587013888888889,
+          "load_kwh": 0.09277083333333333,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 1.8999999999999997,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:05:00Z",
+          "pv_kwh": 0.6676602564102564,
+          "load_kwh": 0.11589102564102564,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 2.176923076923077,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:10:00Z",
+          "pv_kwh": 0.6614236111111111,
+          "load_kwh": 0.22968055555555555,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 2.3000000000000003,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:15:00Z",
+          "pv_kwh": 0.6321111111111111,
+          "load_kwh": 0.22229166666666667,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 2.5999999999999996,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:20:00Z",
+          "pv_kwh": 0.6664935897435897,
+          "load_kwh": 0.12931410256410256,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 2.7,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:25:00Z",
+          "pv_kwh": 0.6890902777777778,
+          "load_kwh": 0.2326111111111111,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 2.9666666666666672,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:30:00Z",
+          "pv_kwh": 0.6948910256410257,
+          "load_kwh": 0.23901282051282052,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 3.100000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:35:00Z",
+          "pv_kwh": 0.6869166666666666,
+          "load_kwh": 0.24002777777777778,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 3.1,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:40:00Z",
+          "pv_kwh": 0.7024166666666667,
+          "load_kwh": 0.2555,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 3.6,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:45:00Z",
+          "pv_kwh": 0.7109583333333334,
+          "load_kwh": 0.10620833333333334,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 4.3,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:50:00Z",
+          "pv_kwh": 0.7319523809523809,
+          "load_kwh": 0.09633333333333334,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 4.3,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T06:55:00Z",
+          "pv_kwh": 0.7194761904761905,
+          "load_kwh": 0.09503571428571428,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 4.814285714285714,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T07:00:00Z",
+          "pv_kwh": 0.7115,
+          "load_kwh": 0.09560833333333334,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 5.200000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T07:05:00Z",
+          "pv_kwh": 0.7171944444444445,
+          "load_kwh": 0.09239583333333333,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 5.933333333333333,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T07:10:00Z",
+          "pv_kwh": 0.7209523809523809,
+          "load_kwh": 0.09346428571428572,
+          "grid_import_kwh": 5.0,
+          "grid_export_kwh": 6.300000000000002,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        }
+      ]
+    }
+  },
+  "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=month": {
+    "endpoint": "dashboard/energy-chart",
+    "url": "http://182.180.150.107:8000/api/v1/dashboard/energy-chart?period=month",
+    "status": 200,
+    "body": {
+      "organization_id": "525dd23e-7dfb-452f-b7ca-4557e447ca27",
+      "site_id": "271edc3f-f8e8-4aac-acae-78ffd8bf4643",
+      "site_name": "My Home",
+      "period": "month",
+      "data": [
+        {
+          "timestamp": "2026-01-26T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.6000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5999999999999996,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 50.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T02:00:00Z",
+          "pv_kwh": 0.2,
+          "load_kwh": 2.1000000000000005,
+          "grid_import_kwh": 0.9000000000000004,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 57.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T03:00:00Z",
+          "pv_kwh": 0.8,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 0.1999999999999993,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 86.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T04:00:00Z",
+          "pv_kwh": 1.7000000000000002,
+          "load_kwh": 0.9999999999999991,
+          "grid_import_kwh": 0.10000000000000053,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 90.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T05:00:00Z",
+          "pv_kwh": 3.3,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 93.9,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T06:00:00Z",
+          "pv_kwh": 4.0,
+          "load_kwh": 2.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 95.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T07:00:00Z",
+          "pv_kwh": 5.200000000000001,
+          "load_kwh": 2.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 94.2,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T08:00:00Z",
+          "pv_kwh": 2.4999999999999982,
+          "load_kwh": 1.0999999999999996,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 96.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T09:00:00Z",
+          "pv_kwh": 1.1000000000000014,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T10:00:00Z",
+          "pv_kwh": 1.4000000000000021,
+          "load_kwh": 1.8000000000000007,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 83.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T11:00:00Z",
+          "pv_kwh": 0.29999999999999716,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.40000000000000036,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 66.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T12:00:00Z",
+          "pv_kwh": 0.10000000000000142,
+          "load_kwh": 0.9000000000000021,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 66.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 90.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3999999999999986,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T16:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 1.3000000000000007,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 13.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T19:00:00Z",
+          "pv_kwh": -20.6,
+          "load_kwh": -28.1,
+          "grid_import_kwh": -6.700000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.4,
+          "grid_import_kwh": 0.3,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 25.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5000000000000001,
+          "grid_import_kwh": 0.4,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 20.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5999999999999999,
+          "grid_import_kwh": 0.5000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-26T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000003,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5999999999999996,
+          "grid_import_kwh": 0.5000000000000002,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 50.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T02:00:00Z",
+          "pv_kwh": 0.2,
+          "load_kwh": 0.6999999999999997,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 57.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T03:00:00Z",
+          "pv_kwh": 1.4000000000000001,
+          "load_kwh": 1.0000000000000009,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T04:00:00Z",
+          "pv_kwh": 1.9,
+          "load_kwh": 1.5999999999999996,
+          "grid_import_kwh": 1.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 37.5,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T05:00:00Z",
+          "pv_kwh": 4.4,
+          "load_kwh": 2.0,
+          "grid_import_kwh": 1.6000000000000005,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 20.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T06:00:00Z",
+          "pv_kwh": 6.0,
+          "load_kwh": 2.5,
+          "grid_import_kwh": 1.0,
+          "grid_export_kwh": 0.30000000000000004,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 60.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T07:00:00Z",
+          "pv_kwh": 2.5999999999999996,
+          "load_kwh": 1.4000000000000004,
+          "grid_import_kwh": 1.2999999999999998,
+          "grid_export_kwh": 0.09999999999999998,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 7.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T08:00:00Z",
+          "pv_kwh": 3.900000000000002,
+          "load_kwh": 1.0999999999999996,
+          "grid_import_kwh": 0.6999999999999993,
+          "grid_export_kwh": 0.8000000000000002,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 36.4,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T09:00:00Z",
+          "pv_kwh": 5.199999999999999,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 3.2,
+          "efficiency_pct": 98.1,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T10:00:00Z",
+          "pv_kwh": 3.8000000000000007,
+          "load_kwh": 1.0999999999999996,
+          "grid_import_kwh": 0.10000000000000142,
+          "grid_export_kwh": 2.5999999999999996,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 90.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T11:00:00Z",
+          "pv_kwh": 1.1999999999999993,
+          "load_kwh": 2.5,
+          "grid_import_kwh": 0.5999999999999996,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 76.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T12:00:00Z",
+          "pv_kwh": 0.10000000000000142,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.40000000000000036,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 63.6,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0999999999999979,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T16:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0999999999999979,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 90.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.9000000000000021,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T19:00:00Z",
+          "pv_kwh": -30.700000000000003,
+          "load_kwh": -26.000000000000004,
+          "grid_import_kwh": -9.700000000000001,
+          "grid_export_kwh": -7.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.4000000000000001,
+          "grid_import_kwh": 0.30000000000000004,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 25.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.4,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 33.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-27T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5,
+          "grid_import_kwh": 0.40000000000000013,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 20.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 50.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T02:00:00Z",
+          "pv_kwh": 0.5,
+          "load_kwh": 0.7000000000000002,
+          "grid_import_kwh": 0.10000000000000009,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 85.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T03:00:00Z",
+          "pv_kwh": 2.9000000000000004,
+          "load_kwh": 0.8999999999999995,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 96.6,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T04:00:00Z",
+          "pv_kwh": 5.5,
+          "load_kwh": 2.3000000000000007,
+          "grid_import_kwh": 0.10000000000000009,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 94.5,
+          "self_sufficiency_pct": 95.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T05:00:00Z",
+          "pv_kwh": 7.6,
+          "load_kwh": 3.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.1,
+          "efficiency_pct": 96.1,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T06:00:00Z",
+          "pv_kwh": 9.3,
+          "load_kwh": 2.6999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 6.4,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T07:00:00Z",
+          "pv_kwh": 9.7,
+          "load_kwh": 1.200000000000001,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 8.3,
+          "efficiency_pct": 99.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T08:00:00Z",
+          "pv_kwh": 8.800000000000004,
+          "load_kwh": 1.0999999999999996,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 7.400000000000002,
+          "efficiency_pct": 96.6,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T09:00:00Z",
+          "pv_kwh": 7.299999999999997,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 5.599999999999998,
+          "efficiency_pct": 98.6,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T10:00:00Z",
+          "pv_kwh": 4.700000000000003,
+          "load_kwh": 2.6000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.1999999999999993,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T11:00:00Z",
+          "pv_kwh": 2.0,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.7000000000000028,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T12:00:00Z",
+          "pv_kwh": 0.19999999999999574,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.10000000000000009,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 90.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0999999999999979,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.6000000000000014,
+          "grid_import_kwh": 0.10000000000000009,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 93.8,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.6999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T16:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.3999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 69.2,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.6999999999999993,
+          "grid_import_kwh": 0.8000000000000003,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 52.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T19:00:00Z",
+          "pv_kwh": -58.5,
+          "load_kwh": -29.900000000000002,
+          "grid_import_kwh": -3.8000000000000007,
+          "grid_export_kwh": -32.7,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.9,
+          "grid_import_kwh": 0.7,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 22.2,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7,
+          "grid_import_kwh": 0.6000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 14.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-28T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.8000000000000003,
+          "grid_import_kwh": 0.8000000000000003,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5999999999999996,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.8000000000000007,
+          "grid_import_kwh": 0.3999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 50.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T02:00:00Z",
+          "pv_kwh": 0.5,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 0.49999999999999956,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 66.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T03:00:00Z",
+          "pv_kwh": 3.1,
+          "load_kwh": 0.8999999999999995,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 93.5,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T04:00:00Z",
+          "pv_kwh": 5.9,
+          "load_kwh": 2.3,
+          "grid_import_kwh": 0.10000000000000053,
+          "grid_export_kwh": 0.1,
+          "efficiency_pct": 96.6,
+          "self_sufficiency_pct": 95.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T05:00:00Z",
+          "pv_kwh": 8.2,
+          "load_kwh": 2.200000000000001,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.6,
+          "efficiency_pct": 95.1,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T06:00:00Z",
+          "pv_kwh": 9.600000000000001,
+          "load_kwh": 1.299999999999999,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 7.500000000000001,
+          "efficiency_pct": 97.9,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T07:00:00Z",
+          "pv_kwh": 9.7,
+          "load_kwh": 2.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 7.1,
+          "efficiency_pct": 97.9,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T08:00:00Z",
+          "pv_kwh": 8.800000000000004,
+          "load_kwh": 2.8999999999999986,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 5.800000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T09:00:00Z",
+          "pv_kwh": 2.299999999999997,
+          "load_kwh": 1.5000000000000036,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.6999999999999993,
+          "efficiency_pct": 95.7,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T10:00:00Z",
+          "pv_kwh": 3.8000000000000043,
+          "load_kwh": 0.8999999999999986,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.8000000000000007,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T11:00:00Z",
+          "pv_kwh": 2.0999999999999943,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 1.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T12:00:00Z",
+          "pv_kwh": 0.10000000000000142,
+          "load_kwh": 1.3999999999999986,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 64.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.6000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.5999999999999979,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.4000000000000021,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T16:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3999999999999986,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.9000000000000004,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 30.8,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.6999999999999993,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 30.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T19:00:00Z",
+          "pv_kwh": -54.1,
+          "load_kwh": -30.900000000000002,
+          "grid_import_kwh": -6.2,
+          "grid_export_kwh": -27.6,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.2000000000000002,
+          "grid_import_kwh": 1.2,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6999999999999997,
+          "grid_import_kwh": 0.6000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 14.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-29T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7000000000000002,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 28.6,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7000000000000002,
+          "grid_import_kwh": 0.7000000000000002,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7000000000000002,
+          "grid_import_kwh": 0.3999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 42.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T02:00:00Z",
+          "pv_kwh": 0.6000000000000001,
+          "load_kwh": 0.8999999999999995,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T03:00:00Z",
+          "pv_kwh": 3.3000000000000003,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 93.9,
+          "self_sufficiency_pct": 90.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T04:00:00Z",
+          "pv_kwh": 6.1,
+          "load_kwh": 1.4000000000000004,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.9,
+          "efficiency_pct": 93.4,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T05:00:00Z",
+          "pv_kwh": 7.699999999999999,
+          "load_kwh": 1.700000000000001,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 3.0000000000000004,
+          "efficiency_pct": 96.1,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T06:00:00Z",
+          "pv_kwh": 9.3,
+          "load_kwh": 2.799999999999999,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 6.200000000000001,
+          "efficiency_pct": 97.8,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T07:00:00Z",
+          "pv_kwh": 9.600000000000001,
+          "load_kwh": 1.4000000000000004,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 7.899999999999999,
+          "efficiency_pct": 97.9,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T08:00:00Z",
+          "pv_kwh": 7.899999999999999,
+          "load_kwh": 1.0999999999999996,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 6.700000000000003,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T09:00:00Z",
+          "pv_kwh": 5.700000000000003,
+          "load_kwh": 1.5999999999999996,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 4.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T10:00:00Z",
+          "pv_kwh": 3.3999999999999986,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.099999999999998,
+          "efficiency_pct": 97.1,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T11:00:00Z",
+          "pv_kwh": 1.8999999999999986,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.9000000000000021,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T12:00:00Z",
+          "pv_kwh": 0.20000000000000284,
+          "load_kwh": 0.8999999999999986,
+          "grid_import_kwh": 0.20000000000000018,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 77.8,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.9000000000000021,
+          "grid_import_kwh": 0.10000000000000053,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 88.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3999999999999986,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T16:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 2.099999999999998,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 76.2,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T19:00:00Z",
+          "pv_kwh": -55.7,
+          "load_kwh": -27.7,
+          "grid_import_kwh": -4.9,
+          "grid_export_kwh": -31.700000000000003,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7,
+          "grid_import_kwh": 0.6000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 14.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-30T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7999999999999998,
+          "grid_import_kwh": 0.7,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 12.5,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 16.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5000000000000004,
+          "grid_import_kwh": 0.30000000000000027,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 40.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T02:00:00Z",
+          "pv_kwh": 0.5,
+          "load_kwh": 2.0999999999999996,
+          "grid_import_kwh": 0.8000000000000003,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 61.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T03:00:00Z",
+          "pv_kwh": 2.6,
+          "load_kwh": 1.4000000000000004,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T04:00:00Z",
+          "pv_kwh": 5.0,
+          "load_kwh": 1.7999999999999998,
+          "grid_import_kwh": 0.1999999999999993,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 96.0,
+          "self_sufficiency_pct": 88.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T05:00:00Z",
+          "pv_kwh": 6.600000000000001,
+          "load_kwh": 1.700000000000001,
+          "grid_import_kwh": 0.10000000000000053,
+          "grid_export_kwh": 0.9,
+          "efficiency_pct": 97.0,
+          "self_sufficiency_pct": 94.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T06:00:00Z",
+          "pv_kwh": 6.9,
+          "load_kwh": 2.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.4000000000000004,
+          "efficiency_pct": 97.1,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T07:00:00Z",
+          "pv_kwh": 6.0,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 4.300000000000001,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T08:00:00Z",
+          "pv_kwh": 7.200000000000003,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 5.8,
+          "efficiency_pct": 98.6,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T09:00:00Z",
+          "pv_kwh": 5.799999999999997,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 4.6,
+          "efficiency_pct": 98.3,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T10:00:00Z",
+          "pv_kwh": 3.700000000000003,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.5,
+          "efficiency_pct": 97.3,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T11:00:00Z",
+          "pv_kwh": 0.8999999999999986,
+          "load_kwh": 0.8999999999999986,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.10000000000000142,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 88.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T12:00:00Z",
+          "pv_kwh": 0.20000000000000284,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.3000000000000007,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 72.7,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.8999999999999986,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.6000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T16:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 90.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0999999999999979,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T19:00:00Z",
+          "pv_kwh": -45.400000000000006,
+          "load_kwh": -26.400000000000002,
+          "grid_import_kwh": -4.6000000000000005,
+          "grid_export_kwh": -20.6,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.9,
+          "grid_import_kwh": 0.8,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 11.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.8,
+          "grid_import_kwh": 0.7,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 12.5,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.8999999999999999,
+          "grid_import_kwh": 0.8,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 11.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-01-31T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7000000000000002,
+          "grid_import_kwh": 0.6000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 14.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7000000000000002,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 28.6,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.2999999999999998,
+          "grid_import_kwh": 1.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 23.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T02:00:00Z",
+          "pv_kwh": 0.6000000000000001,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.20000000000000018,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 80.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T03:00:00Z",
+          "pv_kwh": 2.5,
+          "load_kwh": 1.7000000000000002,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 96.0,
+          "self_sufficiency_pct": 94.1,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T04:00:00Z",
+          "pv_kwh": 4.700000000000001,
+          "load_kwh": 2.4000000000000004,
+          "grid_import_kwh": 0.40000000000000036,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 83.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T05:00:00Z",
+          "pv_kwh": 7.1,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 1.3,
+          "efficiency_pct": 95.8,
+          "self_sufficiency_pct": 93.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T06:00:00Z",
+          "pv_kwh": 7.1,
+          "load_kwh": 1.9000000000000004,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 1.1000000000000003,
+          "efficiency_pct": 95.8,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T07:00:00Z",
+          "pv_kwh": 5.900000000000002,
+          "load_kwh": 1.299999999999999,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.0,
+          "efficiency_pct": 96.6,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T08:00:00Z",
+          "pv_kwh": 7.0,
+          "load_kwh": 1.799999999999999,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 4.500000000000001,
+          "efficiency_pct": 98.6,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T09:00:00Z",
+          "pv_kwh": 4.100000000000001,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.5999999999999996,
+          "efficiency_pct": 97.6,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T10:00:00Z",
+          "pv_kwh": 3.5,
+          "load_kwh": 1.6000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 1.799999999999999,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T11:00:00Z",
+          "pv_kwh": 1.6000000000000014,
+          "load_kwh": 1.0999999999999979,
+          "grid_import_kwh": 0.10000000000000053,
+          "grid_export_kwh": 0.5,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 90.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T12:00:00Z",
+          "pv_kwh": 0.29999999999999716,
+          "load_kwh": 1.2000000000000028,
+          "grid_import_kwh": 0.20000000000000018,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 83.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.2999999999999972,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 76.9,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.7999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 33.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T19:00:00Z",
+          "pv_kwh": -45.6,
+          "load_kwh": -29.900000000000002,
+          "grid_import_kwh": -6.7,
+          "grid_export_kwh": -14.5,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7000000000000001,
+          "grid_import_kwh": 0.7,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7,
+          "grid_import_kwh": 0.6,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 14.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7,
+          "grid_import_kwh": 0.6000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 14.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-01T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5,
+          "grid_import_kwh": 0.3999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 20.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.5,
+          "grid_import_kwh": 0.40000000000000036,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 20.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000005,
+          "grid_import_kwh": 0.2999999999999998,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 50.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T02:00:00Z",
+          "pv_kwh": 0.30000000000000004,
+          "load_kwh": 0.5999999999999996,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T03:00:00Z",
+          "pv_kwh": 2.0,
+          "load_kwh": 0.5999999999999996,
+          "grid_import_kwh": 0.10000000000000009,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 90.0,
+          "self_sufficiency_pct": 83.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T04:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T05:00:00Z",
+          "pv_kwh": 3.1999999999999993,
+          "load_kwh": 1.0999999999999996,
+          "grid_import_kwh": 0.8999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 18.2,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T06:00:00Z",
+          "pv_kwh": 3.4000000000000004,
+          "load_kwh": 2.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 97.1,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T07:00:00Z",
+          "pv_kwh": 3.0999999999999996,
+          "load_kwh": 2.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.9,
+          "efficiency_pct": 96.8,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T08:00:00Z",
+          "pv_kwh": 7.300000000000001,
+          "load_kwh": 1.5,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 5.5,
+          "efficiency_pct": 97.3,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T09:00:00Z",
+          "pv_kwh": 6.300000000000001,
+          "load_kwh": 1.0999999999999996,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 5.1,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T10:00:00Z",
+          "pv_kwh": 3.6000000000000014,
+          "load_kwh": 1.4000000000000021,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 2.1000000000000014,
+          "efficiency_pct": 97.2,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T11:00:00Z",
+          "pv_kwh": 1.2999999999999972,
+          "load_kwh": 1.2999999999999972,
+          "grid_import_kwh": 0.10000000000000053,
+          "grid_export_kwh": 0.29999999999999893,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 92.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T12:00:00Z",
+          "pv_kwh": 0.20000000000000284,
+          "load_kwh": 1.4000000000000021,
+          "grid_import_kwh": 0.5,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 64.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T13:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T14:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T15:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 90.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T16:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T17:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.1000000000000014,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T18:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.0999999999999979,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T19:00:00Z",
+          "pv_kwh": -36.300000000000004,
+          "load_kwh": -26.2,
+          "grid_import_kwh": -4.9,
+          "grid_export_kwh": -14.4,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": null,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T20:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.2,
+          "grid_import_kwh": 1.2,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T21:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7,
+          "grid_import_kwh": 0.6000000000000001,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 14.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T22:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.7000000000000002,
+          "grid_import_kwh": 0.7000000000000002,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 0.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-02T23:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.6000000000000001,
+          "grid_import_kwh": 0.3999999999999999,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 33.3,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T00:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 0.8000000000000003,
+          "grid_import_kwh": 0.7000000000000002,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 12.5,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T01:00:00Z",
+          "pv_kwh": 0.0,
+          "load_kwh": 1.3999999999999995,
+          "grid_import_kwh": 1.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": null,
+          "self_sufficiency_pct": 28.6,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T02:00:00Z",
+          "pv_kwh": 0.5,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 100.0,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T03:00:00Z",
+          "pv_kwh": 2.7,
+          "load_kwh": 1.0,
+          "grid_import_kwh": 0.09999999999999964,
+          "grid_export_kwh": 0.0,
+          "efficiency_pct": 92.6,
+          "self_sufficiency_pct": 90.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T04:00:00Z",
+          "pv_kwh": 4.8999999999999995,
+          "load_kwh": 1.3000000000000007,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 0.1,
+          "efficiency_pct": 91.8,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        },
+        {
+          "timestamp": "2026-02-03T05:00:00Z",
+          "pv_kwh": 7.100000000000001,
+          "load_kwh": 1.1999999999999993,
+          "grid_import_kwh": 0.0,
+          "grid_export_kwh": 1.8,
+          "efficiency_pct": 97.2,
+          "self_sufficiency_pct": 100.0,
+          "temperature_c": 125.0
+        }
+      ]
+    }
+  }
+}
