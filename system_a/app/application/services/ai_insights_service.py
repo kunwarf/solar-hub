@@ -257,8 +257,8 @@ class AIInsightsService:
                 ),
                 timestamp=now,
                 metadata={
-                    "energy_today_kwh": round(energy_today, 2),
-                    "co2_saved_kg": round(co2_saved_kg, 2),
+                    "energy_today_kwh": round(energy_today, 1),
+                    "co2_saved_kg": round(co2_saved_kg, 1),
                 },
             ))
 
@@ -271,7 +271,7 @@ class AIInsightsService:
                 title="Peak Solar Output",
                 message=f"Peak solar output reached {peak_kw:.1f} kW today",
                 timestamp=now,
-                metadata={"peak_kw": round(peak_kw, 2)},
+                metadata={"peak_kw": round(peak_kw, 1)},
             ))
 
         # --- Savings insight ---
@@ -289,7 +289,7 @@ class AIInsightsService:
                 timestamp=now,
                 metadata={
                     "savings_pkr": savings_pkr,
-                    "self_consumed_kwh": round(self_consumed_kwh, 2),
+                    "self_consumed_kwh": round(self_consumed_kwh, 1),
                     "import_rate_pkr": import_rate_pkr,
                 },
             ))

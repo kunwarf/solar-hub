@@ -101,7 +101,7 @@ function generateDailyInsights(stats: EnergyStatsInput): Insight[] {
       type: 'positive',
       category: 'production',
       title: 'Great Production Day!',
-      message: `You generated ${dailyProduction} kWh today, ${Math.abs(productionDiff).toFixed(0)}% above your monthly average 🎉`,
+      message: `You generated ${dailyProduction.toFixed(1)} kWh today, ${Math.abs(productionDiff).toFixed(0)}% above your monthly average 🎉`,
       icon: <Sun className="h-4 w-4" />,
       timestamp: now,
       metadata: { dailyProduction, monthlyAverage, diff: productionDiff }
@@ -112,7 +112,7 @@ function generateDailyInsights(stats: EnergyStatsInput): Insight[] {
       type: 'neutral',
       category: 'production',
       title: 'Production Summary',
-      message: `You generated ${dailyProduction} kWh today, ${Math.abs(productionDiff).toFixed(0)}% below your monthly average`,
+      message: `You generated ${dailyProduction.toFixed(1)} kWh today, ${Math.abs(productionDiff).toFixed(0)}% below your monthly average`,
       icon: <Sun className="h-4 w-4" />,
       timestamp: now,
       metadata: { dailyProduction, monthlyAverage, diff: productionDiff }
