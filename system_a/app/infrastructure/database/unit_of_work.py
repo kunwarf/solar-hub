@@ -17,6 +17,12 @@ from .repositories.dashboard_repository import (
     SQLAlchemyDashboardPreferencesRepository,
     SQLAlchemyCustomPresetRepository,
 )
+from .repositories.admin_repository import (
+    SQLAlchemyElectricityProviderRepository,
+    SQLAlchemyElectricityTariffRepository,
+    SQLAlchemyLoadSheddingScheduleRepository,
+    SQLAlchemyAdminAuditLogRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +51,10 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
         self._alert_rules: Optional[SQLAlchemyAlertRuleRepository] = None
         self._dashboard_preferences: Optional[SQLAlchemyDashboardPreferencesRepository] = None
         self._custom_presets: Optional[SQLAlchemyCustomPresetRepository] = None
+        self._electricity_providers: Optional[SQLAlchemyElectricityProviderRepository] = None
+        self._electricity_tariffs: Optional[SQLAlchemyElectricityTariffRepository] = None
+        self._load_shedding_schedules: Optional[SQLAlchemyLoadSheddingScheduleRepository] = None
+        self._admin_audit_logs: Optional[SQLAlchemyAdminAuditLogRepository] = None
 
     async def __aenter__(self) -> "SQLAlchemyUnitOfWork":
         """Enter async context - create session."""
@@ -129,6 +139,42 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._custom_presets = SQLAlchemyCustomPresetRepository(self._session)
         return self._custom_presets
 
+    @property
+    def electricity_providers(self) -> SQLAlchemyElectricityProviderRepository:
+        """Get electricity provider repository."""
+        if self._electricity_providers is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._electricity_providers = SQLAlchemyElectricityProviderRepository(self._session)
+        return self._electricity_providers
+
+    @property
+    def electricity_tariffs(self) -> SQLAlchemyElectricityTariffRepository:
+        """Get electricity tariff repository."""
+        if self._electricity_tariffs is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._electricity_tariffs = SQLAlchemyElectricityTariffRepository(self._session)
+        return self._electricity_tariffs
+
+    @property
+    def load_shedding_schedules(self) -> SQLAlchemyLoadSheddingScheduleRepository:
+        """Get load shedding schedule repository."""
+        if self._load_shedding_schedules is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._load_shedding_schedules = SQLAlchemyLoadSheddingScheduleRepository(self._session)
+        return self._load_shedding_schedules
+
+    @property
+    def admin_audit_logs(self) -> SQLAlchemyAdminAuditLogRepository:
+        """Get admin audit log repository."""
+        if self._admin_audit_logs is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._admin_audit_logs = SQLAlchemyAdminAuditLogRepository(self._session)
+        return self._admin_audit_logs
+
     async def commit(self) -> None:
         """Commit current transaction."""
         if self._session:
@@ -157,6 +203,10 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._alert_rules = None
             self._dashboard_preferences = None
             self._custom_presets = None
+            self._electricity_providers = None
+            self._electricity_tariffs = None
+            self._load_shedding_schedules = None
+            self._admin_audit_logs = None
 
     def collect_domain_events(self) -> List[DomainEvent]:
         """

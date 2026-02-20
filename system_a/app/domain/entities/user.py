@@ -15,12 +15,17 @@ from ..exceptions import ValidationException, BusinessRuleViolationException
 
 class UserRole(str, Enum):
     """User roles within the system."""
-    SUPER_ADMIN = "super_admin"  # Platform administrator
-    OWNER = "owner"              # Organization owner
-    ADMIN = "admin"              # Organization admin
-    MANAGER = "manager"          # Site manager
-    VIEWER = "viewer"            # Read-only access
-    INSTALLER = "installer"      # Device installation access
+    SUPER_ADMIN = "super_admin"      # Platform administrator (full access)
+    OWNER = "owner"                  # Organization owner
+    ADMIN = "admin"                  # Organization admin
+    MANAGER = "manager"              # Site manager
+    VIEWER = "viewer"                # Read-only access
+    INSTALLER = "installer"          # Device installation access
+    # Admin portal roles (portal-level staff, not organization members)
+    OPS_ADMIN = "ops_admin"          # Operations admin (providers, tariffs, load shedding)
+    BILLING_ADMIN = "billing_admin"  # Billing admin (tariffs only)
+    DEVICE_ADMIN = "device_admin"    # Device admin (device management)
+    FIRMWARE_ADMIN = "firmware_admin"  # Firmware admin (OTA management)
 
 
 class UserStatus(str, Enum):
@@ -149,8 +154,21 @@ class User(AggregateRoot):
 
     @property
     def is_admin(self) -> bool:
-        """Check if user has admin privileges."""
-        return self.role in (UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN)
+        """Check if user has admin privileges (organization or portal admin)."""
+        return self.role in (
+            UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.ADMIN,
+            UserRole.OPS_ADMIN, UserRole.BILLING_ADMIN,
+            UserRole.DEVICE_ADMIN, UserRole.FIRMWARE_ADMIN,
+        )
+
+    @property
+    def is_portal_admin(self) -> bool:
+        """Check if user is a portal-level admin (staff member)."""
+        return self.role in (
+            UserRole.SUPER_ADMIN,
+            UserRole.OPS_ADMIN, UserRole.BILLING_ADMIN,
+            UserRole.DEVICE_ADMIN, UserRole.FIRMWARE_ADMIN,
+        )
 
     def verify_email(self) -> None:
         """Mark email as verified and activate account."""

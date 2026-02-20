@@ -33,9 +33,9 @@ def upgrade() -> None:
             'telemetry_hourly_summary',
             sa.Column('updated_at', TIMESTAMP(timezone=True), nullable=True)
         )
-        print("✓ Added updated_at column to telemetry_hourly_summary")
+        print("[OK] Added updated_at column to telemetry_hourly_summary")
     else:
-        print("⊘ Table telemetry_hourly_summary does not exist - skipping migration")
+        print("[SKIP] Table telemetry_hourly_summary does not exist - skipping migration")
         print("  (This is expected if System A uses System B repository for telemetry)")
 
 
@@ -46,6 +46,6 @@ def downgrade() -> None:
 
     if 'telemetry_hourly_summary' in inspector.get_table_names():
         op.drop_column('telemetry_hourly_summary', 'updated_at')
-        print("✓ Removed updated_at column from telemetry_hourly_summary")
+        print("[OK] Removed updated_at column from telemetry_hourly_summary")
     else:
-        print("⊘ Table telemetry_hourly_summary does not exist - skipping rollback")
+        print("[SKIP] Table telemetry_hourly_summary does not exist - skipping rollback")

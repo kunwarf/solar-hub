@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Input } from "@/components/ui/input";
-import { Search, FileText, Download, Filter } from "lucide-react";
+import { Search, FileText, Download, Filter, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -23,14 +24,27 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import type { AuditLogEntry } from "@/types/admin";
 import { format } from "date-fns";
+import { auditLogService } from "@/api/services/admin.service";
 
 export default function AuditLog() {
-  const { auditLog, hasPermission } = useAdminAuth();
+  const { hasPermission } = useAdminAuth();
   const canExport = hasPermission("export_data");
 
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [entityFilter, setEntityFilter] = useState<string>("all");
+
+  // Fetch audit log from backend
+  const { data: auditLog = [], isLoading, error } = useQuery({
+    queryKey: ["admin", "audit-log", actionFilter, entityFilter],
+    queryFn: () =>
+      auditLogService.list({
+        action: actionFilter !== "all" ? actionFilter : undefined,
+        resource_type: entityFilter !== "all" ? entityFilter : undefined,
+        limit: 100,
+      }),
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
 
   // Get unique actions and entities for filters
   const uniqueActions = Array.from(new Set(auditLog.map((entry) => entry.action)));
@@ -40,24 +54,20 @@ export default function AuditLog() {
     const matchesSearch =
       entry.actor.toLowerCase().includes(search.toLowerCase()) ||
       entry.entity.toLowerCase().includes(search.toLowerCase()) ||
-      entry.entityId.toLowerCase().includes(search.toLowerCase());
-
-    const matchesAction = actionFilter === "all" || entry.action === actionFilter;
-    const matchesEntity = entityFilter === "all" || entry.entity === entityFilter;
-
-    return matchesSearch && matchesAction && matchesEntity;
+      (entry.entityId || "").toLowerCase().includes(search.toLowerCase());
+    return matchesSearch;
   });
 
   const handleExport = () => {
     const csv = [
-      ["Timestamp", "Actor", "Role", "Action", "Entity", "Entity ID"],
+      ["Timestamp", "Actor", "Action", "Entity", "Entity ID", "IP Address"],
       ...filteredLog.map((entry) => [
         entry.timestamp,
         entry.actor,
-        entry.actorRole,
         entry.action,
         entry.entity,
         entry.entityId,
+        entry.ipAddress || "",
       ]),
     ]
       .map((row) => row.join(","))
@@ -103,7 +113,7 @@ export default function AuditLog() {
               Complete history of administrative actions
             </p>
           </div>
-          {canExport && (
+          {canExport && filteredLog.length > 0 && (
             <Button onClick={handleExport} variant="outline">
               <Download className="mr-2 h-4 w-4" />
               Export CSV
@@ -230,55 +240,63 @@ export default function AuditLog() {
           )}
         </div>
 
+        {/* Error state */}
+        {error && (
+          <div className="text-sm text-destructive">
+            Failed to load audit log. Please check your connection.
+          </div>
+        )}
+
         {/* Audit Log Table */}
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[180px]">Timestamp</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Entity ID</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredLog.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Loading audit log...
+          </div>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    {auditLog.length === 0
-                      ? "No audit entries yet. Administrative actions will appear here."
-                      : "No matching entries found"}
-                  </TableCell>
+                  <TableHead className="w-[180px]">Timestamp</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Entity</TableHead>
+                  <TableHead>Entity ID</TableHead>
                 </TableRow>
-              ) : (
-                filteredLog.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="font-mono text-xs">
-                      {format(new Date(entry.timestamp), "MMM dd, yyyy HH:mm:ss")}
-                    </TableCell>
-                    <TableCell className="font-medium">{entry.actor}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {entry.actorRole.replace("_", " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getActionBadgeVariant(entry.action) as any}>
-                        {entry.action}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="capitalize">{entry.entity}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {entry.entityId}
+              </TableHeader>
+              <TableBody>
+                {filteredLog.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      {auditLog.length === 0
+                        ? "No audit entries yet. Administrative actions will appear here."
+                        : "No matching entries found"}
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ) : (
+                  filteredLog.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-mono text-xs">
+                        {format(new Date(entry.timestamp), "MMM dd, yyyy HH:mm:ss")}
+                      </TableCell>
+                      <TableCell className="font-medium">{entry.actor}</TableCell>
+                      <TableCell>
+                        <Badge variant={getActionBadgeVariant(entry.action) as any}>
+                          {entry.action}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="capitalize">{entry.entity}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {entry.entityId}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
         {filteredLog.length > 0 && (
           <div className="text-sm text-muted-foreground text-center">

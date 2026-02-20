@@ -23,6 +23,12 @@ from .net_metering_model import (
     BillingDailyModel,
 )
 from .report_model import ReportModel, ReportScheduleModel, ReportTemplateModel
+from .admin_models import (
+    ElectricityProviderModel,
+    ElectricityTariffModel,
+    LoadSheddingScheduleModel,
+    AdminAuditLogModel,
+)
 
 __all__ = [
     'Base',
@@ -53,4 +59,8 @@ __all__ = [
     'ReportModel',
     'ReportScheduleModel',
     'ReportTemplateModel',
+    'ElectricityProviderModel',
+    'ElectricityTariffModel',
+    'LoadSheddingScheduleModel',
+    'AdminAuditLogModel',
 ]

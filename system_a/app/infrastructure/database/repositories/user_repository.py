@@ -87,13 +87,17 @@ class SQLAlchemyUserRepository(UserRepository):
         self,
         limit: int = 100,
         offset: int = 0,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        role: Optional[str] = None,
     ) -> List[User]:
-        """List users with pagination."""
+        """List users with pagination, optionally filtered by status and/or role."""
+        from ....domain.entities.user import UserRole
         query = select(UserModel)
 
         if status:
             query = query.where(UserModel.status == UserStatus(status))
+        if role:
+            query = query.where(UserModel.role == UserRole(role))
 
         query = query.order_by(UserModel.created_at.desc())
         query = query.limit(limit).offset(offset)
@@ -102,12 +106,15 @@ class SQLAlchemyUserRepository(UserRepository):
         models = result.scalars().all()
         return [m.to_domain() for m in models]
 
-    async def count(self, status: Optional[str] = None) -> int:
-        """Count total users."""
+    async def count(self, status: Optional[str] = None, role: Optional[str] = None) -> int:
+        """Count total users, optionally filtered by status and/or role."""
+        from ....domain.entities.user import UserRole
         query = select(func.count()).select_from(UserModel)
 
         if status:
             query = query.where(UserModel.status == UserStatus(status))
+        if role:
+            query = query.where(UserModel.role == UserRole(role))
 
         result = await self._session.execute(query)
         return result.scalar() or 0

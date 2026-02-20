@@ -181,6 +181,19 @@ class DevicesService {
     }
   }
 
+  /**
+   * Get real-time telemetry snapshot for a device
+   */
+  async getRealtimeTelemetry(deviceId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(`/devices/${deviceId}/telemetry/realtime`);
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch realtime telemetry:', error);
+      throw error;
+    }
+  }
+
   // ============================================================================
   // Device Claiming Methods (via System A auth endpoints)
   // ============================================================================

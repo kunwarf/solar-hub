@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import type { AdminUser, AdminRole, AdminPermission, AuditLogEntry } from "@/types/admin";
+import { adminAuthService, ADMIN_TOKEN_KEY } from "@/api/services/admin.service";
 
 interface AdminAuthContextType {
   adminUser: AdminUser | null;
@@ -10,7 +11,9 @@ interface AdminAuthContextType {
   hasPermission: (permission: AdminPermission) => boolean;
   hasAnyPermission: (permissions: AdminPermission[]) => boolean;
   hasRole: (role: AdminRole) => boolean;
+  /** @deprecated Backend creates audit entries automatically. This is a no-op. */
   auditLog: AuditLogEntry[];
+  /** @deprecated Backend creates audit entries automatically. This is a no-op. */
   addAuditEntry: (entry: Omit<AuditLogEntry, "id" | "actor" | "actorRole" | "timestamp">) => void;
 }
 
@@ -63,92 +66,38 @@ const rolePermissions: Record<AdminRole, AdminPermission[]> = {
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
 
-  // Check for existing session on mount
+  // Restore session on mount by validating stored token with backend
   useEffect(() => {
-    const checkExistingSession = async () => {
+    const restoreSession = async () => {
       try {
-        const token = localStorage.getItem("admin_token");
-        const storedUser = localStorage.getItem("admin_user");
+        const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+        if (!token) return;
 
-        if (token && storedUser) {
-          // In a real app, validate token with backend
-          const user = JSON.parse(storedUser) as AdminUser;
-          setAdminUser(user);
-        }
-      } catch (error) {
-        console.error("Failed to restore admin session:", error);
-        localStorage.removeItem("admin_token");
+        // Validate token with backend — get current user profile
+        const user = await adminAuthService.me();
+        setAdminUser(user);
+      } catch {
+        // Token expired or invalid — clear it
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
         localStorage.removeItem("admin_user");
       } finally {
         setIsLoading(false);
       }
     };
 
-    checkExistingSession();
+    restoreSession();
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
-
     try {
-      // TODO: Replace with actual API call to /api/v1/admin/auth/login
-      // For now, using mock authentication for development
-
-      // Mock admin users
-      const mockAdmins: Record<string, { user: AdminUser; password: string }> = {
-        "admin@solarhub.com": {
-          password: "admin123",
-          user: {
-            id: "admin-1",
-            email: "admin@solarhub.com",
-            firstName: "Super",
-            lastName: "Admin",
-            role: "super_admin",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            lastLoginAt: new Date().toISOString(),
-          },
-        },
-        "ops@solarhub.com": {
-          password: "ops123",
-          user: {
-            id: "admin-2",
-            email: "ops@solarhub.com",
-            firstName: "Operations",
-            lastName: "Admin",
-            role: "ops_admin",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            lastLoginAt: new Date().toISOString(),
-          },
-        },
-      };
-
-      const adminData = mockAdmins[email];
-
-      if (adminData && adminData.password === password) {
-        const token = `mock_admin_token_${Date.now()}`;
-        localStorage.setItem("admin_token", token);
-        localStorage.setItem("admin_user", JSON.stringify(adminData.user));
-        setAdminUser(adminData.user);
-
-        // Add login audit entry
-        addAuditEntry({
-          action: "view",
-          entity: "auth",
-          entityId: adminData.user.id,
-          details: {
-            metadata: { action: "login", success: true },
-          },
-        });
-
-        return true;
-      }
-
-      return false;
-    } catch (error) {
+      const result = await adminAuthService.login(email, password);
+      localStorage.setItem(ADMIN_TOKEN_KEY, result.access_token);
+      localStorage.setItem("admin_user", JSON.stringify(result.user));
+      setAdminUser(result.user);
+      return true;
+    } catch (error: any) {
       console.error("Admin login failed:", error);
       return false;
     } finally {
@@ -157,25 +106,15 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    if (adminUser) {
-      addAuditEntry({
-        action: "view",
-        entity: "auth",
-        entityId: adminUser.id,
-        details: {
-          metadata: { action: "logout" },
-        },
-      });
-    }
-
-    localStorage.removeItem("admin_token");
+    adminAuthService.logout().catch(() => {});
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
     localStorage.removeItem("admin_user");
     setAdminUser(null);
-  }, [adminUser]);
+  }, []);
 
   const hasPermission = useCallback((permission: AdminPermission): boolean => {
     if (!adminUser) return false;
-    const permissions = rolePermissions[adminUser.role];
+    const permissions = rolePermissions[adminUser.role] ?? [];
     return permissions.includes(permission);
   }, [adminUser]);
 
@@ -188,24 +127,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     return adminUser?.role === role;
   }, [adminUser]);
 
-  const addAuditEntry = useCallback((
-    entry: Omit<AuditLogEntry, "id" | "actor" | "actorRole" | "timestamp">
-  ) => {
-    if (!adminUser) return;
-
-    const newEntry: AuditLogEntry = {
-      id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      actor: adminUser.email,
-      actorRole: adminUser.role,
-      ...entry,
-    };
-
-    setAuditLog(prev => [newEntry, ...prev]);
-
-    // TODO: Send audit entry to backend
-    // await auditService.createEntry(newEntry);
-  }, [adminUser]);
+  // Kept for backward-compatibility with pages not yet wired to real API
+  const addAuditEntry = useCallback(
+    (_entry: Omit<AuditLogEntry, "id" | "actor" | "actorRole" | "timestamp">) => {
+      // No-op: backend records audit entries automatically on mutations
+    },
+    []
+  );
 
   const value: AdminAuthContextType = {
     adminUser,
@@ -216,7 +144,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     hasPermission,
     hasAnyPermission,
     hasRole,
-    auditLog,
+    auditLog: [],
     addAuditEntry,
   };
 

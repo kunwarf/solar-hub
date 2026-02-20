@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Zap } from "lucide-react";
+import { Plus, Search, Zap, Loader2 } from "lucide-react";
 import { DataTable, Column, StatusBadge } from "@/components/admin/common/DataTable";
 import { StatCard } from "@/components/admin/common/StatCard";
 import { ConfirmDialog } from "@/components/admin/common/ConfirmDialog";
@@ -25,58 +26,15 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import type { ElectricityProvider } from "@/types/admin";
-
-// Mock data - replace with API calls
-const mockProviders: ElectricityProvider[] = [
-  {
-    id: "p1",
-    name: "Lahore Electric Supply Company",
-    shortName: "LESCO",
-    region: "Punjab",
-    status: "active",
-    tariffCount: 5,
-    createdAt: "2024-01-15T10:00:00Z",
-    updatedAt: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "p2",
-    name: "K-Electric Limited",
-    shortName: "K-Electric",
-    region: "Sindh",
-    status: "active",
-    tariffCount: 8,
-    createdAt: "2024-01-15T10:00:00Z",
-    updatedAt: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "p3",
-    name: "Multan Electric Power Company",
-    shortName: "MEPCO",
-    region: "Punjab",
-    status: "active",
-    tariffCount: 4,
-    createdAt: "2024-01-16T10:00:00Z",
-    updatedAt: "2024-01-16T10:00:00Z",
-  },
-  {
-    id: "p4",
-    name: "Islamabad Electric Supply Company",
-    shortName: "IESCO",
-    region: "ICT",
-    status: "active",
-    tariffCount: 6,
-    createdAt: "2024-01-17T10:00:00Z",
-    updatedAt: "2024-01-17T10:00:00Z",
-  },
-];
+import { providersService } from "@/api/services/admin.service";
 
 const regions = ["Punjab", "Sindh", "KPK", "Balochistan", "ICT"];
 
 export default function ElectricityProviders() {
-  const { hasPermission, addAuditEntry } = useAdminAuth();
+  const { hasPermission } = useAdminAuth();
   const canEdit = hasPermission("manage_providers");
+  const queryClient = useQueryClient();
 
-  const [providers, setProviders] = useState<ElectricityProvider[]>(mockProviders);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -89,6 +47,53 @@ export default function ElectricityProviders() {
     shortName: "",
     region: "",
     status: "active" as "active" | "inactive",
+  });
+
+  // Data fetching
+  const { data: providers = [], isLoading, error } = useQuery({
+    queryKey: ["admin", "providers"],
+    queryFn: providersService.list,
+  });
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: providersService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "providers"] });
+      toast.success("Provider created successfully");
+      setDialogOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || "Failed to create provider");
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ElectricityProvider> }) =>
+      providersService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "providers"] });
+      toast.success("Provider updated successfully");
+      setDialogOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || "Failed to update provider");
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: providersService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "providers"] });
+      toast.success("Provider deleted successfully");
+      setDeleteDialogOpen(false);
+      setDeletingProvider(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || "Failed to delete provider");
+    },
   });
 
   const filteredProviders = providers.filter(
@@ -146,12 +151,7 @@ export default function ElectricityProviders() {
 
   const handleCreate = () => {
     setEditingProvider(null);
-    setFormData({
-      name: "",
-      shortName: "",
-      region: "",
-      status: "active",
-    });
+    setFormData({ name: "", shortName: "", region: "", status: "active" });
     setDialogOpen(true);
   };
 
@@ -178,74 +178,23 @@ export default function ElectricityProviders() {
     }
 
     if (editingProvider) {
-      // Update existing
-      const updated: ElectricityProvider = {
-        ...editingProvider,
-        ...formData,
-        updatedAt: new Date().toISOString(),
-      };
-      setProviders(providers.map((p) => (p.id === editingProvider.id ? updated : p)));
-
-      addAuditEntry({
-        action: "update",
-        entity: "provider",
-        entityId: editingProvider.id,
-        details: {
-          before: editingProvider,
-          after: updated,
-        },
-      });
-
-      toast.success("Provider updated successfully");
+      updateMutation.mutate({ id: editingProvider.id, data: formData });
     } else {
-      // Create new
-      const newProvider: ElectricityProvider = {
-        id: `p${Date.now()}`,
-        ...formData,
-        tariffCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setProviders([...providers, newProvider]);
-
-      addAuditEntry({
-        action: "create",
-        entity: "provider",
-        entityId: newProvider.id,
-        details: {
-          after: newProvider,
-        },
-      });
-
-      toast.success("Provider created successfully");
+      createMutation.mutate(formData);
     }
-
-    setDialogOpen(false);
   };
 
   const confirmDelete = () => {
     if (!deletingProvider) return;
-
-    setProviders(providers.filter((p) => p.id !== deletingProvider.id));
-
-    addAuditEntry({
-      action: "delete",
-      entity: "provider",
-      entityId: deletingProvider.id,
-      details: {
-        before: deletingProvider,
-      },
-    });
-
-    toast.success("Provider deleted successfully");
-    setDeleteDialogOpen(false);
-    setDeletingProvider(null);
+    deleteMutation.mutate(deletingProvider.id);
   };
 
   const breadcrumbs = [
     { label: "Admin", href: "/admin" },
     { label: "Electricity Providers" },
   ];
+
+  const isMutating = createMutation.isPending || updateMutation.isPending;
 
   return (
     <AdminLayout breadcrumbs={breadcrumbs}>
@@ -286,14 +235,28 @@ export default function ElectricityProviders() {
           </div>
         </div>
 
+        {/* Error state */}
+        {error && (
+          <div className="text-sm text-destructive">
+            Failed to load providers. Please check your connection and try again.
+          </div>
+        )}
+
         {/* Table */}
-        <DataTable
-          data={filteredProviders}
-          columns={columns}
-          onEdit={canEdit ? handleEdit : undefined}
-          onDelete={canEdit ? handleDelete : undefined}
-          emptyMessage="No providers found"
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Loading providers...
+          </div>
+        ) : (
+          <DataTable
+            data={filteredProviders}
+            columns={columns}
+            onEdit={canEdit ? handleEdit : undefined}
+            onDelete={canEdit ? handleDelete : undefined}
+            emptyMessage="No providers found"
+          />
+        )}
 
         {/* Create/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -369,10 +332,11 @@ export default function ElectricityProviders() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmit}>
+              <Button onClick={handleSubmit} disabled={isMutating}>
+                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {editingProvider ? "Update" : "Create"}
               </Button>
             </DialogFooter>

@@ -20,18 +20,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add performance metrics fields."""
-    # Add to hourly summaries
-    op.add_column('telemetry_hourly_summary', sa.Column('efficiency_pct', sa.Float(), nullable=True))
-    op.add_column('telemetry_hourly_summary', sa.Column('self_sufficiency_pct', sa.Float(), nullable=True))
-
-    # Add to daily summaries
-    op.add_column('telemetry_daily_summary', sa.Column('efficiency_pct', sa.Float(), nullable=True))
-    op.add_column('telemetry_daily_summary', sa.Column('self_sufficiency_pct', sa.Float(), nullable=True))
-
-    # Add to monthly summaries
-    op.add_column('telemetry_monthly_summary', sa.Column('efficiency_pct', sa.Float(), nullable=True))
-    op.add_column('telemetry_monthly_summary', sa.Column('self_sufficiency_pct', sa.Float(), nullable=True))
+    """Add performance metrics fields (only if tables exist — they may have been dropped by a parallel branch)."""
+    conn = op.get_bind()
+    for table in ('telemetry_hourly_summary', 'telemetry_daily_summary', 'telemetry_monthly_summary'):
+        exists = conn.execute(sa.text(
+            "SELECT EXISTS (SELECT FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = :tbl)"
+        ), {"tbl": table}).scalar()
+        if exists:
+            conn.execute(sa.text(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS efficiency_pct FLOAT"
+            ))
+            conn.execute(sa.text(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS self_sufficiency_pct FLOAT"
+            ))
 
 
 def downgrade() -> None:

@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, DollarSign, Trash2 } from "lucide-react";
+import { Plus, Search, DollarSign, Trash2, Loader2 } from "lucide-react";
 import { DataTable, Column, StatusBadge } from "@/components/admin/common/DataTable";
 import { StatCard } from "@/components/admin/common/StatCard";
 import { ConfirmDialog } from "@/components/admin/common/ConfirmDialog";
@@ -26,37 +27,7 @@ import {
 import { toast } from "sonner";
 import type { TariffPlan } from "@/types/admin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-// Mock data
-const mockTariffs: TariffPlan[] = [
-  {
-    id: "t1",
-    providerId: "p1",
-    name: "Residential Unprotected",
-    category: "residential",
-    type: "slab",
-    rates: {
-      slabs: [
-        { minUnits: 0, maxUnits: 100, ratePerKwh: 7.74 },
-        { minUnits: 101, maxUnits: 200, ratePerKwh: 11.50 },
-        { minUnits: 201, maxUnits: 300, ratePerKwh: 16.00 },
-        { minUnits: 301, maxUnits: 700, ratePerKwh: 24.00 },
-        { minUnits: 701, maxUnits: null, ratePerKwh: 32.00 },
-      ],
-    },
-    fixedCharges: 150,
-    effectiveFrom: "2024-01-01",
-    effectiveTo: null,
-    status: "active",
-  },
-];
-
-const mockProviders = [
-  { id: "p1", name: "LESCO" },
-  { id: "p2", name: "K-Electric" },
-  { id: "p3", name: "MEPCO" },
-];
+import { tariffsService, providersService } from "@/api/services/admin.service";
 
 interface SlabFormData {
   minUnits: number;
@@ -65,10 +36,10 @@ interface SlabFormData {
 }
 
 export default function TariffManagement() {
-  const { hasPermission, addAuditEntry } = useAdminAuth();
+  const { hasPermission } = useAdminAuth();
   const canEdit = hasPermission("manage_tariffs");
+  const queryClient = useQueryClient();
 
-  const [tariffs, setTariffs] = useState<TariffPlan[]>(mockTariffs);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -89,13 +60,58 @@ export default function TariffManagement() {
   const [slabs, setSlabs] = useState<SlabFormData[]>([
     { minUnits: 0, maxUnits: 100, ratePerKwh: 0 },
   ]);
+  const [touRates, setTouRates] = useState({ peakRate: 0, offPeakRate: 0 });
+  const [flatRate, setFlatRate] = useState(0);
 
-  const [touRates, setTouRates] = useState({
-    peakRate: 0,
-    offPeakRate: 0,
+  // Data fetching
+  const { data: tariffs = [], isLoading: tariffsLoading } = useQuery({
+    queryKey: ["admin", "tariffs"],
+    queryFn: () => tariffsService.list(),
   });
 
-  const [flatRate, setFlatRate] = useState(0);
+  const { data: providers = [] } = useQuery({
+    queryKey: ["admin", "providers"],
+    queryFn: providersService.list,
+  });
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (data: Omit<TariffPlan, "id">) => tariffsService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "tariffs"] });
+      toast.success("Tariff plan created successfully");
+      setDialogOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || "Failed to create tariff plan");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<TariffPlan> }) =>
+      tariffsService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "tariffs"] });
+      toast.success("Tariff plan updated successfully");
+      setDialogOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || "Failed to update tariff plan");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: tariffsService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "tariffs"] });
+      toast.success("Tariff plan deleted successfully");
+      setDeleteDialogOpen(false);
+      setDeletingTariff(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || "Failed to delete tariff plan");
+    },
+  });
 
   const filteredTariffs = tariffs.filter(
     (tariff) =>
@@ -237,72 +253,30 @@ export default function TariffManagement() {
       rates.flatRate = flatRate;
     }
 
+    const payload: Omit<TariffPlan, "id"> = {
+      ...formData,
+      rates,
+      effectiveTo: null,
+    };
+
     if (editingTariff) {
-      const updated: TariffPlan = {
-        ...editingTariff,
-        ...formData,
-        rates,
-      };
-      setTariffs(tariffs.map((t) => (t.id === editingTariff.id ? updated : t)));
-
-      addAuditEntry({
-        action: "update",
-        entity: "tariff",
-        entityId: editingTariff.id,
-        details: {
-          before: editingTariff,
-          after: updated,
-        },
-      });
-
-      toast.success("Tariff plan updated successfully");
+      updateMutation.mutate({ id: editingTariff.id, data: payload });
     } else {
-      const newTariff: TariffPlan = {
-        id: `t${Date.now()}`,
-        ...formData,
-        rates,
-        effectiveTo: null,
-      };
-      setTariffs([...tariffs, newTariff]);
-
-      addAuditEntry({
-        action: "create",
-        entity: "tariff",
-        entityId: newTariff.id,
-        details: {
-          after: newTariff,
-        },
-      });
-
-      toast.success("Tariff plan created successfully");
+      createMutation.mutate(payload);
     }
-
-    setDialogOpen(false);
   };
 
   const confirmDelete = () => {
     if (!deletingTariff) return;
-
-    setTariffs(tariffs.filter((t) => t.id !== deletingTariff.id));
-
-    addAuditEntry({
-      action: "delete",
-      entity: "tariff",
-      entityId: deletingTariff.id,
-      details: {
-        before: deletingTariff,
-      },
-    });
-
-    toast.success("Tariff plan deleted successfully");
-    setDeleteDialogOpen(false);
-    setDeletingTariff(null);
+    deleteMutation.mutate(deletingTariff.id);
   };
 
   const breadcrumbs = [
     { label: "Admin", href: "/admin" },
     { label: "Tariff Management" },
   ];
+
+  const isMutating = createMutation.isPending || updateMutation.isPending;
 
   return (
     <AdminLayout breadcrumbs={breadcrumbs}>
@@ -344,13 +318,20 @@ export default function TariffManagement() {
         </div>
 
         {/* Table */}
-        <DataTable
-          data={filteredTariffs}
-          columns={columns}
-          onEdit={canEdit ? handleEdit : undefined}
-          onDelete={canEdit ? handleDelete : undefined}
-          emptyMessage="No tariff plans found"
-        />
+        {tariffsLoading ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Loading tariff plans...
+          </div>
+        ) : (
+          <DataTable
+            data={filteredTariffs}
+            columns={columns}
+            onEdit={canEdit ? handleEdit : undefined}
+            onDelete={canEdit ? handleDelete : undefined}
+            emptyMessage="No tariff plans found"
+          />
+        )}
 
         {/* Create/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -381,9 +362,9 @@ export default function TariffManagement() {
                       <SelectValue placeholder="Select provider" />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockProviders.map((provider) => (
+                      {providers.map((provider) => (
                         <SelectItem key={provider.id} value={provider.id}>
-                          {provider.name}
+                          {provider.shortName}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -597,10 +578,11 @@ export default function TariffManagement() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmit}>
+              <Button onClick={handleSubmit} disabled={isMutating}>
+                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {editingTariff ? "Update" : "Create"}
               </Button>
             </DialogFooter>

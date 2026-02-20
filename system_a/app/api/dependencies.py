@@ -370,6 +370,19 @@ require_admin = RoleChecker([UserRole.ADMIN, UserRole.SUPER_ADMIN])
 require_super_admin = RoleChecker([UserRole.SUPER_ADMIN])
 require_manager = RoleChecker([UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
 
+# Admin portal role checkers
+require_portal_admin = RoleChecker([
+    UserRole.SUPER_ADMIN,
+    UserRole.OPS_ADMIN, UserRole.BILLING_ADMIN,
+    UserRole.DEVICE_ADMIN, UserRole.FIRMWARE_ADMIN,
+])
+require_ops_admin = RoleChecker([UserRole.SUPER_ADMIN, UserRole.OPS_ADMIN])
+require_billing_or_ops_admin = RoleChecker([
+    UserRole.SUPER_ADMIN, UserRole.OPS_ADMIN, UserRole.BILLING_ADMIN,
+])
+require_firmware_admin = RoleChecker([UserRole.SUPER_ADMIN, UserRole.FIRMWARE_ADMIN])
+require_device_admin = RoleChecker([UserRole.SUPER_ADMIN, UserRole.DEVICE_ADMIN])
+
 
 async def get_telemetry_service(
     uow: UnitOfWork = Depends(get_unit_of_work),
