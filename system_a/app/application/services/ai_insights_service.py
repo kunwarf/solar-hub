@@ -215,11 +215,22 @@ class AIInsightsService:
 
         # Try Claude first; fall back to rule-based on any failure
         if self._claude_client and settings.ai.enabled:
+            logger.info(
+                "Generating insights with Claude (model=%s) for site %s.",
+                settings.ai.model,
+                site_id,
+            )
             try:
                 daily_insights, anomaly_alerts = await self._generate_insights_with_claude(
                     site_stats, import_rate_pkr, now
                 )
-                logger.debug("Claude insights generated successfully for site %s.", site_id)
+                logger.info(
+                    "Claude insights generated successfully for site %s "
+                    "(%d daily, %d anomalies).",
+                    site_id,
+                    len(daily_insights),
+                    len(anomaly_alerts),
+                )
             except Exception as exc:
                 logger.warning(
                     "Claude insight generation failed for site %s (%s) — using rule-based fallback.",
@@ -229,6 +240,13 @@ class AIInsightsService:
                 daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now)
                 anomaly_alerts = self._generate_anomaly_alerts(site_stats, now)
         else:
+            logger.info(
+                "Using rule-based insights for site %s "
+                "(claude_client=%s, ai_enabled=%s).",
+                site_id,
+                bool(self._claude_client),
+                settings.ai.enabled,
+            )
             daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now)
             anomaly_alerts = self._generate_anomaly_alerts(site_stats, now)
 
