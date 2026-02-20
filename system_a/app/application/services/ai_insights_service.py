@@ -210,8 +210,32 @@ class AIInsightsService:
         """
         now = datetime.now(timezone.utc)
 
+        logger.info(
+            "[insights] Request for site=%s devices=%s import_rate=%.1f",
+            site_id,
+            device_serials,
+            import_rate_pkr,
+        )
+
         # Gather aggregated site stats from Redis
         site_stats = await self._gather_site_stats(device_serials)
+
+        logger.info(
+            "[insights] Aggregated stats: pv=%.0fW load=%.0fW grid=%.0fW batt=%.0fW "
+            "energy_today=%.2fkWh import=%.2fkWh export=%.2fkWh soc=%.1f%% "
+            "self_suf=%.1f%% devices=%d/%d",
+            site_stats["pv_power_w"],
+            site_stats["load_power_w"],
+            site_stats["grid_power_w"],
+            site_stats["battery_power_w"],
+            site_stats["energy_today_kwh"],
+            site_stats["grid_import_today_kwh"],
+            site_stats["grid_export_today_kwh"],
+            site_stats["avg_soc_pct"],
+            site_stats["self_sufficiency_pct"],
+            site_stats["devices_online"],
+            site_stats["devices_total"],
+        )
 
         # Try Claude first; fall back to rule-based on any failure
         if self._claude_client and settings.ai.enabled:
@@ -252,6 +276,14 @@ class AIInsightsService:
 
         # Weekly digest always uses System B (pure arithmetic, no LLM needed)
         weekly_digest = await self._generate_weekly_digest(site_id, import_rate_pkr)
+
+        logger.info(
+            "[insights] Done for site=%s: %d daily, %d anomalies, weekly_digest=%s",
+            site_id,
+            len(daily_insights),
+            len(anomaly_alerts),
+            "ok (%.1fkWh)" % weekly_digest.total_generated_kwh if weekly_digest else "unavailable",
+        )
 
         return InsightsResponse(
             daily_insights=daily_insights,
@@ -384,11 +416,22 @@ class AIInsightsService:
                 devices_online += 1
 
             if not telemetry:
+                logger.warning("[insights] No telemetry in Redis for device %s (status=%s)", serial, status)
                 continue
 
             power = telemetry.get("power", {})
             energy = telemetry.get("energy_today", {})
             battery = telemetry.get("battery", {})
+
+            logger.info(
+                "[insights] Device %s (status=%s): pv_total_w=%s load_w=%s grid_w=%s "
+                "batt_w=%s pv_kwh=%s import_kwh=%s export_kwh=%s soc=%s",
+                serial, status,
+                power.get("pv_total_w"), power.get("load_w"), power.get("grid_w"),
+                power.get("battery_w"), energy.get("pv_kwh"),
+                energy.get("grid_import_kwh"), energy.get("grid_export_kwh"),
+                battery.get("soc_pct"),
+            )
 
             pv_w = float(power.get("pv_total_w", 0) or 0)
             load_w = float(power.get("load_w", 0) or 0)
