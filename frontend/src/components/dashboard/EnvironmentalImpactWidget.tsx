@@ -155,7 +155,7 @@ export function EnvironmentalImpactWidget({ className, compact = false, environm
             </div>
             <div>
               <h3 className="font-semibold text-foreground">Environmental Impact</h3>
-              <p className="text-xs text-muted-foreground">Lifetime contribution</p>
+              <p className="text-xs text-muted-foreground">This month's contribution</p>
             </div>
           </div>
           <Button 

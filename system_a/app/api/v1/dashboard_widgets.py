@@ -779,6 +779,7 @@ async def get_stats(
 
     devices_online = 0
     devices_data = []
+    redis_grid_export_kwh = 0.0
 
     for serial in site_info.device_serials:
         telemetry = telemetry_batch.get(serial)
@@ -804,7 +805,15 @@ async def get_stats(
                 online=is_online,
             )
 
+            # Accumulate grid export from raw inverter counters as a fallback
+            raw = telemetry.get("raw", {})
+            redis_grid_export_kwh += float(raw.get("grid_export_energy_today_kwh", 0) or 0)
+
         devices_data.append(device_data)
+
+    # System B often returns 0 for grid_export; use Redis raw counters when that happens
+    if grid_export_today_kwh == 0 and redis_grid_export_kwh > 0:
+        grid_export_today_kwh = redis_grid_export_kwh
 
     co2_saved = total_energy_today_kwh * 0.7
 
@@ -1276,22 +1285,29 @@ async def get_peak_demand(
     total_kw = 0.0
 
     try:
-        # Get today's hourly data from System B
+        # Get today's fine-grained data from System B (~5-min buckets for "day" period)
         energy_data = await system_b_client.get_site_energy_chart(
             site_id=site_info.site_id,
-            period="day",  # Last 24 hours with hourly buckets
+            period="day",
         )
 
+        # Aggregate fine-grained buckets into hourly groups.
+        # Sum load_kwh per hour → kWh/hour = average kW for that hour.
+        hourly_load: dict[str, float] = {}
         for point in energy_data.get("data", []):
-            demand = point.get("load_kwh", 0)
+            load_kwh = point.get("load_kwh", 0)
             timestamp = datetime.fromisoformat(point["timestamp"])
             hour_label = timestamp.strftime("%H:00")
+            hourly_load[hour_label] = hourly_load.get(hour_label, 0.0) + load_kwh
 
-            hourly_profile.append(PeakDemandHourly(hour=hour_label, demand_kw=round(demand, 2)))
-            total_kw += demand
+        for hour_label, hour_kwh in sorted(hourly_load.items()):
+            # kWh summed over one hour = average kW for that hour
+            demand_kw = round(hour_kwh, 2)
+            hourly_profile.append(PeakDemandHourly(hour=hour_label, demand_kw=demand_kw))
+            total_kw += demand_kw
 
-            if demand > peak_kw:
-                peak_kw = demand
+            if demand_kw > peak_kw:
+                peak_kw = demand_kw
                 peak_hour_str = hour_label
 
         avg_kw = total_kw / len(hourly_profile) if hourly_profile else 0
@@ -1437,7 +1453,8 @@ async def get_load_shedding(
     total_soc = 0.0
     soc_count = 0
     total_load_w = 0.0
-    battery_capacity_kwh = 13.5  # Default per device
+    total_battery_kwh = 0.0
+    shutdown_soc = 10  # minimum SOC threshold (%)
 
     for serial in site_info.device_serials:
         telemetry = telemetry_batch.get(serial)
@@ -1455,9 +1472,21 @@ async def get_load_shedding(
             power = telemetry.get("power", {})
             total_load_w += power.get("load_w", 0)
 
+            # Derive battery capacity from raw telemetry
+            raw = telemetry.get("raw", {})
+            capacity_ah = float(raw.get("battery_capacity_ah", 0) or 0)
+            if capacity_ah > 0:
+                # Assume 48 V nominal bus (common for residential hybrid inverters)
+                total_battery_kwh += capacity_ah * 48 / 1000
+            else:
+                total_battery_kwh += 13.5  # fallback default kWh
+            # Honour inverter's configured shutdown SOC if available
+            dev_shutdown = int(raw.get("battery_shutdown_capacity_pct", 10) or 10)
+            shutdown_soc = max(shutdown_soc, dev_shutdown)
+
     avg_soc = total_soc / soc_count if soc_count > 0 else 0
-    total_battery_kwh = battery_capacity_kwh * len(site_info.device_serials)
-    usable_kwh = (avg_soc / 100) * total_battery_kwh
+    # Only count energy above the shutdown threshold as usable
+    usable_kwh = max(0.0, ((avg_soc - shutdown_soc) / 100) * total_battery_kwh)
     load_kw = total_load_w / 1000 if total_load_w > 0 else 1
     coverage_hours = round(usable_kwh / load_kw, 1) if load_kw > 0 else 0
 
