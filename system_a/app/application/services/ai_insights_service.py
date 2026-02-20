@@ -387,16 +387,16 @@ class AIInsightsService:
                 continue
 
             power = telemetry.get("power", {})
-            energy = telemetry.get("energy", {})
+            energy = telemetry.get("energy_today", {})
             battery = telemetry.get("battery", {})
 
-            pv_w = float(power.get("pv_w", 0) or 0)
+            pv_w = float(power.get("pv_total_w", 0) or 0)
             load_w = float(power.get("load_w", 0) or 0)
             grid_w = float(power.get("grid_w", 0) or 0)
             batt_w = float(power.get("battery_w", 0) or 0)
-            energy_today = float(energy.get("generated_today_kwh", 0) or 0)
-            grid_import = float(energy.get("grid_import_today_kwh", 0) or 0)
-            grid_export = float(energy.get("grid_export_today_kwh", 0) or 0)
+            energy_today = float(energy.get("pv_kwh", 0) or 0)
+            grid_import = float(energy.get("grid_import_kwh", 0) or 0)
+            grid_export = float(energy.get("grid_export_kwh", 0) or 0)
             soc = float(battery.get("soc_pct", 0) or 0)
 
             total_pv_w += pv_w

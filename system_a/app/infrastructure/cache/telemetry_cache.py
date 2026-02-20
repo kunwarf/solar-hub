@@ -124,7 +124,8 @@ class TelemetryCacheReader:
         try:
             client = await RedisManager.get_client()
             key = self.KEY_STATUS.format(serial=serial_number)
-            return await client.get(key)
+            value = await client.get(key)
+            return value.decode() if isinstance(value, bytes) else value
         except Exception as e:
             logger.error(f"Failed to read status for {serial_number}: {e}")
             return None
