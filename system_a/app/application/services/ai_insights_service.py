@@ -1,8 +1,9 @@
 """
 AI Insights Service.
 
-Generates rule-based insights from real telemetry data.
-Structured for easy upgrade to LLM-powered insights later.
+Generates insights from real telemetry data.
+When an Anthropic API key is configured (AI_API_KEY), Claude is used to produce
+richer, context-aware insights. Falls back to a rule-based engine otherwise.
 
 Architecture:
 - Reads real-time data from Redis (via TelemetryCacheReader)
@@ -10,12 +11,14 @@ Architecture:
 - All numbers are real (no mocks)
 - Returns structured InsightData that maps to the frontend Insight type
 """
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from ...config import settings
 from ...infrastructure.cache.telemetry_cache import TelemetryCacheReader
 from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
 
@@ -37,6 +40,77 @@ WEEKLY_TIPS = [
     "Use a timer on your water heater to heat water during midday solar surplus.",
     "Ceiling fans use 10x less power than AC — combine both on mild days to cut cooling costs.",
 ]
+
+# Tool schema for Claude structured output
+_CLAUDE_INSIGHT_TOOL = {
+    "name": "return_insights",
+    "description": (
+        "Return structured daily insights and anomaly alerts for the solar site. "
+        "Call this tool with every response."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "daily_insights": {
+                "type": "array",
+                "description": "2-4 daily insights about solar generation, savings, and recommendations.",
+                "items": {
+                    "type": "object",
+                    "required": ["id", "type", "category", "title", "message"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "type": {
+                            "type": "string",
+                            "enum": ["positive", "neutral", "warning", "tip"],
+                        },
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "production",
+                                "savings",
+                                "consumption",
+                                "anomaly",
+                                "recommendation",
+                            ],
+                        },
+                        "title": {"type": "string", "maxLength": 60},
+                        "message": {"type": "string", "maxLength": 200},
+                        "metadata": {"type": "object"},
+                    },
+                },
+            },
+            "anomaly_alerts": {
+                "type": "array",
+                "description": "0-3 anomaly alerts. Only include real problems, not routine observations.",
+                "items": {
+                    "type": "object",
+                    "required": ["id", "type", "category", "title", "message"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "type": {
+                            "type": "string",
+                            "enum": ["positive", "neutral", "warning", "tip"],
+                        },
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "production",
+                                "savings",
+                                "consumption",
+                                "anomaly",
+                                "recommendation",
+                            ],
+                        },
+                        "title": {"type": "string", "maxLength": 60},
+                        "message": {"type": "string", "maxLength": 200},
+                        "metadata": {"type": "object"},
+                    },
+                },
+            },
+        },
+        "required": ["daily_insights", "anomaly_alerts"],
+    },
+}
 
 
 @dataclass
@@ -83,8 +157,8 @@ class AIInsightsService:
     - Real-time: Redis cache (via TelemetryCacheReader)
     - Historical: System B energy chart API (7-day / 30-day aggregates)
 
-    The rule engine is designed so each rule can later be replaced
-    with an LLM prompt call without changing the interface.
+    When AI_API_KEY is set, Claude (claude-haiku) is used to generate
+    context-aware insights. Falls back to a deterministic rule engine otherwise.
     """
 
     def __init__(
@@ -94,6 +168,24 @@ class AIInsightsService:
     ):
         self._cache = telemetry_cache
         self._system_b = system_b_client
+        self._claude_client = None
+        self._init_claude()
+
+    def _init_claude(self) -> None:
+        """Initialise the Anthropic client if an API key is configured."""
+        api_key = settings.ai.api_key
+        if not api_key:
+            logger.debug("AI_API_KEY not set — using rule-based insights.")
+            return
+        try:
+            import anthropic  # type: ignore
+            self._claude_client = anthropic.AsyncAnthropic(api_key=api_key)
+            logger.info("Claude AI client initialised (model=%s).", settings.ai.model)
+        except ImportError:
+            logger.warning(
+                "anthropic package not installed. "
+                "Run: pip install anthropic>=0.40.0"
+            )
 
     # =========================================================================
     # Public API
@@ -121,13 +213,26 @@ class AIInsightsService:
         # Gather aggregated site stats from Redis
         site_stats = await self._gather_site_stats(device_serials)
 
-        # Generate daily insights
-        daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now)
+        # Try Claude first; fall back to rule-based on any failure
+        if self._claude_client and settings.ai.enabled:
+            try:
+                daily_insights, anomaly_alerts = await self._generate_insights_with_claude(
+                    site_stats, import_rate_pkr, now
+                )
+                logger.debug("Claude insights generated successfully for site %s.", site_id)
+            except Exception as exc:
+                logger.warning(
+                    "Claude insight generation failed for site %s (%s) — using rule-based fallback.",
+                    site_id,
+                    exc,
+                )
+                daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now)
+                anomaly_alerts = self._generate_anomaly_alerts(site_stats, now)
+        else:
+            daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now)
+            anomaly_alerts = self._generate_anomaly_alerts(site_stats, now)
 
-        # Generate anomaly alerts
-        anomaly_alerts = self._generate_anomaly_alerts(site_stats, now)
-
-        # Generate weekly digest from System B
+        # Weekly digest always uses System B (pure arithmetic, no LLM needed)
         weekly_digest = await self._generate_weekly_digest(site_id, import_rate_pkr)
 
         return InsightsResponse(
@@ -136,6 +241,99 @@ class AIInsightsService:
             weekly_digest=weekly_digest,
             generated_at=now,
         )
+
+    # =========================================================================
+    # Claude-powered insight generation
+    # =========================================================================
+
+    async def _generate_insights_with_claude(
+        self,
+        stats: Dict[str, Any],
+        import_rate_pkr: float,
+        now: datetime,
+    ) -> tuple[List[InsightData], List[InsightData]]:
+        """
+        Ask Claude to generate insights from the aggregated site stats.
+
+        Uses tool use to enforce a strict JSON output schema so the response
+        can be deserialized without any string parsing.
+        """
+        hour = now.hour
+        savings_pkr = round(stats["self_consumed_kwh"] * import_rate_pkr)
+
+        system_prompt = (
+            "You are an expert solar energy analyst for Pakistani residential and commercial "
+            "solar installations. You generate concise, actionable insights for system owners. "
+            "Write in clear English. Keep messages under 200 characters. "
+            "Use Pakistani context: PKR currency, DISCO net metering, load shedding, Karachi/Lahore climate."
+        )
+
+        user_prompt = f"""Analyse the following real-time solar site data and generate insights.
+
+## Current Site Stats
+- Time: {now.strftime('%H:%M')} PKT (hour={hour})
+- Solar generation today: {stats['energy_today_kwh']:.2f} kWh
+- Peak solar power: {stats['peak_power_kw']:.2f} kW
+- Current load: {stats['load_power_w']:.0f} W
+- Current grid power: {stats['grid_power_w']:.0f} W  (positive=import, negative=export)
+- Current battery power: {stats['battery_power_w']:.0f} W  (positive=charging, negative=discharging)
+- Battery SoC: {stats['avg_soc_pct']:.1f}%
+- Self-consumed solar today: {stats['self_consumed_kwh']:.2f} kWh
+- Grid import today: {stats['grid_import_today_kwh']:.2f} kWh
+- Grid export today: {stats['grid_export_today_kwh']:.2f} kWh
+- Self-sufficiency today: {stats['self_sufficiency_pct']:.1f}%
+- CO₂ saved today: {stats['co2_saved_kg']:.2f} kg
+- Money saved today: Rs. {savings_pkr:,} (at Rs. {import_rate_pkr}/kWh)
+- Devices online: {stats['devices_online']} / {stats['devices_total']}
+
+## Instructions
+- Generate 2-4 daily_insights covering: generation performance, savings, self-sufficiency, and one actionable tip for the current time of day.
+- Generate anomaly_alerts ONLY if there are real problems (low generation during daylight, very low battery, devices offline). Do not generate alerts if everything is fine.
+- Be specific with numbers. Avoid generic filler text.
+- Call the `return_insights` tool with your response.
+"""
+
+        response = await self._claude_client.messages.create(
+            model=settings.ai.model,
+            max_tokens=1024,
+            system=system_prompt,
+            tools=[_CLAUDE_INSIGHT_TOOL],
+            tool_choice={"type": "tool", "name": "return_insights"},
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+
+        # Extract tool_use block
+        tool_use_block = next(
+            (block for block in response.content if block.type == "tool_use"),
+            None,
+        )
+        if not tool_use_block:
+            raise ValueError("Claude did not call the return_insights tool.")
+
+        raw = tool_use_block.input
+        daily_insights = self._parse_insight_list(raw.get("daily_insights", []), now)
+        anomaly_alerts = self._parse_insight_list(raw.get("anomaly_alerts", []), now)
+        return daily_insights, anomaly_alerts
+
+    def _parse_insight_list(
+        self, items: List[Dict[str, Any]], now: datetime
+    ) -> List[InsightData]:
+        """Convert raw tool-use dicts into InsightData objects."""
+        result: List[InsightData] = []
+        for item in items:
+            try:
+                result.append(InsightData(
+                    id=item["id"],
+                    type=item["type"],
+                    category=item["category"],
+                    title=item["title"],
+                    message=item["message"],
+                    timestamp=now,
+                    metadata=item.get("metadata", {}),
+                ))
+            except (KeyError, TypeError) as exc:
+                logger.warning("Skipping malformed insight from Claude: %s — %s", item, exc)
+        return result
 
     # =========================================================================
     # Data Gathering
@@ -226,7 +424,7 @@ class AIInsightsService:
         }
 
     # =========================================================================
-    # Insight Generators
+    # Rule-Based Insight Generators (fallback)
     # =========================================================================
 
     def _generate_daily_insights(

@@ -196,9 +196,9 @@ class AISettings(BaseSettings):
     )
 
     enabled: bool = Field(default=True)
-    provider: str = Field(default='openai', description='AI provider')
+    provider: str = Field(default='anthropic', description='AI provider (anthropic or openai)')
     api_key: Optional[str] = Field(default=None)
-    model: str = Field(default='gpt-4', description='Model to use')
+    model: str = Field(default='claude-haiku-4-5-20251001', description='Model to use')
     anomaly_detection_enabled: bool = Field(default=True)
     forecasting_enabled: bool = Field(default=True)
 
