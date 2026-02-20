@@ -281,7 +281,7 @@ class WeatherResponse(BaseModel):
     temperature: float = 0  # °C from ambient sensor
     condition: str = "sunny"  # sunny, cloudy, rainy, windy
     humidity: int = 50
-    wind_speed: int = 10  # km/h
+    wind_speed: float = 10.0  # m/s
     solar_forecast: int = 0  # % of expected production
     sunrise: str = "06:00"
     sunset: str = "18:00"
