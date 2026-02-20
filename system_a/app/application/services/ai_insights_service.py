@@ -422,25 +422,24 @@ class AIInsightsService:
             power = telemetry.get("power", {})
             energy = telemetry.get("energy_today", {})
             battery = telemetry.get("battery", {})
-
-            logger.info(
-                "[insights] Device %s (status=%s): pv_total_w=%s load_w=%s grid_w=%s "
-                "batt_w=%s pv_kwh=%s import_kwh=%s export_kwh=%s soc=%s",
-                serial, status,
-                power.get("pv_total_w"), power.get("load_w"), power.get("grid_w"),
-                power.get("battery_w"), energy.get("pv_kwh"),
-                energy.get("grid_import_kwh"), energy.get("grid_export_kwh"),
-                battery.get("soc_pct"),
-            )
+            # Grid import/export kWh live in 'raw' (System B stores them there, not in energy_today)
+            raw = telemetry.get("raw", {})
 
             pv_w = float(power.get("pv_total_w", 0) or 0)
             load_w = float(power.get("load_w", 0) or 0)
             grid_w = float(power.get("grid_w", 0) or 0)
             batt_w = float(power.get("battery_w", 0) or 0)
             energy_today = float(energy.get("pv_kwh", 0) or 0)
-            grid_import = float(energy.get("grid_import_kwh", 0) or 0)
-            grid_export = float(energy.get("grid_export_kwh", 0) or 0)
+            grid_import = float(raw.get("grid_import_energy_today_kwh", 0) or 0)
+            grid_export = float(raw.get("grid_export_energy_today_kwh", 0) or 0)
             soc = float(battery.get("soc_pct", 0) or 0)
+
+            logger.info(
+                "[insights] Device %s (status=%s): pv_total_w=%.0f load_w=%.0f grid_w=%.0f "
+                "batt_w=%.0f pv_kwh=%.2f import_kwh=%.2f export_kwh=%.2f soc=%.0f",
+                serial, status,
+                pv_w, load_w, grid_w, batt_w, energy_today, grid_import, grid_export, soc,
+            )
 
             total_pv_w += pv_w
             total_load_w += load_w
