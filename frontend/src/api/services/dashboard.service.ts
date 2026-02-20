@@ -337,6 +337,39 @@ export interface AllWidgetsData {
   billing: BillingData;
 }
 
+// AI Insights Types
+export interface InsightItem {
+  id: string;
+  type: 'positive' | 'neutral' | 'warning' | 'tip';
+  category: 'production' | 'savings' | 'consumption' | 'anomaly' | 'recommendation';
+  title: string;
+  message: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
+export interface WeeklyDigest {
+  total_generated_kwh: number;
+  total_saved_pkr: number;
+  self_sufficiency_pct: number;
+  prev_week_generated_kwh: number;
+  prev_week_saved_pkr: number;
+  prev_week_self_sufficiency_pct: number;
+  generated_change_pct: number;
+  saved_change_pct: number;
+  self_sufficiency_change_pct: number;
+  tip_of_the_week: string;
+}
+
+export interface InsightsData {
+  site_id: string;
+  site_name: string;
+  daily_insights: InsightItem[];
+  anomaly_alerts: InsightItem[];
+  weekly_digest: WeeklyDigest | null;
+  generated_at: string;
+}
+
 // Dashboard Preferences Types
 export interface WidgetConfigAPI {
   id: string;
@@ -690,6 +723,33 @@ class DashboardService {
         billing,
       };
     }
+  }
+
+  // =========================================================================
+  // AI Insights
+  // =========================================================================
+
+  /**
+   * Get AI insights for the site.
+   * Returns daily insights, anomaly alerts, and weekly digest from real telemetry.
+   */
+  async getInsights(siteId?: string, importRatePkr?: number): Promise<InsightsData> {
+    const params: Record<string, string | number> = {};
+    if (siteId) params.site_id = siteId;
+    if (importRatePkr !== undefined) params.import_rate_pkr = importRatePkr;
+
+    const response = await apiClient.get<InsightsData>('/insights', { params });
+    return response.data;
+  }
+
+  /**
+   * Submit thumbs-up or thumbs-down feedback for an insight.
+   */
+  async submitInsightFeedback(insightId: string, positive: boolean): Promise<void> {
+    await apiClient.post(`/insights/${insightId}/feedback`, {
+      insight_id: insightId,
+      positive,
+    });
   }
 
   // =========================================================================

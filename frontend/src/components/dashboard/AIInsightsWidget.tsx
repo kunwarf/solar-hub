@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
@@ -13,14 +14,16 @@ import {
   Zap,
   Clock,
   Sun,
-  Battery
+  Battery,
+  RefreshCw,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import type { AllWidgetsData } from '@/api/services/dashboard.service';
+import dashboardService from '@/api/services/dashboard.service';
+import type { AllWidgetsData, InsightItem } from '@/api/services/dashboard.service';
 
 // Types for AI insights - structured for easy AI integration later
 export interface Insight {
@@ -34,7 +37,7 @@ export interface Insight {
   metadata?: Record<string, unknown>;
 }
 
-export interface WeeklyDigest {
+export interface LocalWeeklyDigest {
   totalGenerated: number;
   totalSaved: number;
   selfSufficiency: number;
@@ -207,7 +210,7 @@ function generateAnomalyAlerts(stats: EnergyStatsInput): Insight[] {
   return alerts;
 }
 
-function generateWeeklyDigest(stats: EnergyStatsInput): WeeklyDigest {
+function generateWeeklyDigest(stats: EnergyStatsInput): LocalWeeklyDigest {
   // Estimate weekly values from today's data (7x daily average)
   // NOTE: This is a rough estimate assuming consistent daily generation
   // TODO: Replace with actual 7-day historical data when available
@@ -296,21 +299,79 @@ const InsightCard = ({ insight, onFeedback, feedbackGiven }: InsightCardProps) =
 interface AIInsightsWidgetProps {
   widgetsData?: AllWidgetsData | null;
   weeklyEnergyData?: { totalGenerated: number; totalSaved: number } | null;
+  siteId?: string;
 }
 
-export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData }: AIInsightsWidgetProps) => {
+/** Convert a backend InsightItem to a local Insight with an icon. */
+function backendInsightToLocal(item: InsightItem): Insight {
+  const iconMap: Record<string, React.ReactNode> = {
+    production: <Sun className="h-4 w-4" />,
+    savings: <TrendingUp className="h-4 w-4" />,
+    consumption: <Zap className="h-4 w-4" />,
+    anomaly: <AlertTriangle className="h-4 w-4" />,
+    recommendation: <Lightbulb className="h-4 w-4" />,
+  };
+  return {
+    id: item.id,
+    type: item.type,
+    category: item.category,
+    title: item.title,
+    message: item.message,
+    icon: iconMap[item.category] ?? <Sparkles className="h-4 w-4" />,
+    timestamp: new Date(item.timestamp),
+    metadata: item.metadata,
+  };
+}
+
+export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData, siteId }: AIInsightsWidgetProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const [showAnomalies, setShowAnomalies] = useState(true);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
 
+  // Fetch insights from backend (real data)
+  const { data: backendInsights, isLoading: insightsLoading } = useQuery({
+    queryKey: ['insights', siteId],
+    queryFn: () => dashboardService.getInsights(siteId),
+    staleTime: 5 * 60 * 1000,  // 5 minutes
+    retry: 1,
+  });
+
+  // Local rule-based fallback (used when backend is unavailable or no data yet)
   const energyInput = useMemo(() => deriveEnergyStats(widgetsData), [widgetsData]);
+  const localDailyInsights = useMemo(() => generateDailyInsights(energyInput), [energyInput]);
+  const localAnomalyAlerts = useMemo(() => generateAnomalyAlerts(energyInput), [energyInput]);
 
-  // Generate insights (memoized, regenerated when widgetsData changes)
-  const dailyInsights = useMemo(() => generateDailyInsights(energyInput), [energyInput]);
-  const anomalyAlerts = useMemo(() => generateAnomalyAlerts(energyInput), [energyInput]);
+  // Use backend data if available, otherwise fall back to local rule-based
+  const dailyInsights: Insight[] = useMemo(() => {
+    if (backendInsights?.daily_insights?.length) {
+      return backendInsights.daily_insights.map(backendInsightToLocal);
+    }
+    return localDailyInsights;
+  }, [backendInsights, localDailyInsights]);
 
-  // Use actual 7-day data if available, otherwise estimate from today
-  const weeklyDigest = useMemo(() => {
+  const anomalyAlerts: Insight[] = useMemo(() => {
+    if (backendInsights?.anomaly_alerts !== undefined) {
+      return backendInsights.anomaly_alerts.map(backendInsightToLocal);
+    }
+    return localAnomalyAlerts;
+  }, [backendInsights, localAnomalyAlerts]);
+
+  // Weekly digest: backend → weeklyEnergyData prop → local estimate
+  const weeklyDigest = useMemo((): LocalWeeklyDigest => {
+    if (backendInsights?.weekly_digest) {
+      const wd = backendInsights.weekly_digest;
+      return {
+        totalGenerated: wd.total_generated_kwh,
+        totalSaved: wd.total_saved_pkr,
+        selfSufficiency: wd.self_sufficiency_pct,
+        comparedToLastWeek: {
+          generated: wd.generated_change_pct,
+          saved: wd.saved_change_pct,
+          selfSufficiency: wd.self_sufficiency_change_pct,
+        },
+        tipOfTheWeek: wd.tip_of_the_week,
+      };
+    }
     if (weeklyEnergyData) {
       return {
         totalGenerated: weeklyEnergyData.totalGenerated,
@@ -321,16 +382,16 @@ export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData }: AIInsightsWi
       };
     }
     return generateWeeklyDigest(energyInput);
-  }, [energyInput, weeklyEnergyData]);
+  }, [backendInsights, weeklyEnergyData, energyInput]);
 
-  const handleFeedback = (id: string, positive: boolean) => {
-    setFeedback(prev => ({
-      ...prev,
-      [id]: positive ? 'up' : 'down'
-    }));
-    // In a real app, this would send feedback to the backend for AI training
-    console.log(`Feedback for ${id}: ${positive ? 'positive' : 'negative'}`);
-  };
+  const handleFeedback = useCallback(async (id: string, positive: boolean) => {
+    setFeedback(prev => ({ ...prev, [id]: positive ? 'up' : 'down' }));
+    try {
+      await dashboardService.submitInsightFeedback(id, positive);
+    } catch {
+      // Feedback is best-effort; silently ignore errors
+    }
+  }, []);
 
   return (
     <Card className="overflow-hidden">
@@ -340,9 +401,18 @@ export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData }: AIInsightsWi
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-primary/10 rounded-lg">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                  {insightsLoading ? (
+                    <RefreshCw className="h-4 w-4 text-primary animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 text-primary" />
+                  )}
                 </div>
                 <CardTitle className="text-base">AI Insights</CardTitle>
+                {backendInsights && (
+                  <Badge variant="outline" className="text-xs text-muted-foreground border-muted">
+                    Live
+                  </Badge>
+                )}
                 {anomalyAlerts.length > 0 && (
                   <Badge variant="outline" className="text-warning border-warning/30 text-xs">
                     {anomalyAlerts.length} alert{anomalyAlerts.length !== 1 ? 's' : ''}
