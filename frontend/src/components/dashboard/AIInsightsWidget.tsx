@@ -24,6 +24,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils';
 import dashboardService from '@/api/services/dashboard.service';
 import type { AllWidgetsData, InsightItem } from '@/api/services/dashboard.service';
+import { tokenStorage } from '@/api/client';
 
 // Types for AI insights - structured for easy AI integration later
 export interface Insight {
@@ -328,10 +329,12 @@ export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData, siteId }: AIIn
   const [showAnomalies, setShowAnomalies] = useState(true);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
 
-  // Fetch insights from backend (real data)
+  // Fetch insights from backend — only when an auth token is present
+  const isAuthenticated = tokenStorage.hasValidToken();
   const { data: backendInsights, isLoading: insightsLoading } = useQuery({
     queryKey: ['insights', siteId],
     queryFn: () => dashboardService.getInsights(siteId),
+    enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,  // 5 minutes
     retry: 1,
   });

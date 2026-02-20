@@ -416,7 +416,7 @@ const Index = () => {
       case "system-diagram":
         return <VisualSystemDiagram />;
       case "ai-insights":
-        return <AIInsightsWidget widgetsData={widgetsData} weeklyEnergyData={weeklyEnergyData} />;
+        return <AIInsightsWidget widgetsData={widgetsData} weeklyEnergyData={weeklyEnergyData} siteId={siteId || undefined} />;
       case "peak-demand":
         return <PeakDemandWidget />;
       default:
