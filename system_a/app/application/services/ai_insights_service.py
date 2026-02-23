@@ -44,9 +44,10 @@ logger = logging.getLogger(__name__)
 _PKT = timezone(timedelta(hours=5))
 
 # Redis cache TTLs
-_TTL_HOURLY_S  = 3600       # 1 hour
-_TTL_MONTHLY_S = 86400      # 24 hours
-_TTL_YEARLY_S  = 2592000    # 30 days
+_TTL_HOURLY_S         = 3600   # 1 hour  (devices online)
+_TTL_HOURLY_OFFLINE_S = 300    # 5 min   (any device offline — refreshes fast on reconnect)
+_TTL_MONTHLY_S        = 86400  # 24 hours
+_TTL_YEARLY_S         = 2592000  # 30 days
 
 # Models per tier
 _MODEL_HOURLY  = "claude-haiku-4-5-20251001"
@@ -413,11 +414,16 @@ class AIInsightsService:
         }
 
         # Cache and persist
+        # Use a short TTL when devices are offline so stale "inverter offline"
+        # insights expire quickly once the device reconnects.
+        devices_online = site_stats.get("devices_online", 0)
+        devices_total = site_stats.get("devices_total", 1)
+        hourly_ttl = _TTL_HOURLY_S if devices_online >= devices_total else _TTL_HOURLY_OFFLINE_S
         serializable = {
             "daily_insights": [self._insight_to_dict(i) for i in daily],
             "anomaly_alerts": [self._insight_to_dict(i) for i in anomalies],
         }
-        await self._redis_set(cache_key, serializable, _TTL_HOURLY_S)
+        await self._redis_set(cache_key, serializable, hourly_ttl)
         await self._persist_insights_log(
             site_id=site_id,
             tier="hourly",
