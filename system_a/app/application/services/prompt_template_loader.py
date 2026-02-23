@@ -57,7 +57,7 @@ class PromptTemplateLoader:
     async def invalidate(self, key: str) -> None:
         """Evict a template from Redis so the next request re-fetches from DB."""
         try:
-            from ...infrastructure.cache.redis_manager import RedisManager
+            from ...infrastructure.cache.redis_cache import RedisManager
             redis = await RedisManager.get_client()
             await redis.delete(f"{_REDIS_KEY_PREFIX}{key}")
             logger.info("Prompt template cache invalidated for key=%s", key)
@@ -91,7 +91,7 @@ class PromptTemplateLoader:
 
     async def _from_redis(self, key: str) -> Optional[str]:
         try:
-            from ...infrastructure.cache.redis_manager import RedisManager
+            from ...infrastructure.cache.redis_cache import RedisManager
             redis = await RedisManager.get_client()
             value = await redis.get(f"{_REDIS_KEY_PREFIX}{key}")
             if value:
@@ -116,7 +116,7 @@ class PromptTemplateLoader:
 
     async def _store_redis(self, key: str, template: str) -> None:
         try:
-            from ...infrastructure.cache.redis_manager import RedisManager
+            from ...infrastructure.cache.redis_cache import RedisManager
             redis = await RedisManager.get_client()
             await redis.setex(f"{_REDIS_KEY_PREFIX}{key}", _REDIS_TTL_SECONDS, template)
         except Exception as exc:
@@ -156,224 +156,121 @@ def _safe_format(template: str, variables: Dict[str, Any]) -> str:
 _HARDCODED_DEFAULTS: Dict[str, str] = {
 
     # ================================================================ HOURLY
+    # Variables supplied by AIInsightsService._claude_hourly():
+    #   time_pkt, energy_today_kwh, peak_power_kw, load_power_w, grid_power_w,
+    #   battery_power_w, avg_soc_pct, self_consumed_kwh, grid_import_today_kwh,
+    #   grid_export_today_kwh, self_sufficiency_pct, co2_saved_kg, savings_pkr,
+    #   import_rate_pkr, devices_online, devices_total, inverter_temp_line,
+    #   battery_charge_today_kwh, battery_discharge_today_kwh,
+    #   battery_hourly_charge_kwh, battery_hourly_discharge_kwh,
+    #   system_alerts_block, load_shedding_block, warn_temp_c
 
     "hourly_system": (
-        "You are an expert solar energy analyst for Pakistani {system_type} solar "
-        "installations. You generate concise, actionable insights for system owners.\n"
-        "Rules:\n"
-        "- Write in plain English. No markdown, no bullet points inside message fields.\n"
-        "- Keep each insight message under {max_chars} characters.\n"
-        "- Use Pakistani context: PKR currency, DISCO net metering, load shedding.\n"
-        "- Climate context: {city}.\n"
-        "- Be specific with numbers — never give generic advice when real data is available.\n"
-        "- Call the `return_insights` tool with your structured response.\n"
-        "- Current date/time: {current_datetime} PKT."
+        "You are an expert solar energy analyst for Pakistani residential and "
+        "commercial solar installations. You generate concise, actionable insights "
+        "for system owners.\n\n"
+        "Write in clear English. Keep messages under 200 characters.\n"
+        "Use Pakistani context: PKR currency, DISCO net metering, load shedding "
+        "(bijli gul), Karachi/Lahore climate.\n"
+        "Consider battery state-of-charge when recommending EV charging windows.\n"
+        "If load shedding is predicted, recommend optimal battery charge level "
+        "before the outage window."
     ),
 
     "hourly_user": (
-        "Analyse this real-time solar site snapshot and generate insights.\n\n"
-
-        "━━ REAL-TIME POWER ━━\n"
-        "PV generation now: {pv_power_w} W\n"
-        "Load now: {load_power_w} W\n"
-        "Solar surplus (PV − load): {solar_surplus_w} W  "
-        "(positive = excess solar available)\n"
-        "Grid: {grid_power_w} W  (positive = importing, negative = exporting)\n"
-        "Battery: {battery_power_w} W  (positive = charging, negative = discharging)\n"
-        "Battery SoC: {battery_soc_pct}%\n\n"
-
-        "━━ TODAY'S ENERGY ━━\n"
-        "Solar generated today: {energy_today_kwh} kWh\n"
-        "Peak solar power today: {peak_power_kw} kW\n"
-        "Grid imported today: {grid_import_today_kwh} kWh\n"
-        "Grid exported today: {grid_export_today_kwh} kWh\n"
-        "Battery charged today: {battery_charge_today_kwh} kWh\n"
-        "Battery discharged today: {battery_discharge_today_kwh} kWh\n"
-        "Self-consumed solar today: {self_consumed_kwh} kWh\n"
-        "Self-sufficiency today: {self_sufficiency_pct}%\n"
-        "Money saved today: Rs. {savings_pkr} (at Rs. {import_rate_pkr}/kWh)\n"
-        "CO₂ avoided today: {co2_saved_kg} kg\n\n"
-
-        "━━ SYSTEM STATUS ━━\n"
-        "Devices online: {devices_online} / {devices_total}\n"
-        "Inverter temperature: {inverter_temp_c}°C\n"
+        "Analyse the following real-time solar site data and generate insights.\n\n"
+        "## Current Site Data ({time_pkt} PKT)\n"
+        "- Solar generation today: {energy_today_kwh} kWh  |  Peak: {peak_power_kw} kW\n"
+        "- Current load: {load_power_w} W\n"
+        "- Current grid power: {grid_power_w} W  (positive=import, negative=export)\n"
+        "- Current battery power: {battery_power_w} W  "
+        "(positive=charging, negative=discharging)\n"
+        "- Battery SoC: {avg_soc_pct}%\n"
+        "- Self-consumed solar today: {self_consumed_kwh} kWh\n"
+        "- Grid import today: {grid_import_today_kwh} kWh  |  "
+        "Export: {grid_export_today_kwh} kWh\n"
+        "- Self-sufficiency: {self_sufficiency_pct}%\n"
+        "- CO\u2082 avoided: {co2_saved_kg} kg  |  "
+        "Money saved: Rs. {savings_pkr} (@ Rs. {import_rate_pkr}/kWh)\n"
+        "- Battery charged today: {battery_charge_today_kwh} kWh  |  "
+        "Discharged: {battery_discharge_today_kwh} kWh\n"
+        "- Devices online: {devices_online}/{devices_total}\n"
+        "- {inverter_temp_line}\n\n"
+        "## System Alerts\n"
         "{system_alerts_block}\n\n"
-
-        "━━ LOAD SHEDDING INTELLIGENCE ━━\n"
-        "(Based on {ls_history_days} days of actual grid outage data for this site)\n"
+        "## Load Shedding Status & Prediction\n"
         "{load_shedding_block}\n\n"
-
-        "━━ EV CHARGING CONTEXT ━━\n"
-        "Solar surplus available now: {solar_surplus_w} W\n"
-        "Estimated solar window remaining today: {solar_hours_remaining} hours\n"
-        "Battery headroom above 20% reserve: {battery_headroom_kwh} kWh\n\n"
-
-        "━━ QUESTIONS TO ANSWER ━━\n"
-        "1. Is the system performing as expected for {current_time} PKT? "
-        "Comment on generation vs time-of-day norms.\n"
-        "2. Battery optimisation: given the load-shedding windows predicted above, "
-        "is the battery charging/discharging at the right rate? "
-        "Will it be sufficiently charged before the next outage?\n"
-        "3. EV charging recommendation: based on current solar surplus, "
-        "battery headroom, and predicted outage windows — should the user "
-        "charge their EV now, wait, or skip today? Give a specific time window.\n"
-        "4. Flag any anomalies: low generation during daylight, battery below 15%, "
-        "devices offline, high inverter temperature. "
-        "Only raise an alert for real problems.\n"
-        "5. One time-appropriate actionable tip "
-        "(solar peak hours → run heavy loads; evening → conserve battery; "
-        "night → grid situation).\n\n"
-        "{recent_anomalies_block}"
+        "## Instructions\n"
+        "- Generate 2\u20134 daily_insights: generation performance, savings, "
+        "self-sufficiency, load-shedding readiness, EV charging window "
+        "(if battery > 70% SoC and solar surplus exists), and one time-of-day tip.\n"
+        "- Generate anomaly_alerts ONLY for real problems (low generation during "
+        "daylight, very low battery, devices offline, high temperature, "
+        "predicted outage with low battery).\n"
+        "- If inverter temperature \u2265 {warn_temp_c}\u00b0C, include an overheating alert.\n"
+        "- If an outage is predicted in the next 2\u20134 hours and SoC < 60%, "
+        "warn the user to let the battery charge.\n"
+        "- Be specific with numbers. Avoid filler text.\n"
+        "- Call the `return_insights` tool with your response."
     ),
 
     # =============================================================== MONTHLY
+    # Variables supplied by AIInsightsService._claude_monthly():
+    #   billing_month, days_elapsed, total_pv_kwh, total_load_kwh,
+    #   total_import_kwh, total_export_kwh, self_sufficiency_pct, savings_pkr,
+    #   import_rate_pkr, outage_hours, outage_events, chart_snippet
 
     "monthly_system": (
-        "You are a solar energy financial analyst reviewing billing-month "
-        "performance for a Pakistani solar customer.\n"
-        "Rules:\n"
-        "- Write in clear, professional English. Be specific with numbers.\n"
-        "- Currency: Pakistani Rupee (Rs. or PKR).\n"
-        "- Reference DISCO net metering for export credit calculations.\n"
-        "- Pakistan load shedding context: evening peaks, stage-based schedules.\n"
-        "- Climate: {city}.\n"
-        "- Call the `return_monthly_analysis` tool with your structured response.\n"
-        "- Current date: {current_date} PKT."
+        "You are an expert solar energy analyst preparing a monthly performance "
+        "report for a Pakistani solar installation.\n\n"
+        "Write in clear English. Use Pakistani context (PKR, DISCO, load shedding, "
+        "seasonal patterns).\n"
+        "Be analytical and specific. Reference actual numbers from the data provided.\n"
+        "Focus on actionable improvements for the next billing month."
     ),
 
     "monthly_user": (
-        "Analyse this billing month's solar performance and answer the "
-        "five questions below.\n\n"
-
-        "━━ BILLING MONTH ━━\n"
-        "Period: {billing_month_start} – {billing_month_today} "
-        "({days_elapsed} of {days_in_month} days elapsed, "
-        "{days_remaining} days remaining)\n"
-        "Import rate: Rs. {import_rate_pkr}/kWh\n\n"
-
-        "━━ DAILY BREAKDOWN ━━\n"
-        "Date       | PV kWh | Load kWh | Import kWh | Export kWh | "
-        "Bat Charge kWh | Bat Discharge kWh | LS Hours | LS Covered %\n"
-        "{daily_breakdown_table}\n\n"
-
-        "━━ MONTH-TO-DATE TOTALS ━━\n"
-        "Total generated: {mtd_pv_kwh} kWh\n"
-        "Total load:      {mtd_load_kwh} kWh\n"
-        "Grid import:     {mtd_import_kwh} kWh\n"
-        "Grid export:     {mtd_export_kwh} kWh\n"
-        "Battery charged:    {mtd_batt_charge_kwh} kWh\n"
-        "Battery discharged: {mtd_batt_discharge_kwh} kWh\n"
-        "Battery avg round-trip efficiency: {batt_efficiency_pct}%\n"
-        "Self-sufficiency: {self_sufficiency_pct}%\n"
-        "Money saved MTD:  Rs. {savings_pkr}\n"
-        "CO₂ avoided MTD:  {co2_kg} kg\n"
-        "Best day:  {best_day_date} → {best_day_kwh} kWh\n"
-        "Worst day: {worst_day_date} → {worst_day_kwh} kWh\n"
-        "Daily average so far: {daily_avg_kwh} kWh\n\n"
-
-        "━━ LOAD SHEDDING THIS BILLING MONTH ━━\n"
-        "Total outage hours: {ls_total_hours}h across {ls_event_count} events\n"
-        "Battery covered: {ls_covered_hours}h ({ls_covered_pct}%)\n"
-        "Grid fallback required: {ls_uncovered_hours}h\n"
-        "Worst LS day: {ls_worst_day} → {ls_worst_hours}h, "
-        "battery covered {ls_worst_covered_pct}%\n"
-        "Days with full battery coverage: {ls_full_coverage_days}/{days_elapsed}\n\n"
-
-        "━━ RECURRING ANOMALIES FROM AI LOG (last 30 daily results) ━━\n"
-        "{recent_anomaly_log}\n\n"
-
-        "━━ SYSTEM ALERTS THIS MONTH ━━\n"
-        "{system_alerts_month}\n\n"
-
-        "━━ QUESTIONS ━━\n"
-        "1. MTD SUMMARY: How is this billing month going overall? "
-        "Key numbers and whether performance is above/below expectations.\n"
-        "2. MONTH-END PROJECTION: Extrapolate from daily average × remaining "
-        "{days_remaining} days. Project total generation and total savings for "
-        "the full billing month.\n"
-        "3. BILLING ESTIMATE: How much will the electricity bill be reduced this "
-        "month? Factor in import savings and DISCO net metering export credit.\n"
-        "4. BATTERY RESILIENCE: Was the battery sufficient to cover load shedding? "
-        "What reserve SoC would have achieved full coverage? "
-        "Is the battery efficiency ({batt_efficiency_pct}%) normal or concerning?\n"
-        "5. RECOMMENDATIONS: 2–3 specific actions for the remaining "
-        "{days_remaining} days to maximise savings. "
-        "Consider: EV charging windows, heavy-load scheduling, "
-        "battery reserve settings, and load-shedding preparation.\n\n"
-        "Call the `return_monthly_analysis` tool with your response."
+        "Generate a monthly performance analysis for {billing_month} "
+        "({days_elapsed} days elapsed).\n\n"
+        "## Monthly Energy Summary\n"
+        "- Solar generation: {total_pv_kwh} kWh\n"
+        "- Total consumption: {total_load_kwh} kWh\n"
+        "- Grid import: {total_import_kwh} kWh  |  Export: {total_export_kwh} kWh\n"
+        "- Self-sufficiency: {self_sufficiency_pct}%\n"
+        "- Money saved: Rs. {savings_pkr} (@ Rs. {import_rate_pkr}/kWh)\n\n"
+        "## Load Shedding This Month\n"
+        "- Total outage hours: {outage_hours}h across {outage_events} events\n\n"
+        "## Daily Breakdown (last 10 days)\n"
+        "{chart_snippet}\n\n"
+        "Call the `return_monthly_analysis` tool with your analysis."
     ),
 
     # ================================================================ YEARLY
+    # Variables supplied by AIInsightsService._claude_yearly():
+    #   year, month_label, total_pv_kwh, total_load_kwh, total_import_kwh,
+    #   total_export_kwh, self_sufficiency_pct, savings_pkr, co2_saved_kg,
+    #   import_rate_pkr, chart_snippet
 
     "yearly_system": (
-        "You are a senior solar energy consultant conducting an annual "
-        "performance review for a Pakistani solar installation.\n"
-        "Rules:\n"
-        "- Write in clear, professional English.\n"
-        "- Currency: Pakistani Rupee (Rs. / PKR).\n"
-        "- Pakistan seasonality: summer (Apr–Sep) produces 40–60% more solar "
-        "than winter (Oct–Mar) due to longer days and higher irradiance.\n"
-        "- Reference DISCO net metering and load-shedding context.\n"
-        "- Call the `return_yearly_analysis` tool with your structured response.\n"
-        "- Tone: positive and motivating, while being honest about areas for improvement.\n"
-        "- City: {city}.\n"
-        "- Report date: {current_date} PKT."
+        "You are an expert solar energy analyst preparing a year-to-date "
+        "performance review for a Pakistani solar installation.\n\n"
+        "Write in clear English. Use Pakistani context (PKR, DISCO net metering, "
+        "seasonal monsoon/winter patterns).\n"
+        "Be strategic. Identify long-term trends, ROI progress, and seasonal patterns.\n"
+        "Compare months and identify the best/worst performing periods."
     ),
 
     "yearly_user": (
-        "Conduct a year-to-date strategic review for this solar site "
-        "and answer the six questions below.\n\n"
-
-        "━━ PERIOD ━━\n"
-        "{ytd_period_label}  ({months_available} billing months of data)\n\n"
-
-        "━━ MONTHLY BREAKDOWN ━━\n"
-        "Month    | Generated kWh | Load kWh | Import kWh | Export kWh | "
-        "Bat Charge kWh | Bat Efficiency % | LS Hours | LS Coverage % | Saved Rs.\n"
-        "{monthly_breakdown_table}\n\n"
-
-        "━━ YEAR-TO-DATE TOTALS ━━\n"
-        "Total generated: {ytd_pv_kwh} kWh\n"
-        "Total load:      {ytd_load_kwh} kWh\n"
-        "Grid import:     {ytd_import_kwh} kWh\n"
-        "Grid export:     {ytd_export_kwh} kWh\n"
-        "Total savings:   Rs. {ytd_savings_pkr}\n"
-        "CO₂ avoided:     {ytd_co2_kg} kg\n"
-        "Avg self-sufficiency: {ytd_self_sufficiency_pct}%\n"
-        "Best month:  {best_month_label} → {best_month_kwh} kWh\n"
-        "Worst month: {worst_month_label} → {worst_month_kwh} kWh\n"
-        "Average monthly generation: {avg_monthly_kwh} kWh\n\n"
-
-        "━━ LOAD SHEDDING YEAR-TO-DATE ━━\n"
-        "Total outage hours: {ytd_ls_hours}h\n"
-        "Battery coverage:   {ytd_ls_coverage_pct}%\n"
-        "Most affected month: {ls_worst_month_label} "
-        "({ls_worst_month_hours}h outage)\n\n"
-
-        "━━ MONTHLY AI SUMMARIES (context from previous monthly analyses) ━━\n"
-        "{monthly_ai_summaries}\n\n"
-
-        "━━ RECURRING ANOMALIES (appearing 3+ times in AI log this year) ━━\n"
-        "{recurring_anomalies}\n\n"
-
-        "━━ QUESTIONS ━━\n"
-        "1. YTD SUMMARY: Summarise total generation, savings, and CO₂ avoided. "
-        "Is performance good for this system size and location?\n"
-        "2. SEASONAL ANALYSIS: Compare summer vs winter performance. "
-        "Were the summer months significantly better? "
-        "What does this mean for expected performance going forward?\n"
-        "3. TREND ANALYSIS: Is the system performing consistently month-over-month, "
-        "or is there a degradation or improvement trend? "
-        "Is battery efficiency ({ytd_avg_batt_efficiency_pct}% avg) stable?\n"
-        "4. LOAD SHEDDING RESILIENCE: How well did the battery handle "
-        "Pakistan's load shedding over the year? "
-        "Are there months where coverage was inadequate?\n"
-        "5. NEXT MONTH FORECAST: Based on the same calendar month in prior years "
-        "(or seasonal patterns if first year), what generation and savings "
-        "can the user expect next month?\n"
-        "6. STRATEGIC RECOMMENDATIONS: 2–3 high-impact actions for the next "
-        "12 months. Consider: panel cleaning schedule, battery reserve optimisation, "
-        "EV charging strategy, potential system expansion, tariff optimisation.\n\n"
-        "Call the `return_yearly_analysis` tool with your response."
+        "Generate a year-to-date analysis as of {month_label}.\n\n"
+        "## Year-to-Date Energy Summary ({year})\n"
+        "- Total solar generation: {total_pv_kwh} kWh\n"
+        "- Total consumption: {total_load_kwh} kWh\n"
+        "- Grid import: {total_import_kwh} kWh  |  Export: {total_export_kwh} kWh\n"
+        "- Self-sufficiency: {self_sufficiency_pct}%\n"
+        "- Total savings: Rs. {savings_pkr} (@ Rs. {import_rate_pkr}/kWh)\n"
+        "- CO\u2082 avoided: {co2_saved_kg} kg\n\n"
+        "## Recent Monthly Breakdown\n"
+        "{chart_snippet}\n\n"
+        "Call the `return_yearly_analysis` tool with your analysis."
     ),
 }
