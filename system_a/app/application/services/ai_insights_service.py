@@ -554,8 +554,9 @@ class AIInsightsService:
         outage_events = ls_stats.get("event_count", 0)
 
         # Build chart snippet (max 10 rows to keep prompt lean)
+        # System B returns 'timestamp' (ISO string) not 'date'
         chart_rows = "\n".join(
-            f"  {p.get('date','?')} | pv={float(p.get('pv_kwh',0) or 0):.1f}kWh "
+            f"  {str(p.get('timestamp','?'))[:10]} | pv={float(p.get('pv_kwh',0) or 0):.1f}kWh "
             f"load={float(p.get('load_kwh',0) or 0):.1f}kWh "
             f"import={float(p.get('grid_import_kwh',0) or 0):.1f}kWh"
             for p in data_points[-10:]
@@ -676,8 +677,9 @@ class AIInsightsService:
         co2_saved     = total_pv * CO2_KG_PER_KWH
 
         # Monthly breakdown for chart snippet (last 12 months)
+        # System B returns 'timestamp' (ISO string) not 'date'
         chart_rows = "\n".join(
-            f"  {p.get('date','?')} | pv={float(p.get('pv_kwh',0) or 0):.0f}kWh "
+            f"  {str(p.get('timestamp','?'))[:10]} | pv={float(p.get('pv_kwh',0) or 0):.0f}kWh "
             f"load={float(p.get('load_kwh',0) or 0):.0f}kWh "
             f"import={float(p.get('grid_import_kwh',0) or 0):.0f}kWh"
             for p in data_points
@@ -903,8 +905,9 @@ class AIInsightsService:
             from ...infrastructure.cache.redis_cache import RedisManager
             redis = await RedisManager.get_client()
             await redis.setex(key, ttl_s, json.dumps(value, default=str))
+            logger.debug("[insights] Redis SET ok key=%s ttl=%ds", key, ttl_s)
         except Exception as exc:
-            logger.debug("[insights] Redis SET failed for %s: %s", key, exc)
+            logger.warning("[insights] Redis SET failed for %s: %s", key, exc)
 
     # =========================================================================
     # DB persistence
