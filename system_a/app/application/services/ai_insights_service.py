@@ -449,8 +449,8 @@ class AIInsightsService:
         }
 
         if loader:
-            system_prompt = loader.render("hourly_system", variables)
-            user_prompt   = loader.render("hourly_user",   variables)
+            system_prompt = await loader.render("hourly_system", variables)
+            user_prompt   = await loader.render("hourly_user",   variables)
         else:
             system_prompt = _HARDCODED_HOURLY_SYSTEM.format_map(_Default(variables))
             user_prompt   = _HARDCODED_HOURLY_USER.format_map(_Default(variables))
@@ -573,8 +573,8 @@ class AIInsightsService:
         }
 
         if loader:
-            system_prompt = loader.render("monthly_system", variables)
-            user_prompt   = loader.render("monthly_user",   variables)
+            system_prompt = await loader.render("monthly_system", variables)
+            user_prompt   = await loader.render("monthly_user",   variables)
         else:
             system_prompt = _HARDCODED_MONTHLY_SYSTEM.format_map(_Default(variables))
             user_prompt   = _HARDCODED_MONTHLY_USER.format_map(_Default(variables))
@@ -655,10 +655,10 @@ class AIInsightsService:
     ) -> str:
         try:
             yearly_data = await self._system_b.get_site_energy_chart(
-                site_id=site_id, period="year",
+                site_id=site_id, period="month",
             )
             data_points = yearly_data.get("data", [])
-        except SystemBClientError:
+        except Exception:
             data_points = []
 
         total_pv    = sum(float(p.get("pv_kwh",         0) or 0) for p in data_points)
@@ -694,8 +694,8 @@ class AIInsightsService:
         }
 
         if loader:
-            system_prompt = loader.render("yearly_system", variables)
-            user_prompt   = loader.render("yearly_user",   variables)
+            system_prompt = await loader.render("yearly_system", variables)
+            user_prompt   = await loader.render("yearly_user",   variables)
         else:
             system_prompt = _HARDCODED_YEARLY_SYSTEM.format_map(_Default(variables))
             user_prompt   = _HARDCODED_YEARLY_USER.format_map(_Default(variables))
@@ -828,7 +828,7 @@ class AIInsightsService:
         """Build a text block of active system alerts from Redis device status."""
         lines = []
         try:
-            from ...infrastructure.cache.redis_manager import RedisManager
+            from ...infrastructure.cache.redis_cache import RedisManager
             redis = await RedisManager.get_client()
             for serial in device_serials:
                 raw = await redis.get(f"device:{serial}:alerts")
@@ -884,7 +884,7 @@ class AIInsightsService:
 
     async def _redis_get(self, key: str) -> Optional[Dict]:
         try:
-            from ...infrastructure.cache.redis_manager import RedisManager
+            from ...infrastructure.cache.redis_cache import RedisManager
             redis = await RedisManager.get_client()
             raw = await redis.get(key)
             if raw:
@@ -895,7 +895,7 @@ class AIInsightsService:
 
     async def _redis_set(self, key: str, value: Dict, ttl_s: int) -> None:
         try:
-            from ...infrastructure.cache.redis_manager import RedisManager
+            from ...infrastructure.cache.redis_cache import RedisManager
             redis = await RedisManager.get_client()
             await redis.setex(key, ttl_s, json.dumps(value, default=str))
         except Exception as exc:
@@ -925,12 +925,24 @@ class AIInsightsService:
             from ...infrastructure.database.repositories.ai_repository import (
                 SQLAlchemyAIInsightsLogRepository,
             )
+            # Convert period string ("2026-02-23T15:00", "2026-02-01", "2026-02") to datetime
+            try:
+                period_start = datetime.fromisoformat(period)
+                if period_start.tzinfo is None:
+                    period_start = period_start.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                # Handle compact "YYYY-MM" format used by yearly tier
+                try:
+                    parts = period.split("-")
+                    period_start = datetime(int(parts[0]), int(parts[1]), 1, tzinfo=timezone.utc)
+                except Exception:
+                    period_start = datetime.now(timezone.utc)
             log = AIInsightsLog(
                 id=uuid4(),
                 site_id=site_id,
                 tier=tier,
                 model=model,
-                period=period,
+                period_start=period_start,
                 billing_month=billing_month,
                 daily_insights=daily_insights or [],
                 anomaly_alerts=anomaly_alerts or [],
