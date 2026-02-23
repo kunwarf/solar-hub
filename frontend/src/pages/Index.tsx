@@ -14,6 +14,7 @@ import { ComparisonChart } from "@/components/dashboard/ComparisonChart";
 import { GoalTrackingWidget } from "@/components/dashboard/GoalTrackingWidget";
 import { EnvironmentalImpactWidget } from "@/components/dashboard/EnvironmentalImpactWidget";
 import { AIInsightsWidget } from "@/components/dashboard/AIInsightsWidget";
+import { PerformanceReportCard } from "@/components/dashboard/PerformanceReportCard";
 import { PeakDemandWidget } from "@/components/dashboard/PeakDemandWidget";
 import { DashboardEditControls } from "@/components/dashboard/DashboardEditControls";
 import { DraggableWidget } from "@/components/dashboard/DraggableWidget";
@@ -416,7 +417,14 @@ const Index = () => {
       case "system-diagram":
         return <VisualSystemDiagram />;
       case "ai-insights":
-        return <AIInsightsWidget widgetsData={widgetsData} weeklyEnergyData={weeklyEnergyData} siteId={siteId || undefined} />;
+        return (
+          <>
+            <AIInsightsWidget widgetsData={widgetsData} weeklyEnergyData={weeklyEnergyData} siteId={siteId || undefined} />
+            <div className="mt-4">
+              <PerformanceReportCard siteId={siteId || undefined} />
+            </div>
+          </>
+        );
       case "peak-demand":
         return <PeakDemandWidget />;
       default:

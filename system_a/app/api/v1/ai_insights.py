@@ -59,14 +59,30 @@ class WeeklyDigestSchema(BaseModel):
     tip_of_the_week: str
 
 
+class MonthlyAnalysisSchema(BaseModel):
+    summary: str = ""
+    highlights: List[str] = []
+    recommendations: List[str] = []
+    load_shedding_insight: str = ""
+
+
+class YearlyAnalysisSchema(BaseModel):
+    summary: str = ""
+    best_month: str = ""
+    worst_month: str = ""
+    trends: List[str] = []
+    recommendations: List[str] = []
+    roi_insight: str = ""
+
+
 class InsightsResponse(BaseModel):
     site_id: UUID
     site_name: str
     daily_insights: List[InsightSchema]
     anomaly_alerts: List[InsightSchema]
     weekly_digest: Optional[WeeklyDigestSchema] = None
-    monthly_analysis: Optional[str] = None
-    yearly_analysis: Optional[str] = None
+    monthly_analysis: Optional[MonthlyAnalysisSchema] = None
+    yearly_analysis: Optional[YearlyAnalysisSchema] = None
     generated_at: datetime
     source: str = "rule_based"
 
@@ -151,8 +167,10 @@ async def get_insights(
             self_sufficiency_change_pct=result.weekly_digest.self_sufficiency_change_pct,
             tip_of_the_week=result.weekly_digest.tip_of_the_week,
         ) if result.weekly_digest else None,
-        monthly_analysis=result.monthly_analysis,
-        yearly_analysis=result.yearly_analysis,
+        monthly_analysis=MonthlyAnalysisSchema(**result.monthly_analysis)
+            if result.monthly_analysis else None,
+        yearly_analysis=YearlyAnalysisSchema(**result.yearly_analysis)
+            if result.yearly_analysis else None,
         generated_at=result.generated_at,
         source=result.source,
     )

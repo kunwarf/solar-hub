@@ -361,14 +361,30 @@ export interface WeeklyDigest {
   tip_of_the_week: string;
 }
 
+export interface MonthlyAnalysis {
+  summary: string;
+  highlights: string[];
+  recommendations: string[];
+  load_shedding_insight: string;
+}
+
+export interface YearlyAnalysis {
+  summary: string;
+  best_month: string;
+  worst_month: string;
+  trends: string[];
+  recommendations: string[];
+  roi_insight: string;
+}
+
 export interface InsightsData {
   site_id: string;
   site_name: string;
   daily_insights: InsightItem[];
   anomaly_alerts: InsightItem[];
   weekly_digest: WeeklyDigest | null;
-  monthly_analysis: string | null;
-  yearly_analysis: string | null;
+  monthly_analysis: MonthlyAnalysis | null;
+  yearly_analysis: YearlyAnalysis | null;
   generated_at: string;
   source: string;
 }

@@ -53,6 +53,17 @@ _MODEL_HOURLY  = "claude-haiku-4-5-20251001"
 _MODEL_MONTHLY = "claude-sonnet-4-6"
 _MODEL_YEARLY  = "claude-sonnet-4-6"
 
+# Pakistan seasonal solar generation window (start_hour, end_hour) in PKT
+# Used to calculate EV charging window and hours remaining
+_PAKISTAN_SOLAR_WINDOW: Dict[int, tuple] = {
+    1: (8, 17),  2: (8, 17),  # Jan-Feb: 8am–5pm
+    3: (7, 18),  4: (7, 18),  # Mar-Apr: 7am–6pm
+    5: (6, 19),  6: (6, 19),  # May-Jun: 6am–7pm
+    7: (6, 19),  8: (6, 18),  # Jul-Aug: 6am–7/6pm (monsoon clouds but long days)
+    9: (7, 18),  10: (7, 17), # Sep-Oct: 7am–6/5pm
+    11: (8, 17), 12: (8, 17), # Nov-Dec: 8am–5pm
+}
+
 # Thresholds
 INVERTER_TEMP_WARN_C = 75.0
 INVERTER_TEMP_HIGH_C = 90.0
@@ -108,8 +119,8 @@ class InsightsResponse:
     anomaly_alerts: List[InsightData]
     weekly_digest: Optional[WeeklyDigestData]
     generated_at: datetime
-    monthly_analysis: Optional[str] = None
-    yearly_analysis:  Optional[str] = None
+    monthly_analysis: Optional[Dict] = None   # structured dict from Claude tool
+    yearly_analysis:  Optional[Dict] = None   # structured dict from Claude tool
     source: str = "rule_based"   # "claude" | "cache" | "rule_based"
 
 
@@ -165,30 +176,32 @@ _HOURLY_TOOL = {
 
 _MONTHLY_TOOL = {
     "name": "return_monthly_analysis",
-    "description": "Return a structured monthly energy analysis. Always call this tool.",
+    "description": "Return a concise structured monthly energy analysis. Always call this tool.",
     "input_schema": {
         "type": "object",
         "required": ["summary", "highlights", "recommendations"],
         "properties": {
             "summary": {
                 "type": "string",
-                "description": "3–5 sentence executive summary of this billing month's performance.",
-                "maxLength": 500,
+                "description": "2-sentence executive summary of this billing month. Max 50 words.",
+                "maxLength": 300,
             },
             "highlights": {
                 "type": "array",
-                "description": "3–5 specific highlights (wins, losses, load-shedding patterns).",
-                "items": {"type": "string", "maxLength": 200},
+                "description": "Exactly 3 highlights (wins or issues). Each ≤ 15 words. No filler.",
+                "items": {"type": "string", "maxLength": 100},
+                "maxItems": 3,
             },
             "recommendations": {
                 "type": "array",
-                "description": "2–3 actionable recommendations for next month.",
-                "items": {"type": "string", "maxLength": 200},
+                "description": "Exactly 2 actionable recommendations for next month. Each ≤ 15 words.",
+                "items": {"type": "string", "maxLength": 100},
+                "maxItems": 2,
             },
             "load_shedding_insight": {
                 "type": "string",
-                "description": "1–2 sentences on how well the battery handled load shedding this month.",
-                "maxLength": 300,
+                "description": "1 sentence on battery coverage of load shedding this month. Max 20 words.",
+                "maxLength": 150,
             },
         },
     },
@@ -196,32 +209,42 @@ _MONTHLY_TOOL = {
 
 _YEARLY_TOOL = {
     "name": "return_yearly_analysis",
-    "description": "Return a year-to-date energy analysis. Always call this tool.",
+    "description": "Return a concise year-to-date energy analysis. Always call this tool.",
     "input_schema": {
         "type": "object",
         "required": ["summary", "best_month", "worst_month", "trends", "recommendations"],
         "properties": {
             "summary": {
                 "type": "string",
-                "description": "4–6 sentence year-to-date executive summary.",
-                "maxLength": 600,
+                "description": "2-sentence year-to-date executive summary. Max 50 words.",
+                "maxLength": 300,
             },
-            "best_month":  {"type": "string", "maxLength": 150},
-            "worst_month": {"type": "string", "maxLength": 150},
+            "best_month":  {
+                "type": "string",
+                "description": "Best performing month and why. Max 15 words.",
+                "maxLength": 100,
+            },
+            "worst_month": {
+                "type": "string",
+                "description": "Worst performing month and why. Max 15 words.",
+                "maxLength": 100,
+            },
             "trends": {
                 "type": "array",
-                "description": "3–5 year-to-date trends (seasonal, consumption, grid independence).",
-                "items": {"type": "string", "maxLength": 200},
+                "description": "Exactly 3 year-to-date trends. Each ≤ 15 words.",
+                "items": {"type": "string", "maxLength": 100},
+                "maxItems": 3,
             },
             "recommendations": {
                 "type": "array",
-                "description": "2–3 strategic recommendations for the coming year.",
-                "items": {"type": "string", "maxLength": 200},
+                "description": "Exactly 2 strategic recommendations for the coming year. Each ≤ 15 words.",
+                "items": {"type": "string", "maxLength": 100},
+                "maxItems": 2,
             },
             "roi_insight": {
                 "type": "string",
-                "description": "Return-on-investment insight based on savings vs. installation cost estimate.",
-                "maxLength": 300,
+                "description": "ROI payback estimate in 1 sentence. Max 20 words.",
+                "maxLength": 150,
             },
         },
     },
@@ -269,6 +292,10 @@ class AIInsightsService:
             logger.info("Claude AI client initialised.")
         except ImportError:
             logger.warning("anthropic package not installed. Run: pip install anthropic>=0.40.0")
+
+    def _solar_window(self, now_pkt: datetime) -> tuple:
+        """Return (start_hour, end_hour) for the good solar generation window in PKT."""
+        return _PAKISTAN_SOLAR_WINDOW.get(now_pkt.month, (7, 18))
 
     def _get_prompt_loader(self):
         if self._prompt_loader is None:
@@ -426,6 +453,10 @@ class AIInsightsService:
                " ⚠ Elevated" if max_temp >= INVERTER_TEMP_WARN_C else "")
         ) if max_temp > 0 else "Inverter temperature: not available"
 
+        solar_start_h, solar_end_h = self._solar_window(now)
+        solar_surplus_kw = max(0.0, (stats.get("pv_power_w", 0) - stats.get("load_power_w", 0)) / 1000)
+        ev_hours_remaining = max(0, solar_end_h - now.hour)
+
         variables = {
             "time_pkt":             now_pkt_str,
             "energy_today_kwh":     f"{stats['energy_today_kwh']:.2f}",
@@ -451,6 +482,10 @@ class AIInsightsService:
             "system_alerts_block":  alerts_block or "No active system alerts.",
             "load_shedding_block":  ls_block or "No load shedding data available.",
             "warn_temp_c":          str(int(INVERTER_TEMP_WARN_C)),
+            # EV charging window
+            "solar_peak_end_pkt":   f"{solar_end_h}:00",
+            "ev_hours_remaining":   str(ev_hours_remaining),
+            "solar_surplus_kw":     f"{solar_surplus_kw:.1f}",
         }
 
         if loader:
@@ -599,20 +634,12 @@ class AIInsightsService:
             raise ValueError("Claude did not call return_monthly_analysis.")
 
         raw = block.input
-        parts = [raw.get("summary", "")]
-        highlights = raw.get("highlights", [])
-        if highlights:
-            parts.append("\n**Highlights:**")
-            parts.extend(f"• {h}" for h in highlights)
-        recs = raw.get("recommendations", [])
-        if recs:
-            parts.append("\n**Recommendations:**")
-            parts.extend(f"• {r}" for r in recs)
-        ls_insight = raw.get("load_shedding_insight", "")
-        if ls_insight:
-            parts.append(f"\n**Load Shedding:** {ls_insight}")
-
-        return "\n".join(parts)
+        return {
+            "summary":              raw.get("summary", ""),
+            "highlights":           raw.get("highlights", []),
+            "recommendations":      raw.get("recommendations", []),
+            "load_shedding_insight":raw.get("load_shedding_insight", ""),
+        }
 
     # =========================================================================
     # Tier 3 – Yearly
@@ -721,24 +748,14 @@ class AIInsightsService:
             raise ValueError("Claude did not call return_yearly_analysis.")
 
         raw = block.input
-        parts = [raw.get("summary", "")]
-        if raw.get("best_month"):
-            parts.append(f"\n**Best Month:** {raw['best_month']}")
-        if raw.get("worst_month"):
-            parts.append(f"**Worst Month:** {raw['worst_month']}")
-        trends = raw.get("trends", [])
-        if trends:
-            parts.append("\n**Year-to-Date Trends:**")
-            parts.extend(f"• {t}" for t in trends)
-        recs = raw.get("recommendations", [])
-        if recs:
-            parts.append("\n**Strategic Recommendations:**")
-            parts.extend(f"• {r}" for r in recs)
-        roi = raw.get("roi_insight", "")
-        if roi:
-            parts.append(f"\n**ROI:** {roi}")
-
-        return "\n".join(parts)
+        return {
+            "summary":        raw.get("summary", ""),
+            "best_month":     raw.get("best_month", ""),
+            "worst_month":    raw.get("worst_month", ""),
+            "trends":         raw.get("trends", []),
+            "recommendations":raw.get("recommendations", []),
+            "roi_insight":    raw.get("roi_insight", ""),
+        }
 
     # =========================================================================
     # Data Helpers
@@ -922,8 +939,8 @@ class AIInsightsService:
         billing_month: Optional[date],
         daily_insights: Optional[List[Dict]] = None,
         anomaly_alerts: Optional[List[Dict]] = None,
-        monthly_analysis: Optional[str] = None,
-        yearly_analysis:  Optional[str] = None,
+        monthly_analysis: Optional[Dict] = None,
+        yearly_analysis:  Optional[Dict] = None,
         input_stats: Optional[Dict] = None,
     ) -> None:
         if not self._session_factory:
