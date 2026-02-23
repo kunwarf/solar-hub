@@ -418,13 +418,10 @@ const Index = () => {
         return <VisualSystemDiagram />;
       case "ai-insights":
         return (
-          <>
-            <AIInsightsWidget widgetsData={widgetsData} weeklyEnergyData={weeklyEnergyData} siteId={siteId || undefined} />
-            <div className="mt-4">
-              <PerformanceReportCard siteId={siteId || undefined} />
-            </div>
-          </>
+          <AIInsightsWidget widgetsData={widgetsData} weeklyEnergyData={weeklyEnergyData} siteId={siteId || undefined} />
         );
+      case "performance-report":
+        return <PerformanceReportCard siteId={siteId || undefined} />;
       case "peak-demand":
         return <PeakDemandWidget />;
       default:

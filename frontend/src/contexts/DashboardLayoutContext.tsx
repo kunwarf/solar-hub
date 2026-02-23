@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback,
 import { dashboardService } from "@/api/services/dashboard.service";
 import { toast } from "sonner";
 
-export type WidgetId = 
+export type WidgetId =
   | "stat-cards"
   | "energy-flow"
   | "system-diagram"
@@ -16,7 +16,8 @@ export type WidgetId =
   | "device-overview"
   | "alerts-summary"
   | "ai-insights"
-  | "peak-demand";
+  | "peak-demand"
+  | "performance-report";
 
 export type WidgetCategory = "statistics" | "charts" | "status" | "actions";
 
@@ -208,6 +209,15 @@ export const widgetConfigs: WidgetConfig[] = [
     defaultVisible: true,
     defaultSize: "medium",
   },
+  {
+    id: "performance-report",
+    name: "Performance Report",
+    description: "Monthly billing summary & year-to-date analysis (AI-generated)",
+    category: "statistics",
+    icon: "FileBarChart2",
+    defaultVisible: false,
+    defaultSize: "medium",
+  },
 ];
 
 // Built-in layout presets
@@ -231,6 +241,7 @@ export const builtInPresets: LayoutPresetConfig[] = [
       { id: "alerts-summary", visible: false, size: "medium" },
       { id: "ai-insights", visible: false, size: "medium" },
       { id: "peak-demand", visible: false, size: "medium" },
+      { id: "performance-report", visible: false, size: "medium" },
     ],
   },
   {
@@ -252,6 +263,7 @@ export const builtInPresets: LayoutPresetConfig[] = [
       { id: "alerts-summary", visible: false, size: "medium" },
       { id: "ai-insights", visible: false, size: "medium" },
       { id: "peak-demand", visible: false, size: "medium" },
+      { id: "performance-report", visible: false, size: "medium" },
     ],
   },
   {
@@ -273,6 +285,7 @@ export const builtInPresets: LayoutPresetConfig[] = [
       { id: "alerts-summary", visible: true, size: "medium" },
       { id: "ai-insights", visible: true, size: "medium" },
       { id: "peak-demand", visible: true, size: "medium" },
+      { id: "performance-report", visible: true, size: "medium" },
     ],
   },
 ];
