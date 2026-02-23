@@ -29,6 +29,12 @@ from .admin_models import (
     LoadSheddingScheduleModel,
     AdminAuditLogModel,
 )
+from .ai_models import (
+    GridOutageModel,
+    AIInsightsLogModel,
+    AIPromptTemplateModel,
+    AIPromptTemplateVersionModel,
+)
 
 __all__ = [
     'Base',
@@ -63,4 +69,8 @@ __all__ = [
     'ElectricityTariffModel',
     'LoadSheddingScheduleModel',
     'AdminAuditLogModel',
+    'GridOutageModel',
+    'AIInsightsLogModel',
+    'AIPromptTemplateModel',
+    'AIPromptTemplateVersionModel',
 ]

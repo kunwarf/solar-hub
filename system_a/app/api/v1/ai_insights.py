@@ -1,12 +1,14 @@
 """
 AI Insights API endpoints.
 
-Provides GET /insights to fetch rule-based insights derived from real telemetry.
-Provides POST /insights/{id}/feedback to record user feedback on insights.
+GET  /insights           — three-tier insights (hourly cached 1h, monthly cached 24h, yearly cached 30d)
+POST /insights/{id}/feedback — record thumbs-up/down feedback
 
 Data sources:
 - Real-time telemetry: Redis cache (via telemetry_cache singleton)
 - Historical data: System B energy chart API (via SystemBClient)
+- Load shedding: grid_outages table + OutagePredictionService
+- Prompt templates: ai_prompt_templates table (Redis-cached 5min)
 """
 import logging
 from datetime import datetime
@@ -21,6 +23,7 @@ from ...application.interfaces.unit_of_work import UnitOfWork
 from ...application.services.ai_insights_service import AIInsightsService
 from ...domain.entities.user import User
 from ...infrastructure.cache.telemetry_cache import telemetry_cache
+from ...infrastructure.database.connection import DatabaseManager
 from ...infrastructure.external.system_b_client import SystemBClient
 from .dashboard_widgets import get_site_with_devices
 
@@ -34,7 +37,6 @@ router = APIRouter(prefix="/insights", tags=["AI Insights"])
 # ============================================================================
 
 class InsightSchema(BaseModel):
-    """Single insight item."""
     id: str
     type: str
     category: str
@@ -45,7 +47,6 @@ class InsightSchema(BaseModel):
 
 
 class WeeklyDigestSchema(BaseModel):
-    """Weekly energy summary digest."""
     total_generated_kwh: float
     total_saved_pkr: float
     self_sufficiency_pct: float
@@ -59,23 +60,23 @@ class WeeklyDigestSchema(BaseModel):
 
 
 class InsightsResponse(BaseModel):
-    """Full insights response for a site."""
     site_id: UUID
     site_name: str
     daily_insights: List[InsightSchema]
     anomaly_alerts: List[InsightSchema]
     weekly_digest: Optional[WeeklyDigestSchema] = None
+    monthly_analysis: Optional[str] = None
+    yearly_analysis: Optional[str] = None
     generated_at: datetime
+    source: str = "rule_based"
 
 
 class FeedbackRequest(BaseModel):
-    """Insight feedback payload."""
     insight_id: str
     positive: bool
 
 
 class FeedbackResponse(BaseModel):
-    """Feedback acknowledgement."""
     message: str
     insight_id: str
 
@@ -87,31 +88,33 @@ class FeedbackResponse(BaseModel):
 @router.get(
     "",
     response_model=InsightsResponse,
-    summary="Get AI insights",
+    summary="Get AI insights (three-tier)",
     description=(
-        "Returns rule-based insights generated from real telemetry data. "
-        "Includes daily production summary, savings, anomaly alerts, and weekly digest. "
-        "Refresh: 5 minutes."
+        "Returns AI-generated insights for the site. "
+        "Hourly insights cached 1h, monthly analysis cached 24h, yearly analysis cached 30d. "
+        "All tiers use Claude when AI_API_KEY is set; rule-based fallback otherwise."
     ),
 )
 async def get_insights(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
-    import_rate_pkr: float = Query(35.0, description="PKR per kWh import rate for savings calculation"),
+    import_rate_pkr: float = Query(35.0, description="PKR per kWh import rate"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
     system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
     """
-    Generate AI insights for the site.
+    Generate AI insights for the site (all three tiers).
 
-    Uses real telemetry from Redis + historical data from System B.
-    Falls back gracefully if System B is unavailable.
+    - Hourly tier: live telemetry + LS prediction + system alerts (Haiku, cached 1h)
+    - Monthly tier: 30-day energy + billing + outage history (Sonnet, cached 24h)
+    - Yearly tier: 365-day energy + YTD summary (Sonnet, cached 30d)
     """
     site_info = await get_site_with_devices(current_user, uow, site_id)
 
     service = AIInsightsService(
         telemetry_cache=telemetry_cache,
         system_b_client=system_b_client,
+        session_factory=DatabaseManager.get_session_factory(),
     )
 
     result = await service.get_insights(
@@ -120,33 +123,22 @@ async def get_insights(
         import_rate_pkr=import_rate_pkr,
     )
 
+    def _to_schema(i) -> InsightSchema:
+        return InsightSchema(
+            id=i.id,
+            type=i.type,
+            category=i.category,
+            title=i.title,
+            message=i.message,
+            timestamp=i.timestamp,
+            metadata=i.metadata,
+        )
+
     return InsightsResponse(
         site_id=site_info.site_id,
         site_name=site_info.site_name,
-        daily_insights=[
-            InsightSchema(
-                id=i.id,
-                type=i.type,
-                category=i.category,
-                title=i.title,
-                message=i.message,
-                timestamp=i.timestamp,
-                metadata=i.metadata,
-            )
-            for i in result.daily_insights
-        ],
-        anomaly_alerts=[
-            InsightSchema(
-                id=i.id,
-                type=i.type,
-                category=i.category,
-                title=i.title,
-                message=i.message,
-                timestamp=i.timestamp,
-                metadata=i.metadata,
-            )
-            for i in result.anomaly_alerts
-        ],
+        daily_insights=[_to_schema(i) for i in result.daily_insights],
+        anomaly_alerts=[_to_schema(i) for i in result.anomaly_alerts],
         weekly_digest=WeeklyDigestSchema(
             total_generated_kwh=result.weekly_digest.total_generated_kwh,
             total_saved_pkr=result.weekly_digest.total_saved_pkr,
@@ -159,7 +151,10 @@ async def get_insights(
             self_sufficiency_change_pct=result.weekly_digest.self_sufficiency_change_pct,
             tip_of_the_week=result.weekly_digest.tip_of_the_week,
         ) if result.weekly_digest else None,
+        monthly_analysis=result.monthly_analysis,
+        yearly_analysis=result.yearly_analysis,
         generated_at=result.generated_at,
+        source=result.source,
     )
 
 
@@ -174,18 +169,8 @@ async def submit_feedback(
     feedback: FeedbackRequest,
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Record user feedback on an insight.
-
-    Feedback is logged for future AI training / quality improvement.
-    """
     logger.info(
         "Insight feedback: user=%s insight=%s positive=%s",
-        current_user.id,
-        insight_id,
-        feedback.positive,
+        current_user.id, insight_id, feedback.positive,
     )
-    return FeedbackResponse(
-        message="Feedback recorded. Thank you!",
-        insight_id=insight_id,
-    )
+    return FeedbackResponse(message="Feedback recorded. Thank you!", insight_id=insight_id)

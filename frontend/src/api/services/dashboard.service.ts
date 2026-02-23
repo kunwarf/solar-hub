@@ -367,7 +367,10 @@ export interface InsightsData {
   daily_insights: InsightItem[];
   anomaly_alerts: InsightItem[];
   weekly_digest: WeeklyDigest | null;
+  monthly_analysis: string | null;
+  yearly_analysis: string | null;
   generated_at: string;
+  source: string;
 }
 
 // Dashboard Preferences Types

@@ -23,6 +23,11 @@ from .repositories.admin_repository import (
     SQLAlchemyLoadSheddingScheduleRepository,
     SQLAlchemyAdminAuditLogRepository,
 )
+from .repositories.ai_repository import (
+    SQLAlchemyGridOutageRepository,
+    SQLAlchemyAIInsightsLogRepository,
+    SQLAlchemyAIPromptTemplateRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +60,10 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
         self._electricity_tariffs: Optional[SQLAlchemyElectricityTariffRepository] = None
         self._load_shedding_schedules: Optional[SQLAlchemyLoadSheddingScheduleRepository] = None
         self._admin_audit_logs: Optional[SQLAlchemyAdminAuditLogRepository] = None
+        # AI Intelligence layer
+        self._grid_outages: Optional[SQLAlchemyGridOutageRepository] = None
+        self._ai_insights_log: Optional[SQLAlchemyAIInsightsLogRepository] = None
+        self._ai_prompt_templates: Optional[SQLAlchemyAIPromptTemplateRepository] = None
 
     async def __aenter__(self) -> "SQLAlchemyUnitOfWork":
         """Enter async context - create session."""
@@ -175,6 +184,33 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._admin_audit_logs = SQLAlchemyAdminAuditLogRepository(self._session)
         return self._admin_audit_logs
 
+    @property
+    def grid_outages(self) -> SQLAlchemyGridOutageRepository:
+        """Get grid outage repository."""
+        if self._grid_outages is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._grid_outages = SQLAlchemyGridOutageRepository(self._session)
+        return self._grid_outages
+
+    @property
+    def ai_insights_log(self) -> SQLAlchemyAIInsightsLogRepository:
+        """Get AI insights log repository."""
+        if self._ai_insights_log is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._ai_insights_log = SQLAlchemyAIInsightsLogRepository(self._session)
+        return self._ai_insights_log
+
+    @property
+    def ai_prompt_templates(self) -> SQLAlchemyAIPromptTemplateRepository:
+        """Get AI prompt template repository."""
+        if self._ai_prompt_templates is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._ai_prompt_templates = SQLAlchemyAIPromptTemplateRepository(self._session)
+        return self._ai_prompt_templates
+
     async def commit(self) -> None:
         """Commit current transaction."""
         if self._session:
@@ -207,6 +243,9 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._electricity_tariffs = None
             self._load_shedding_schedules = None
             self._admin_audit_logs = None
+            self._grid_outages = None
+            self._ai_insights_log = None
+            self._ai_prompt_templates = None
 
     def collect_domain_events(self) -> List[DomainEvent]:
         """

@@ -16,6 +16,7 @@ import {
   Rocket,
   Users,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -130,6 +131,16 @@ export function AdminSidebar() {
           href: "/admin/ota-campaigns",
           icon: <Rocket className="w-4 h-4" />,
           permission: "manage_campaigns",
+        },
+      ],
+    },
+    {
+      title: "AI Intelligence",
+      items: [
+        {
+          title: "AI Prompt Templates",
+          href: "/admin/ai-prompts",
+          icon: <Sparkles className="w-4 h-4" />,
         },
       ],
     },

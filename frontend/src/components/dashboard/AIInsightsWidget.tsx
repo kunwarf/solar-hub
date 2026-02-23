@@ -335,7 +335,8 @@ export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData, siteId }: AIIn
     queryKey: ['insights', siteId],
     queryFn: () => dashboardService.getInsights(siteId),
     enabled: isAuthenticated && !!siteId,
-    staleTime: 5 * 60 * 1000,  // 5 minutes
+    staleTime: 60 * 60 * 1000,     // 1 hour — matches backend hourly cache
+    refetchInterval: 60 * 60 * 1000, // re-fetch at the top of every hour
     retry: 1,
   });
 
@@ -487,6 +488,34 @@ export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData, siteId }: AIIn
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Monthly Analysis (from Tier 2 — Sonnet) */}
+            {backendInsights?.monthly_analysis && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Battery className="h-3.5 w-3.5" />
+                  Monthly Analysis
+                  <Badge variant="outline" className="text-xs">Billing Month</Badge>
+                </h4>
+                <div className="bg-muted/30 rounded-lg p-4 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                  {backendInsights.monthly_analysis}
+                </div>
+              </div>
+            )}
+
+            {/* Yearly Analysis (from Tier 3 — Sonnet) */}
+            {backendInsights?.yearly_analysis && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  Year-to-Date Analysis
+                  <Badge variant="outline" className="text-xs">Annual</Badge>
+                </h4>
+                <div className="bg-muted/30 rounded-lg p-4 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                  {backendInsights.yearly_analysis}
+                </div>
+              </div>
+            )}
 
             {/* Weekly Digest */}
             <div className="space-y-3">

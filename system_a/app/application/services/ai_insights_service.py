@@ -1,22 +1,38 @@
 """
-AI Insights Service.
+AI Insights Service — Three-Tier Architecture.
 
-Generates insights from real telemetry data.
-When an Anthropic API key is configured (AI_API_KEY), Claude is used to produce
-richer, context-aware insights. Falls back to a rule-based engine otherwise.
+Tier 1 – Hourly (claude-haiku-4-5-20251001):
+    Triggered on login / page reload, then re-fetched every clock hour.
+    Cache TTL: 60 minutes.  Redis key: insights:hourly:{site_id}
+    Data: live telemetry + battery kWh today + system alerts + LS prediction.
+    Produces: daily_insights + anomaly_alerts.
 
-Architecture:
-- Reads real-time data from Redis (via TelemetryCacheReader)
-- Reads historical data from System B (7-day energy chart)
-- All numbers are real (no mocks)
-- Returns structured InsightData that maps to the frontend Insight type
+Tier 2 – Monthly (claude-3-5-sonnet-20241022):
+    Called once per calendar day.
+    Cache TTL: 24 hours.  Redis key: insights:monthly:{site_id}:{billing_date}
+    Data: 30-day System B energy chart + billing data + outage history.
+    Produces: monthly_analysis block.
+
+Tier 3 – Yearly (claude-3-5-sonnet-20241022):
+    Called once per billing month (on first load after billing month rolls over).
+    Cache TTL: 30 days.  Redis key: insights:yearly:{site_id}:{year}:{month}
+    Data: 365-day System B energy chart + year-to-date billing + outage YTD.
+    Produces: yearly_analysis block.
+
+Every Claude call result is persisted to the ai_insights_log table for
+historical trend analysis and to seed future Claude prompts with context.
+
+Prompt templates are loaded from DB (Redis-cached 5 min) with a hardcoded
+fallback, so admins can edit them at /admin/ai-prompts without a deploy.
+
+Rule-based fallback is used when Claude is unavailable or disabled.
 """
 import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from ...config import settings
 from ...infrastructure.cache.telemetry_cache import TelemetryCacheReader
@@ -24,108 +40,46 @@ from ...infrastructure.external.system_b_client import SystemBClient, SystemBCli
 
 logger = logging.getLogger(__name__)
 
-# Pakistan Standard Time: UTC+5, no DST
+# Pakistan Standard Time
 _PKT = timezone(timedelta(hours=5))
 
-# Inverter temperature thresholds
-INVERTER_TEMP_WARN_C = 75.0   # elevated — monitor closely
-INVERTER_TEMP_HIGH_C = 90.0   # critical — flag as anomaly
+# Redis cache TTLs
+_TTL_HOURLY_S  = 3600       # 1 hour
+_TTL_MONTHLY_S = 86400      # 24 hours
+_TTL_YEARLY_S  = 2592000    # 30 days
 
-# Pakistan grid carbon intensity (kg CO2 per kWh)
-CO2_KG_PER_KWH = 0.7
+# Models per tier
+_MODEL_HOURLY  = "claude-haiku-4-5-20251001"
+_MODEL_MONTHLY = "claude-3-5-sonnet-20241022"
+_MODEL_YEARLY  = "claude-3-5-sonnet-20241022"
 
-# Default import rate (PKR per kWh) - overridden from billing config when available
-DEFAULT_PKR_RATE = 35.0
+# Thresholds
+INVERTER_TEMP_WARN_C = 75.0
+INVERTER_TEMP_HIGH_C = 90.0
+CO2_KG_PER_KWH       = 0.7
+DEFAULT_PKR_RATE      = 35.0
 
-# Rotating weekly tips for the "tip of the week" section
 WEEKLY_TIPS = [
-    "Run dishwasher and laundry during peak solar hours (11 AM - 3 PM) to maximize savings.",
+    "Run dishwasher and laundry during peak solar hours (11 AM – 3 PM) to maximize savings.",
     "Pre-cool your home before 4 PM to reduce AC load during expensive evening rates.",
     "Check panel cleanliness monthly — dust reduces efficiency by up to 15% in Pakistan's dry climate.",
     "Set battery minimum reserve to 20% to extend battery lifespan significantly.",
     "Your DISCO net metering export rate earns you credit — export excess during peak solar hours.",
     "Use a timer on your water heater to heat water during midday solar surplus.",
-    "Ceiling fans use 10x less power than AC — combine both on mild days to cut cooling costs.",
+    "Ceiling fans use 10× less power than AC — combine both on mild days to cut cooling costs.",
 ]
 
-# Tool schema for Claude structured output
-_CLAUDE_INSIGHT_TOOL = {
-    "name": "return_insights",
-    "description": (
-        "Return structured daily insights and anomaly alerts for the solar site. "
-        "Call this tool with every response."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "daily_insights": {
-                "type": "array",
-                "description": "2-4 daily insights about solar generation, savings, and recommendations.",
-                "items": {
-                    "type": "object",
-                    "required": ["id", "type", "category", "title", "message"],
-                    "properties": {
-                        "id": {"type": "string"},
-                        "type": {
-                            "type": "string",
-                            "enum": ["positive", "neutral", "warning", "tip"],
-                        },
-                        "category": {
-                            "type": "string",
-                            "enum": [
-                                "production",
-                                "savings",
-                                "consumption",
-                                "anomaly",
-                                "recommendation",
-                            ],
-                        },
-                        "title": {"type": "string", "maxLength": 60},
-                        "message": {"type": "string", "maxLength": 200},
-                        "metadata": {"type": "object"},
-                    },
-                },
-            },
-            "anomaly_alerts": {
-                "type": "array",
-                "description": "0-3 anomaly alerts. Only include real problems, not routine observations.",
-                "items": {
-                    "type": "object",
-                    "required": ["id", "type", "category", "title", "message"],
-                    "properties": {
-                        "id": {"type": "string"},
-                        "type": {
-                            "type": "string",
-                            "enum": ["positive", "neutral", "warning", "tip"],
-                        },
-                        "category": {
-                            "type": "string",
-                            "enum": [
-                                "production",
-                                "savings",
-                                "consumption",
-                                "anomaly",
-                                "recommendation",
-                            ],
-                        },
-                        "title": {"type": "string", "maxLength": 60},
-                        "message": {"type": "string", "maxLength": 200},
-                        "metadata": {"type": "object"},
-                    },
-                },
-            },
-        },
-        "required": ["daily_insights", "anomaly_alerts"],
-    },
-}
 
+# =============================================================================
+# Response types (unchanged from previous version — frontend compatibility)
+# =============================================================================
 
 @dataclass
 class InsightData:
-    """A single insight generated by the service."""
+    """A single insight item."""
     id: str
-    type: str  # 'positive', 'neutral', 'warning', 'tip'
-    category: str  # 'production', 'savings', 'consumption', 'anomaly', 'recommendation'
+    type: str
+    category: str
     title: str
     message: str
     timestamp: datetime
@@ -134,7 +88,7 @@ class InsightData:
 
 @dataclass
 class WeeklyDigestData:
-    """Weekly energy summary digest."""
+    """Weekly energy digest for the AIInsightsWidget."""
     total_generated_kwh: float
     total_saved_pkr: float
     self_sufficiency_pct: float
@@ -149,50 +103,179 @@ class WeeklyDigestData:
 
 @dataclass
 class InsightsResponse:
-    """Full set of insights for a site."""
+    """Full insights payload returned to the API endpoint."""
     daily_insights: List[InsightData]
     anomaly_alerts: List[InsightData]
     weekly_digest: Optional[WeeklyDigestData]
     generated_at: datetime
+    monthly_analysis: Optional[str] = None
+    yearly_analysis:  Optional[str] = None
+    source: str = "rule_based"   # "claude" | "cache" | "rule_based"
 
+
+# =============================================================================
+# Claude tool schemas
+# =============================================================================
+
+_HOURLY_TOOL = {
+    "name": "return_insights",
+    "description": (
+        "Return structured hourly insights and anomaly alerts for the solar site. "
+        "Always call this tool."
+    ),
+    "input_schema": {
+        "type": "object",
+        "required": ["daily_insights", "anomaly_alerts"],
+        "properties": {
+            "daily_insights": {
+                "type": "array",
+                "description": "2–4 daily insights covering generation, savings, load shedding, EV, and self-sufficiency.",
+                "items": {
+                    "type": "object",
+                    "required": ["id", "type", "category", "title", "message"],
+                    "properties": {
+                        "id":       {"type": "string"},
+                        "type":     {"type": "string", "enum": ["positive", "neutral", "warning", "tip"]},
+                        "category": {"type": "string", "enum": ["production", "savings", "consumption", "anomaly", "recommendation", "load_shedding", "ev_charging"]},
+                        "title":    {"type": "string", "maxLength": 60},
+                        "message":  {"type": "string", "maxLength": 200},
+                        "metadata": {"type": "object"},
+                    },
+                },
+            },
+            "anomaly_alerts": {
+                "type": "array",
+                "description": "0–3 anomaly alerts. Only real problems, not routine observations.",
+                "items": {
+                    "type": "object",
+                    "required": ["id", "type", "category", "title", "message"],
+                    "properties": {
+                        "id":       {"type": "string"},
+                        "type":     {"type": "string", "enum": ["positive", "neutral", "warning", "tip"]},
+                        "category": {"type": "string", "enum": ["production", "savings", "consumption", "anomaly", "recommendation", "load_shedding", "ev_charging"]},
+                        "title":    {"type": "string", "maxLength": 60},
+                        "message":  {"type": "string", "maxLength": 200},
+                        "metadata": {"type": "object"},
+                    },
+                },
+            },
+        },
+    },
+}
+
+_MONTHLY_TOOL = {
+    "name": "return_monthly_analysis",
+    "description": "Return a structured monthly energy analysis. Always call this tool.",
+    "input_schema": {
+        "type": "object",
+        "required": ["summary", "highlights", "recommendations"],
+        "properties": {
+            "summary": {
+                "type": "string",
+                "description": "3–5 sentence executive summary of this billing month's performance.",
+                "maxLength": 500,
+            },
+            "highlights": {
+                "type": "array",
+                "description": "3–5 specific highlights (wins, losses, load-shedding patterns).",
+                "items": {"type": "string", "maxLength": 200},
+            },
+            "recommendations": {
+                "type": "array",
+                "description": "2–3 actionable recommendations for next month.",
+                "items": {"type": "string", "maxLength": 200},
+            },
+            "load_shedding_insight": {
+                "type": "string",
+                "description": "1–2 sentences on how well the battery handled load shedding this month.",
+                "maxLength": 300,
+            },
+        },
+    },
+}
+
+_YEARLY_TOOL = {
+    "name": "return_yearly_analysis",
+    "description": "Return a year-to-date energy analysis. Always call this tool.",
+    "input_schema": {
+        "type": "object",
+        "required": ["summary", "best_month", "worst_month", "trends", "recommendations"],
+        "properties": {
+            "summary": {
+                "type": "string",
+                "description": "4–6 sentence year-to-date executive summary.",
+                "maxLength": 600,
+            },
+            "best_month":  {"type": "string", "maxLength": 150},
+            "worst_month": {"type": "string", "maxLength": 150},
+            "trends": {
+                "type": "array",
+                "description": "3–5 year-to-date trends (seasonal, consumption, grid independence).",
+                "items": {"type": "string", "maxLength": 200},
+            },
+            "recommendations": {
+                "type": "array",
+                "description": "2–3 strategic recommendations for the coming year.",
+                "items": {"type": "string", "maxLength": 200},
+            },
+            "roi_insight": {
+                "type": "string",
+                "description": "Return-on-investment insight based on savings vs. installation cost estimate.",
+                "maxLength": 300,
+            },
+        },
+    },
+}
+
+
+# =============================================================================
+# Main service
+# =============================================================================
 
 class AIInsightsService:
     """
-    Generates insights from real telemetry data.
+    Three-tier AI insights service.
 
-    Data sources:
-    - Real-time: Redis cache (via TelemetryCacheReader)
-    - Historical: System B energy chart API (7-day / 30-day aggregates)
+    Each tier independently checks Redis for a cached response and only calls
+    Claude when the cache is empty.  Results are persisted to ai_insights_log.
 
-    When AI_API_KEY is set, Claude (claude-haiku) is used to generate
-    context-aware insights. Falls back to a deterministic rule engine otherwise.
+    Constructor arguments:
+        telemetry_cache:  TelemetryCacheReader
+        system_b_client:  SystemBClient
+        session_factory:  async_sessionmaker[AsyncSession]  (for DB writes)
     """
 
     def __init__(
         self,
         telemetry_cache: TelemetryCacheReader,
         system_b_client: SystemBClient,
+        session_factory=None,
     ):
         self._cache = telemetry_cache
         self._system_b = system_b_client
-        self._claude_client = None
+        self._session_factory = session_factory
+        self._claude: Any = None
+        self._prompt_loader = None
         self._init_claude()
 
     def _init_claude(self) -> None:
-        """Initialise the Anthropic client if an API key is configured."""
         api_key = settings.ai.api_key
         if not api_key:
             logger.debug("AI_API_KEY not set — using rule-based insights.")
             return
         try:
-            import anthropic  # type: ignore
-            self._claude_client = anthropic.AsyncAnthropic(api_key=api_key)
-            logger.info("Claude AI client initialised (model=%s).", settings.ai.model)
+            import anthropic
+            self._claude = anthropic.AsyncAnthropic(api_key=api_key)
+            logger.info("Claude AI client initialised.")
         except ImportError:
-            logger.warning(
-                "anthropic package not installed. "
-                "Run: pip install anthropic>=0.40.0"
-            )
+            logger.warning("anthropic package not installed. Run: pip install anthropic>=0.40.0")
+
+    def _get_prompt_loader(self):
+        if self._prompt_loader is None:
+            from .prompt_template_loader import PromptTemplateLoader
+            if self._session_factory:
+                self._prompt_loader = PromptTemplateLoader(self._session_factory)
+        return self._prompt_loader
 
     # =========================================================================
     # Public API
@@ -203,585 +286,667 @@ class AIInsightsService:
         site_id: UUID,
         device_serials: List[str],
         import_rate_pkr: float = DEFAULT_PKR_RATE,
+        billing_month_start: Optional[date] = None,
     ) -> InsightsResponse:
         """
-        Generate the complete set of insights for a site.
+        Generate / retrieve insights for a site (all three tiers).
 
-        Args:
-            site_id: Site UUID (used for System B historical queries)
-            device_serials: List of device serial numbers (used for Redis telemetry)
-            import_rate_pkr: PKR per kWh import rate for savings calculation
-
-        Returns:
-            InsightsResponse with daily insights, anomaly alerts, and weekly digest
+        The hourly tier is always refreshed on-demand (cache checked internally).
+        Monthly and yearly tiers are also cache-checked here; they are included
+        in the response when available.
         """
-        now = datetime.now(timezone.utc)
-        now_pkt = now.astimezone(_PKT)  # All time-based logic uses PKT (UTC+5)
+        now     = datetime.now(timezone.utc)
+        now_pkt = now.astimezone(_PKT)
 
         logger.info(
-            "[insights] Request for site=%s devices=%s import_rate=%.1f",
-            site_id,
-            device_serials,
-            import_rate_pkr,
+            "[insights] site=%s devices=%s rate=%.1f",
+            site_id, device_serials, import_rate_pkr,
         )
 
-        # Gather aggregated site stats from Redis
-        site_stats = await self._gather_site_stats(device_serials)
-
-        logger.info(
-            "[insights] Aggregated stats: pv=%.0fW load=%.0fW grid=%.0fW batt=%.0fW "
-            "energy_today=%.2fkWh import=%.2fkWh export=%.2fkWh soc=%.1f%% "
-            "self_suf=%.1f%% devices=%d/%d",
-            site_stats["pv_power_w"],
-            site_stats["load_power_w"],
-            site_stats["grid_power_w"],
-            site_stats["battery_power_w"],
-            site_stats["energy_today_kwh"],
-            site_stats["grid_import_today_kwh"],
-            site_stats["grid_export_today_kwh"],
-            site_stats["avg_soc_pct"],
-            site_stats["self_sufficiency_pct"],
-            site_stats["devices_online"],
-            site_stats["devices_total"],
+        # --- Tier 1: Hourly (always runs, cached) ---
+        hourly = await self._get_hourly(
+            site_id, device_serials, import_rate_pkr, now_pkt,
         )
 
-        # Try Claude first; fall back to rule-based on any failure
-        if self._claude_client and settings.ai.enabled:
-            logger.info(
-                "Generating insights with Claude (model=%s) for site %s.",
-                settings.ai.model,
-                site_id,
-            )
-            try:
-                daily_insights, anomaly_alerts = await self._generate_insights_with_claude(
-                    site_stats, import_rate_pkr, now_pkt
-                )
-                logger.info(
-                    "Claude insights generated successfully for site %s "
-                    "(%d daily, %d anomalies).",
-                    site_id,
-                    len(daily_insights),
-                    len(anomaly_alerts),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Claude insight generation failed for site %s (%s) — using rule-based fallback.",
-                    site_id,
-                    exc,
-                )
-                daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now_pkt)
-                anomaly_alerts = self._generate_anomaly_alerts(site_stats, now_pkt)
-        else:
-            logger.info(
-                "Using rule-based insights for site %s "
-                "(claude_client=%s, ai_enabled=%s).",
-                site_id,
-                bool(self._claude_client),
-                settings.ai.enabled,
-            )
-            daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now_pkt)
-            anomaly_alerts = self._generate_anomaly_alerts(site_stats, now_pkt)
+        # --- Tier 2: Monthly (run once per day, cached 24h) ---
+        monthly_text = await self._get_monthly_cached(
+            site_id, import_rate_pkr, billing_month_start, now_pkt,
+        )
 
-        # Weekly digest always uses System B (pure arithmetic, no LLM needed)
+        # --- Tier 3: Yearly (run once per billing month, cached 30d) ---
+        yearly_text = await self._get_yearly_cached(
+            site_id, import_rate_pkr, now_pkt,
+        )
+
+        # Weekly digest (arithmetic, no LLM)
         weekly_digest = await self._generate_weekly_digest(site_id, import_rate_pkr)
 
-        logger.info(
-            "[insights] Done for site=%s: %d daily, %d anomalies, weekly_digest=%s",
-            site_id,
-            len(daily_insights),
-            len(anomaly_alerts),
-            "ok (%.1fkWh)" % weekly_digest.total_generated_kwh if weekly_digest else "unavailable",
-        )
-
         return InsightsResponse(
-            daily_insights=daily_insights,
-            anomaly_alerts=anomaly_alerts,
+            daily_insights=hourly["daily_insights"],
+            anomaly_alerts=hourly["anomaly_alerts"],
             weekly_digest=weekly_digest,
             generated_at=now,
+            monthly_analysis=monthly_text,
+            yearly_analysis=yearly_text,
+            source=hourly["source"],
         )
 
     # =========================================================================
-    # Claude-powered insight generation
+    # Tier 1 – Hourly
     # =========================================================================
 
-    async def _generate_insights_with_claude(
+    async def _get_hourly(
+        self,
+        site_id: UUID,
+        device_serials: List[str],
+        import_rate_pkr: float,
+        now_pkt: datetime,
+    ) -> Dict[str, Any]:
+        cache_key = f"insights:hourly:{site_id}"
+
+        # Check Redis cache first
+        cached = await self._redis_get(cache_key)
+        if cached:
+            logger.info("[insights] Hourly cache HIT for site=%s", site_id)
+            return {**cached, "source": "cache"}
+
+        # Gather data
+        site_stats = await self._gather_site_stats(device_serials)
+        alerts_block = await self._gather_alerts_block(device_serials)
+        ls_block = await self._gather_load_shedding_block(site_id)
+        battery_kwh = self._extract_battery_kwh(site_stats)
+
+        # Try Claude
+        if self._claude and settings.ai.enabled:
+            try:
+                daily, anomalies = await self._claude_hourly(
+                    site_stats, import_rate_pkr, now_pkt,
+                    alerts_block, ls_block, battery_kwh,
+                )
+                source = "claude"
+            except Exception as exc:
+                logger.warning("[insights] Hourly Claude failed (%s) — rule-based fallback", exc)
+                daily    = self._rule_daily(site_stats, import_rate_pkr, now_pkt)
+                anomalies = self._rule_anomalies(site_stats, now_pkt)
+                source = "rule_based"
+        else:
+            daily    = self._rule_daily(site_stats, import_rate_pkr, now_pkt)
+            anomalies = self._rule_anomalies(site_stats, now_pkt)
+            source = "rule_based"
+
+        result = {
+            "daily_insights": daily,
+            "anomaly_alerts": anomalies,
+            "source": source,
+        }
+
+        # Cache and persist
+        serializable = {
+            "daily_insights": [self._insight_to_dict(i) for i in daily],
+            "anomaly_alerts": [self._insight_to_dict(i) for i in anomalies],
+        }
+        await self._redis_set(cache_key, serializable, _TTL_HOURLY_S)
+        await self._persist_insights_log(
+            site_id=site_id,
+            tier="hourly",
+            model=_MODEL_HOURLY if source == "claude" else "rule_based",
+            period=now_pkt.strftime("%Y-%m-%dT%H:00"),
+            billing_month=None,
+            daily_insights=[self._insight_to_dict(i) for i in daily],
+            anomaly_alerts=[self._insight_to_dict(i) for i in anomalies],
+            input_stats={
+                **{k: v for k, v in site_stats.items() if not isinstance(v, list)},
+                "battery_kwh": battery_kwh,
+            },
+        )
+
+        return result
+
+    async def _claude_hourly(
         self,
         stats: Dict[str, Any],
         import_rate_pkr: float,
         now: datetime,
-    ) -> tuple[List[InsightData], List[InsightData]]:
-        """
-        Ask Claude to generate insights from the aggregated site stats.
-
-        Uses tool use to enforce a strict JSON output schema so the response
-        can be deserialized without any string parsing.
-        """
-        hour = now.hour  # PKT hour (now is already in PKT timezone)
+        alerts_block: str,
+        ls_block: str,
+        battery_kwh: Dict[str, float],
+    ) -> tuple:
+        loader = self._get_prompt_loader()
+        now_pkt_str = now.strftime("%H:%M %a %d %b")
         savings_pkr = round(stats["self_consumed_kwh"] * import_rate_pkr)
-        max_temp_c = stats.get("max_inverter_temp_c", 0.0)
-
-        system_prompt = (
-            "You are an expert solar energy analyst for Pakistani residential and commercial "
-            "solar installations. You generate concise, actionable insights for system owners. "
-            "Write in clear English. Keep messages under 200 characters. "
-            "Use Pakistani context: PKR currency, DISCO net metering, load shedding, Karachi/Lahore climate."
-        )
-
+        max_temp = stats.get("max_inverter_temp_c", 0.0)
         temp_line = (
-            f"- Inverter temperature: {max_temp_c:.0f}°C"
-            + (" ⚠ CRITICAL — above safe range" if max_temp_c >= INVERTER_TEMP_HIGH_C else
-               " ⚠ Elevated" if max_temp_c >= INVERTER_TEMP_WARN_C else "")
-            + (" (reading >100°C may indicate a sensor scaling artifact)" if max_temp_c > 100 else "")
-        ) if max_temp_c > 0 else "- Inverter temperature: not available"
+            f"Inverter temperature: {max_temp:.0f}°C"
+            + (" ⚠ CRITICAL" if max_temp >= INVERTER_TEMP_HIGH_C else
+               " ⚠ Elevated" if max_temp >= INVERTER_TEMP_WARN_C else "")
+        ) if max_temp > 0 else "Inverter temperature: not available"
 
-        user_prompt = f"""Analyse the following real-time solar site data and generate insights.
+        variables = {
+            "time_pkt":             now_pkt_str,
+            "energy_today_kwh":     f"{stats['energy_today_kwh']:.2f}",
+            "peak_power_kw":        f"{stats['peak_power_kw']:.2f}",
+            "load_power_w":         f"{stats['load_power_w']:.0f}",
+            "grid_power_w":         f"{stats['grid_power_w']:.0f}",
+            "battery_power_w":      f"{stats['battery_power_w']:.0f}",
+            "avg_soc_pct":          f"{stats['avg_soc_pct']:.1f}",
+            "self_consumed_kwh":    f"{stats['self_consumed_kwh']:.2f}",
+            "grid_import_today_kwh":f"{stats['grid_import_today_kwh']:.2f}",
+            "grid_export_today_kwh":f"{stats['grid_export_today_kwh']:.2f}",
+            "self_sufficiency_pct": f"{stats['self_sufficiency_pct']:.1f}",
+            "co2_saved_kg":         f"{stats['co2_saved_kg']:.2f}",
+            "savings_pkr":          f"{savings_pkr:,}",
+            "import_rate_pkr":      f"{import_rate_pkr:.1f}",
+            "devices_online":       str(stats['devices_online']),
+            "devices_total":        str(stats['devices_total']),
+            "inverter_temp_line":   temp_line,
+            "battery_charge_today_kwh":    f"{battery_kwh.get('charge', 0.0):.2f}",
+            "battery_discharge_today_kwh": f"{battery_kwh.get('discharge', 0.0):.2f}",
+            "battery_hourly_charge_kwh":   f"{battery_kwh.get('hour_charge', 0.0):.3f}",
+            "battery_hourly_discharge_kwh":f"{battery_kwh.get('hour_discharge', 0.0):.3f}",
+            "system_alerts_block":  alerts_block or "No active system alerts.",
+            "load_shedding_block":  ls_block or "No load shedding data available.",
+            "warn_temp_c":          str(int(INVERTER_TEMP_WARN_C)),
+        }
 
-## Current Site Stats
-- Time: {now.strftime('%H:%M')} PKT (hour={hour})
-- Solar generation today: {stats['energy_today_kwh']:.2f} kWh
-- Peak solar power: {stats['peak_power_kw']:.2f} kW
-- Current load: {stats['load_power_w']:.0f} W
-- Current grid power: {stats['grid_power_w']:.0f} W  (positive=import, negative=export)
-- Current battery power: {stats['battery_power_w']:.0f} W  (positive=charging, negative=discharging)
-- Battery SoC: {stats['avg_soc_pct']:.1f}%
-- Self-consumed solar today: {stats['self_consumed_kwh']:.2f} kWh
-- Grid import today: {stats['grid_import_today_kwh']:.2f} kWh
-- Grid export today: {stats['grid_export_today_kwh']:.2f} kWh
-- Self-sufficiency today: {stats['self_sufficiency_pct']:.1f}%
-- CO₂ saved today: {stats['co2_saved_kg']:.2f} kg
-- Money saved today: Rs. {savings_pkr:,} (at Rs. {import_rate_pkr}/kWh)
-- Devices online: {stats['devices_online']} / {stats['devices_total']}
-{temp_line}
+        if loader:
+            system_prompt = loader.render("hourly_system", variables)
+            user_prompt   = loader.render("hourly_user",   variables)
+        else:
+            system_prompt = _HARDCODED_HOURLY_SYSTEM.format_map(_Default(variables))
+            user_prompt   = _HARDCODED_HOURLY_USER.format_map(_Default(variables))
 
-## Instructions
-- Generate 2-4 daily_insights covering: generation performance, savings, self-sufficiency, and one actionable tip for the current time of day.
-- Generate anomaly_alerts ONLY if there are real problems (low generation during daylight, very low battery, devices offline, high temperature). Do not generate alerts if everything is fine.
-- If inverter temperature ≥ {INVERTER_TEMP_WARN_C:.0f}°C, include an anomaly alert about overheating risk. If >100°C, also note this may be a sensor scaling artifact worth verifying.
-- Be specific with numbers. Avoid generic filler text.
-- Call the `return_insights` tool with your response.
-"""
-
-        response = await self._claude_client.messages.create(
-            model=settings.ai.model,
+        response = await self._claude.messages.create(
+            model=_MODEL_HOURLY,
             max_tokens=1024,
             system=system_prompt,
-            tools=[_CLAUDE_INSIGHT_TOOL],
+            tools=[_HOURLY_TOOL],
             tool_choice={"type": "tool", "name": "return_insights"},
             messages=[{"role": "user", "content": user_prompt}],
         )
 
-        # Extract tool_use block
-        tool_use_block = next(
-            (block for block in response.content if block.type == "tool_use"),
-            None,
-        )
-        if not tool_use_block:
-            raise ValueError("Claude did not call the return_insights tool.")
+        block = next((b for b in response.content if b.type == "tool_use"), None)
+        if not block:
+            raise ValueError("Claude did not call return_insights.")
 
-        raw = tool_use_block.input
-        daily_insights = self._parse_insight_list(raw.get("daily_insights", []), now)
-        anomaly_alerts = self._parse_insight_list(raw.get("anomaly_alerts", []), now)
-        return daily_insights, anomaly_alerts
-
-    def _parse_insight_list(
-        self, items: List[Dict[str, Any]], now: datetime
-    ) -> List[InsightData]:
-        """Convert raw tool-use dicts into InsightData objects."""
-        result: List[InsightData] = []
-        for item in items:
-            try:
-                result.append(InsightData(
-                    id=item["id"],
-                    type=item["type"],
-                    category=item["category"],
-                    title=item["title"],
-                    message=item["message"],
-                    timestamp=now,
-                    metadata=item.get("metadata", {}),
-                ))
-            except (KeyError, TypeError) as exc:
-                logger.warning("Skipping malformed insight from Claude: %s — %s", item, exc)
-        return result
+        raw = block.input
+        now_dt = datetime.now(timezone.utc)
+        daily    = self._parse_insight_list(raw.get("daily_insights", []), now_dt)
+        anomalies = self._parse_insight_list(raw.get("anomaly_alerts",  []), now_dt)
+        return daily, anomalies
 
     # =========================================================================
-    # Data Gathering
+    # Tier 2 – Monthly
+    # =========================================================================
+
+    async def _get_monthly_cached(
+        self,
+        site_id: UUID,
+        import_rate_pkr: float,
+        billing_month_start: Optional[date],
+        now_pkt: datetime,
+    ) -> Optional[str]:
+        today = now_pkt.date()
+        bm = billing_month_start or today.replace(day=1)
+        cache_key = f"insights:monthly:{site_id}:{bm.isoformat()}"
+
+        cached = await self._redis_get(cache_key)
+        if cached:
+            logger.info("[insights] Monthly cache HIT for site=%s", site_id)
+            return cached.get("monthly_analysis")
+
+        if not (self._claude and settings.ai.enabled):
+            return None
+
+        try:
+            text = await self._claude_monthly(
+                site_id, import_rate_pkr, bm, today, now_pkt,
+            )
+        except Exception as exc:
+            logger.warning("[insights] Monthly Claude failed: %s", exc)
+            return None
+
+        await self._redis_set(cache_key, {"monthly_analysis": text}, _TTL_MONTHLY_S)
+        await self._persist_insights_log(
+            site_id=site_id,
+            tier="monthly",
+            model=_MODEL_MONTHLY,
+            period=bm.isoformat(),
+            billing_month=bm,
+            monthly_analysis=text,
+        )
+        return text
+
+    async def _claude_monthly(
+        self,
+        site_id: UUID,
+        import_rate_pkr: float,
+        billing_month_start: date,
+        today: date,
+        now_pkt: datetime,
+    ) -> str:
+        # Fetch 30-day energy chart from System B
+        try:
+            monthly_data = await self._system_b.get_site_energy_chart(
+                site_id=site_id, period="month",
+            )
+            data_points = monthly_data.get("data", [])
+        except SystemBClientError:
+            data_points = []
+
+        # Aggregate monthly stats
+        total_pv    = sum(float(p.get("pv_kwh",          0) or 0) for p in data_points)
+        total_load  = sum(float(p.get("load_kwh",         0) or 0) for p in data_points)
+        total_import= sum(float(p.get("grid_import_kwh",  0) or 0) for p in data_points)
+        total_export= sum(float(p.get("grid_export_kwh",  0) or 0) for p in data_points)
+        self_consumed = max(0.0, total_load - total_import)
+        self_suf_pct  = (self_consumed / total_load * 100) if total_load > 0 else 0.0
+        savings_pkr   = round(self_consumed * import_rate_pkr)
+        days_elapsed  = (today - billing_month_start).days + 1
+
+        # Outage statistics from DB
+        ls_stats = await self._fetch_monthly_outage_stats(site_id, billing_month_start, today)
+        outage_hours = ls_stats.get("total_hours", 0.0)
+        outage_events = ls_stats.get("event_count", 0)
+
+        # Build chart snippet (max 10 rows to keep prompt lean)
+        chart_rows = "\n".join(
+            f"  {p.get('date','?')} | pv={float(p.get('pv_kwh',0) or 0):.1f}kWh "
+            f"load={float(p.get('load_kwh',0) or 0):.1f}kWh "
+            f"import={float(p.get('grid_import_kwh',0) or 0):.1f}kWh"
+            for p in data_points[-10:]
+        ) or "  (no daily breakdown available)"
+
+        loader = self._get_prompt_loader()
+        variables = {
+            "billing_month":      billing_month_start.strftime("%B %Y"),
+            "days_elapsed":       str(days_elapsed),
+            "total_pv_kwh":       f"{total_pv:.1f}",
+            "total_load_kwh":     f"{total_load:.1f}",
+            "total_import_kwh":   f"{total_import:.1f}",
+            "total_export_kwh":   f"{total_export:.1f}",
+            "self_sufficiency_pct": f"{self_suf_pct:.1f}",
+            "savings_pkr":        f"{savings_pkr:,}",
+            "import_rate_pkr":    f"{import_rate_pkr:.1f}",
+            "outage_hours":       f"{outage_hours:.1f}",
+            "outage_events":      str(outage_events),
+            "chart_snippet":      chart_rows,
+        }
+
+        if loader:
+            system_prompt = loader.render("monthly_system", variables)
+            user_prompt   = loader.render("monthly_user",   variables)
+        else:
+            system_prompt = _HARDCODED_MONTHLY_SYSTEM.format_map(_Default(variables))
+            user_prompt   = _HARDCODED_MONTHLY_USER.format_map(_Default(variables))
+
+        response = await self._claude.messages.create(
+            model=_MODEL_MONTHLY,
+            max_tokens=1500,
+            system=system_prompt,
+            tools=[_MONTHLY_TOOL],
+            tool_choice={"type": "tool", "name": "return_monthly_analysis"},
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+
+        block = next((b for b in response.content if b.type == "tool_use"), None)
+        if not block:
+            raise ValueError("Claude did not call return_monthly_analysis.")
+
+        raw = block.input
+        parts = [raw.get("summary", "")]
+        highlights = raw.get("highlights", [])
+        if highlights:
+            parts.append("\n**Highlights:**")
+            parts.extend(f"• {h}" for h in highlights)
+        recs = raw.get("recommendations", [])
+        if recs:
+            parts.append("\n**Recommendations:**")
+            parts.extend(f"• {r}" for r in recs)
+        ls_insight = raw.get("load_shedding_insight", "")
+        if ls_insight:
+            parts.append(f"\n**Load Shedding:** {ls_insight}")
+
+        return "\n".join(parts)
+
+    # =========================================================================
+    # Tier 3 – Yearly
+    # =========================================================================
+
+    async def _get_yearly_cached(
+        self,
+        site_id: UUID,
+        import_rate_pkr: float,
+        now_pkt: datetime,
+    ) -> Optional[str]:
+        year  = now_pkt.year
+        month = now_pkt.month
+        cache_key = f"insights:yearly:{site_id}:{year}:{month:02d}"
+
+        cached = await self._redis_get(cache_key)
+        if cached:
+            logger.info("[insights] Yearly cache HIT for site=%s", site_id)
+            return cached.get("yearly_analysis")
+
+        if not (self._claude and settings.ai.enabled):
+            return None
+
+        try:
+            text = await self._claude_yearly(site_id, import_rate_pkr, now_pkt)
+        except Exception as exc:
+            logger.warning("[insights] Yearly Claude failed: %s", exc)
+            return None
+
+        await self._redis_set(cache_key, {"yearly_analysis": text}, _TTL_YEARLY_S)
+        await self._persist_insights_log(
+            site_id=site_id,
+            tier="yearly",
+            model=_MODEL_YEARLY,
+            period=f"{year}-{month:02d}",
+            billing_month=now_pkt.date().replace(day=1),
+            yearly_analysis=text,
+        )
+        return text
+
+    async def _claude_yearly(
+        self,
+        site_id: UUID,
+        import_rate_pkr: float,
+        now_pkt: datetime,
+    ) -> str:
+        try:
+            yearly_data = await self._system_b.get_site_energy_chart(
+                site_id=site_id, period="year",
+            )
+            data_points = yearly_data.get("data", [])
+        except SystemBClientError:
+            data_points = []
+
+        total_pv    = sum(float(p.get("pv_kwh",         0) or 0) for p in data_points)
+        total_load  = sum(float(p.get("load_kwh",        0) or 0) for p in data_points)
+        total_import= sum(float(p.get("grid_import_kwh", 0) or 0) for p in data_points)
+        total_export= sum(float(p.get("grid_export_kwh", 0) or 0) for p in data_points)
+        self_consumed = max(0.0, total_load - total_import)
+        self_suf_pct  = (self_consumed / total_load * 100) if total_load > 0 else 0.0
+        savings_pkr   = round(self_consumed * import_rate_pkr)
+        co2_saved     = total_pv * CO2_KG_PER_KWH
+
+        # Monthly breakdown for chart snippet (last 12 months)
+        chart_rows = "\n".join(
+            f"  {p.get('date','?')} | pv={float(p.get('pv_kwh',0) or 0):.0f}kWh "
+            f"load={float(p.get('load_kwh',0) or 0):.0f}kWh "
+            f"import={float(p.get('grid_import_kwh',0) or 0):.0f}kWh"
+            for p in data_points
+        ) or "  (no monthly breakdown available)"
+
+        loader = self._get_prompt_loader()
+        variables = {
+            "year":               str(now_pkt.year),
+            "month_label":        now_pkt.strftime("%B %Y"),
+            "total_pv_kwh":       f"{total_pv:.0f}",
+            "total_load_kwh":     f"{total_load:.0f}",
+            "total_import_kwh":   f"{total_import:.0f}",
+            "total_export_kwh":   f"{total_export:.0f}",
+            "self_sufficiency_pct": f"{self_suf_pct:.1f}",
+            "savings_pkr":        f"{savings_pkr:,}",
+            "co2_saved_kg":       f"{co2_saved:.0f}",
+            "import_rate_pkr":    f"{import_rate_pkr:.1f}",
+            "chart_snippet":      chart_rows,
+        }
+
+        if loader:
+            system_prompt = loader.render("yearly_system", variables)
+            user_prompt   = loader.render("yearly_user",   variables)
+        else:
+            system_prompt = _HARDCODED_YEARLY_SYSTEM.format_map(_Default(variables))
+            user_prompt   = _HARDCODED_YEARLY_USER.format_map(_Default(variables))
+
+        response = await self._claude.messages.create(
+            model=_MODEL_YEARLY,
+            max_tokens=2000,
+            system=system_prompt,
+            tools=[_YEARLY_TOOL],
+            tool_choice={"type": "tool", "name": "return_yearly_analysis"},
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+
+        block = next((b for b in response.content if b.type == "tool_use"), None)
+        if not block:
+            raise ValueError("Claude did not call return_yearly_analysis.")
+
+        raw = block.input
+        parts = [raw.get("summary", "")]
+        if raw.get("best_month"):
+            parts.append(f"\n**Best Month:** {raw['best_month']}")
+        if raw.get("worst_month"):
+            parts.append(f"**Worst Month:** {raw['worst_month']}")
+        trends = raw.get("trends", [])
+        if trends:
+            parts.append("\n**Year-to-Date Trends:**")
+            parts.extend(f"• {t}" for t in trends)
+        recs = raw.get("recommendations", [])
+        if recs:
+            parts.append("\n**Strategic Recommendations:**")
+            parts.extend(f"• {r}" for r in recs)
+        roi = raw.get("roi_insight", "")
+        if roi:
+            parts.append(f"\n**ROI:** {roi}")
+
+        return "\n".join(parts)
+
+    # =========================================================================
+    # Data Helpers
     # =========================================================================
 
     async def _gather_site_stats(self, device_serials: List[str]) -> Dict[str, Any]:
-        """
-        Aggregate real-time statistics from Redis across all site devices.
-
-        Returns a flat dict of site-level aggregated metrics.
-        """
-        total_pv_w = 0.0
-        total_load_w = 0.0
-        total_grid_w = 0.0
-        total_battery_w = 0.0
-        total_energy_today_kwh = 0.0
-        total_grid_import_today_kwh = 0.0
-        total_grid_export_today_kwh = 0.0
+        """Aggregate real-time stats from Redis across all site devices."""
+        total_pv_w = total_load_w = total_grid_w = total_battery_w = 0.0
+        total_energy_today = total_import = total_export = 0.0
+        total_batt_charge = total_batt_discharge = 0.0
         total_soc = 0.0
         soc_count = 0
-        peak_power_kw = 0.0
-        max_inverter_temp_c = 0.0
+        peak_kw = max_temp = 0.0
         devices_online = 0
         devices_total = len(device_serials)
 
         for serial in device_serials:
             telemetry = await self._cache.get_telemetry(serial)
-            status = await self._cache.get_status(serial)
-
+            status    = await self._cache.get_status(serial)
             if status == "online":
                 devices_online += 1
-
             if not telemetry:
-                logger.warning("[insights] No telemetry in Redis for device %s (status=%s)", serial, status)
                 continue
 
-            power = telemetry.get("power", {})
-            energy = telemetry.get("energy_today", {})
+            power   = telemetry.get("power", {})
+            energy  = telemetry.get("energy_today", {})
             battery = telemetry.get("battery", {})
-            # Grid import/export kWh live in 'raw' (System B stores them there, not in energy_today)
-            raw = telemetry.get("raw", {})
-            # Temperature — check both structured 'temperatures' sub-key and raw device keys
-            temps = telemetry.get("temperatures", {})
-            inv_temp_c = float(temps.get("inverter_c") or raw.get("inverter_temp_c") or 0)
-            heat_sink_c = float(raw.get("heat_sink_temp_c") or 0)
-            device_peak_temp = max(inv_temp_c, heat_sink_c)
-            if device_peak_temp > max_inverter_temp_c:
-                max_inverter_temp_c = device_peak_temp
+            raw     = telemetry.get("raw", {})
+            temps   = telemetry.get("temperatures", {})
 
-            pv_w = float(power.get("pv_total_w", 0) or 0)
-            load_w = float(power.get("load_w", 0) or 0)
-            grid_w = float(power.get("grid_w", 0) or 0)
-            batt_w = float(power.get("battery_w", 0) or 0)
+            inv_temp  = float(temps.get("inverter_c") or raw.get("inverter_temp_c") or 0)
+            sink_temp = float(raw.get("heat_sink_temp_c") or 0)
+            max_temp  = max(max_temp, inv_temp, sink_temp)
+
+            pv_w   = float(power.get("pv_total_w", 0) or 0)
+            load_w = float(power.get("load_w",     0) or 0)
+            grid_w = float(power.get("grid_w",     0) or 0)
+            batt_w = float(power.get("battery_w",  0) or 0)
             energy_today = float(energy.get("pv_kwh", 0) or 0)
-            grid_import = float(raw.get("grid_import_energy_today_kwh", 0) or 0)
-            grid_export = float(raw.get("grid_export_energy_today_kwh", 0) or 0)
-            soc = float(battery.get("soc_pct", 0) or 0)
+            grid_import  = float(raw.get("grid_import_energy_today_kwh", 0) or 0)
+            grid_export  = float(raw.get("grid_export_energy_today_kwh", 0) or 0)
+            batt_charge  = float(raw.get("battery_charge_today_kwh",     0) or 0)
+            batt_disch   = float(raw.get("battery_discharge_today_kwh",  0) or 0)
+            soc          = float(battery.get("soc_pct", 0) or 0)
 
-            logger.info(
-                "[insights] Device %s (status=%s): pv_total_w=%.0f load_w=%.0f grid_w=%.0f "
-                "batt_w=%.0f pv_kwh=%.2f import_kwh=%.2f export_kwh=%.2f soc=%.0f",
-                serial, status,
-                pv_w, load_w, grid_w, batt_w, energy_today, grid_import, grid_export, soc,
-            )
-
-            total_pv_w += pv_w
-            total_load_w += load_w
-            total_grid_w += grid_w
+            total_pv_w      += pv_w
+            total_load_w    += load_w
+            total_grid_w    += grid_w
             total_battery_w += batt_w
-            total_energy_today_kwh += energy_today
-            total_grid_import_today_kwh += grid_import
-            total_grid_export_today_kwh += grid_export
-
+            total_energy_today += energy_today
+            total_import    += grid_import
+            total_export    += grid_export
+            total_batt_charge   += batt_charge
+            total_batt_discharge += batt_disch
             if pv_w > 0:
-                peak_power_kw = max(peak_power_kw, pv_w / 1000.0)
-
+                peak_kw = max(peak_kw, pv_w / 1000.0)
             if soc > 0:
                 total_soc += soc
                 soc_count += 1
 
-            if device_peak_temp > 0:
-                logger.debug(
-                    "[insights] Device %s temperatures: inverter=%.1f°C heat_sink=%.1f°C",
-                    serial, inv_temp_c, heat_sink_c,
-                )
-
         avg_soc = total_soc / soc_count if soc_count > 0 else 0.0
-
-        # Self-sufficiency: solar directly consumed vs total load
-        self_consumed_kwh = max(0.0, total_energy_today_kwh - total_grid_export_today_kwh)
-        self_sufficiency_pct = (
-            (self_consumed_kwh / total_energy_today_kwh * 100)
-            if total_energy_today_kwh > 0
-            else 0.0
-        )
+        self_consumed = max(0.0, total_energy_today - total_export)
+        self_suf = (self_consumed / total_energy_today * 100) if total_energy_today > 0 else 0.0
 
         return {
-            "pv_power_w": total_pv_w,
-            "load_power_w": total_load_w,
-            "grid_power_w": total_grid_w,
-            "battery_power_w": total_battery_w,
-            "energy_today_kwh": total_energy_today_kwh,
-            "grid_import_today_kwh": total_grid_import_today_kwh,
-            "grid_export_today_kwh": total_grid_export_today_kwh,
-            "avg_soc_pct": avg_soc,
-            "peak_power_kw": peak_power_kw,
-            "max_inverter_temp_c": max_inverter_temp_c,
-            "self_sufficiency_pct": self_sufficiency_pct,
-            "self_consumed_kwh": self_consumed_kwh,
-            "devices_online": devices_online,
-            "devices_total": devices_total,
-            "co2_saved_kg": total_energy_today_kwh * CO2_KG_PER_KWH,
+            "pv_power_w":              total_pv_w,
+            "load_power_w":            total_load_w,
+            "grid_power_w":            total_grid_w,
+            "battery_power_w":         total_battery_w,
+            "energy_today_kwh":        total_energy_today,
+            "grid_import_today_kwh":   total_import,
+            "grid_export_today_kwh":   total_export,
+            "battery_charge_today_kwh":   total_batt_charge,
+            "battery_discharge_today_kwh":total_batt_discharge,
+            "avg_soc_pct":             avg_soc,
+            "peak_power_kw":           peak_kw,
+            "max_inverter_temp_c":     max_temp,
+            "self_sufficiency_pct":    self_suf,
+            "self_consumed_kwh":       self_consumed,
+            "devices_online":          devices_online,
+            "devices_total":           devices_total,
+            "co2_saved_kg":            total_energy_today * CO2_KG_PER_KWH,
         }
 
-    # =========================================================================
-    # Rule-Based Insight Generators (fallback)
-    # =========================================================================
+    def _extract_battery_kwh(self, stats: Dict[str, Any]) -> Dict[str, float]:
+        return {
+            "charge":            stats.get("battery_charge_today_kwh",   0.0),
+            "discharge":         stats.get("battery_discharge_today_kwh",0.0),
+            "hour_charge":       0.0,   # instantaneous hourly not tracked separately
+            "hour_discharge":    0.0,
+        }
 
-    def _generate_daily_insights(
+    async def _gather_alerts_block(self, device_serials: List[str]) -> str:
+        """Build a text block of active system alerts from Redis device status."""
+        lines = []
+        try:
+            from ...infrastructure.cache.redis_manager import RedisManager
+            redis = await RedisManager.get_client()
+            for serial in device_serials:
+                raw = await redis.get(f"device:{serial}:alerts")
+                if raw:
+                    data = json.loads(raw) if isinstance(raw, (str, bytes)) else {}
+                    for alert in (data.get("alerts") or []):
+                        lines.append(
+                            f"[{serial}] {alert.get('severity','INFO').upper()}: {alert.get('message','')}"
+                        )
+        except Exception as exc:
+            logger.debug("[insights] Could not fetch alerts from Redis: %s", exc)
+        return "\n".join(lines) if lines else ""
+
+    async def _gather_load_shedding_block(self, site_id: UUID) -> str:
+        """Build the LS prediction block using OutagePredictionService."""
+        if not self._session_factory:
+            return ""
+        try:
+            from .outage_prediction_service import OutagePredictionService
+            svc = OutagePredictionService(self._session_factory)
+            result = await svc.predict(site_id)
+            return svc.format_prompt_block(result)
+        except Exception as exc:
+            logger.debug("[insights] LS block failed: %s", exc)
+            return ""
+
+    async def _fetch_monthly_outage_stats(
         self,
-        stats: Dict[str, Any],
-        import_rate_pkr: float,
-        now: datetime,
-    ) -> List[InsightData]:
-        """Generate daily insights from aggregated site stats."""
-        insights: List[InsightData] = []
-        hour = now.hour
-        energy_today = stats["energy_today_kwh"]
-        peak_kw = stats["peak_power_kw"]
-        self_consumed_kwh = stats["self_consumed_kwh"]
-        self_sufficiency_pct = stats["self_sufficiency_pct"]
-        co2_saved_kg = stats["co2_saved_kg"]
+        site_id: UUID,
+        month_start: date,
+        month_end: date,
+    ) -> Dict[str, Any]:
+        if not self._session_factory:
+            return {}
+        try:
+            async with self._session_factory() as session:
+                from ...infrastructure.database.repositories.ai_repository import (
+                    SQLAlchemyGridOutageRepository,
+                )
+                repo = SQLAlchemyGridOutageRepository(session)
+                return await repo.get_month_stats(
+                    site_id=site_id,
+                    billing_month_start=month_start,
+                    billing_month_end=month_end,
+                )
+        except Exception as exc:
+            logger.debug("[insights] Monthly outage stats failed: %s", exc)
+            return {}
 
-        # --- Production insight ---
-        if energy_today > 0:
-            insights.append(InsightData(
-                id="prod-daily",
-                type="positive" if energy_today >= 5 else "neutral",
-                category="production",
-                title="Today's Solar Generation",
-                message=(
-                    f"You generated {energy_today:.1f} kWh today from solar energy"
-                    + (f", avoiding {co2_saved_kg:.1f} kg of CO₂" if co2_saved_kg > 0.1 else "")
-                ),
-                timestamp=now,
-                metadata={
-                    "energy_today_kwh": round(energy_today, 1),
-                    "co2_saved_kg": round(co2_saved_kg, 1),
-                },
-            ))
+    # =========================================================================
+    # Redis cache helpers
+    # =========================================================================
 
-        # --- Peak power insight ---
-        if peak_kw > 0:
-            insights.append(InsightData(
-                id="peak-daily",
-                type="neutral",
-                category="production",
-                title="Peak Solar Output",
-                message=f"Peak solar output reached {peak_kw:.1f} kW today",
-                timestamp=now,
-                metadata={"peak_kw": round(peak_kw, 1)},
-            ))
+    async def _redis_get(self, key: str) -> Optional[Dict]:
+        try:
+            from ...infrastructure.cache.redis_manager import RedisManager
+            redis = await RedisManager.get_client()
+            raw = await redis.get(key)
+            if raw:
+                return json.loads(raw)
+        except Exception as exc:
+            logger.debug("[insights] Redis GET failed for %s: %s", key, exc)
+        return None
 
-        # --- Savings insight ---
-        savings_pkr = round(self_consumed_kwh * import_rate_pkr)
-        if savings_pkr > 0:
-            insights.append(InsightData(
-                id="save-daily",
-                type="positive",
-                category="savings",
-                title="Money Saved Today",
-                message=(
-                    f"You saved Rs. {savings_pkr:,} today by consuming {self_consumed_kwh:.1f} kWh "
-                    f"of solar instead of grid power"
-                ),
-                timestamp=now,
-                metadata={
-                    "savings_pkr": savings_pkr,
-                    "self_consumed_kwh": round(self_consumed_kwh, 1),
-                    "import_rate_pkr": import_rate_pkr,
-                },
-            ))
+    async def _redis_set(self, key: str, value: Dict, ttl_s: int) -> None:
+        try:
+            from ...infrastructure.cache.redis_manager import RedisManager
+            redis = await RedisManager.get_client()
+            await redis.setex(key, ttl_s, json.dumps(value, default=str))
+        except Exception as exc:
+            logger.debug("[insights] Redis SET failed for %s: %s", key, exc)
 
-        # --- Self-sufficiency insight ---
-        if self_sufficiency_pct >= 80:
-            insights.append(InsightData(
-                id="suf-high",
-                type="positive",
-                category="production",
-                title="High Solar Independence",
-                message=(
-                    f"Excellent! {self_sufficiency_pct:.0f}% of your energy today came from solar. "
-                    f"You are nearly grid-independent today!"
-                ),
-                timestamp=now,
-                metadata={"self_sufficiency_pct": round(self_sufficiency_pct, 1)},
-            ))
-        elif self_sufficiency_pct >= 50:
-            insights.append(InsightData(
-                id="suf-mid",
-                type="neutral",
-                category="production",
-                title="Solar Coverage",
-                message=(
-                    f"Solar covered {self_sufficiency_pct:.0f}% of your energy needs today. "
-                    f"The rest came from the grid."
-                ),
-                timestamp=now,
-                metadata={"self_sufficiency_pct": round(self_sufficiency_pct, 1)},
-            ))
+    # =========================================================================
+    # DB persistence
+    # =========================================================================
 
-        # --- Time-based optimization tip ---
-        if 9 <= hour <= 15:
-            insights.append(InsightData(
-                id="tip-solar-hours",
-                type="tip",
-                category="recommendation",
-                title="Peak Solar Hours Active",
-                message=(
-                    "Now is the best time to run high-load appliances — AC, washing machine, "
-                    "dishwasher. Solar is producing maximum power right now."
-                ),
-                timestamp=now,
-            ))
-        elif 16 <= hour <= 20:
-            insights.append(InsightData(
-                id="tip-evening",
-                type="tip",
-                category="recommendation",
-                title="Evening Load Tip",
-                message=(
-                    "Solar output is reducing now. If your battery is charged, "
-                    "use battery power for evening loads to avoid grid import costs."
-                ),
-                timestamp=now,
-            ))
-        else:
-            # Rotating weekly tips for non-solar hours
-            tip_idx = date.today().weekday() % len(WEEKLY_TIPS)
-            insights.append(InsightData(
-                id="tip-weekly",
-                type="tip",
-                category="recommendation",
-                title="Energy Saving Tip",
-                message=WEEKLY_TIPS[tip_idx],
-                timestamp=now,
-            ))
-
-        return insights
-
-    def _generate_anomaly_alerts(
+    async def _persist_insights_log(
         self,
-        stats: Dict[str, Any],
-        now: datetime,
-    ) -> List[InsightData]:
-        """Detect anomalies from current site telemetry."""
-        alerts: List[InsightData] = []
-        hour = now.hour
-        energy_today = stats["energy_today_kwh"]
-        peak_kw = stats["peak_power_kw"]
-        avg_soc = stats["avg_soc_pct"]
-        devices_online = stats["devices_online"]
-        devices_total = stats["devices_total"]
-
-        # --- Inverter overtemperature ---
-        max_temp = stats.get("max_inverter_temp_c", 0.0)
-        if max_temp >= INVERTER_TEMP_HIGH_C:
-            artifact_note = (
-                " (Note: readings above 100°C may also indicate a sensor scaling issue"
-                " — verify the reading physically.)"
-                if max_temp > 100 else ""
+        site_id: UUID,
+        tier: str,
+        model: str,
+        period: str,
+        billing_month: Optional[date],
+        daily_insights: Optional[List[Dict]] = None,
+        anomaly_alerts: Optional[List[Dict]] = None,
+        monthly_analysis: Optional[str] = None,
+        yearly_analysis:  Optional[str] = None,
+        input_stats: Optional[Dict] = None,
+    ) -> None:
+        if not self._session_factory:
+            return
+        try:
+            from ...domain.entities.ai_entities import AIInsightsLog
+            from ...infrastructure.database.repositories.ai_repository import (
+                SQLAlchemyAIInsightsLogRepository,
             )
-            alerts.append(InsightData(
-                id="anomaly-overtemp",
-                type="warning",
-                category="anomaly",
-                title="High Inverter Temperature",
-                message=(
-                    f"Inverter temperature is {max_temp:.0f}°C — above safe operating range. "
-                    f"Ensure ventilation is clear and the unit is not in direct sunlight."
-                    + artifact_note
-                ),
-                timestamp=now,
-                metadata={"max_inverter_temp_c": round(max_temp, 1)},
-            ))
-        elif max_temp >= INVERTER_TEMP_WARN_C:
-            alerts.append(InsightData(
-                id="anomaly-hightemp",
-                type="warning",
-                category="anomaly",
-                title="Elevated Inverter Temperature",
-                message=(
-                    f"Inverter temperature is {max_temp:.0f}°C. Monitor closely — "
-                    f"ensure adequate ventilation to prevent overheating."
-                ),
-                timestamp=now,
-                metadata={"max_inverter_temp_c": round(max_temp, 1)},
-            ))
-
-        # --- Low generation during daylight (panel issue or heavy cloud cover) ---
-        if (
-            9 <= hour <= 16
-            and devices_online > 0
-            and energy_today < 0.5
-            and peak_kw < 0.3
-        ):
-            alerts.append(InsightData(
-                id="anomaly-low-gen",
-                type="warning",
-                category="anomaly",
-                title="Unusually Low Solar Generation",
-                message=(
-                    "Generation is much lower than expected for this time of day. "
-                    "Possible causes: heavy cloud cover, panel shading, or inverter issue. "
-                    "Check your system if the sky is clear."
-                ),
-                timestamp=now,
-                metadata={"energy_today_kwh": energy_today, "peak_kw": peak_kw, "hour": hour},
-            ))
-
-        # --- Battery critically low ---
-        if 0 < avg_soc < 15:
-            alerts.append(InsightData(
-                id="anomaly-batt-crit",
-                type="warning",
-                category="anomaly",
-                title="Battery Critically Low",
-                message=(
-                    f"Battery is at {avg_soc:.0f}%. Switch non-essential loads to grid "
-                    f"or reduce consumption to extend backup time."
-                ),
-                timestamp=now,
-                metadata={"soc_pct": round(avg_soc, 1)},
-            ))
-        elif 0 < avg_soc < 25:
-            alerts.append(InsightData(
-                id="anomaly-batt-low",
-                type="warning",
-                category="anomaly",
-                title="Battery Level Low",
-                message=(
-                    f"Battery at {avg_soc:.0f}%. It will recharge during the next solar window."
-                ),
-                timestamp=now,
-                metadata={"soc_pct": round(avg_soc, 1)},
-            ))
-
-        # --- Devices offline ---
-        if devices_total > 0 and devices_online == 0:
-            alerts.append(InsightData(
-                id="anomaly-all-offline",
-                type="warning",
-                category="anomaly",
-                title="All Devices Offline",
-                message=(
-                    "No devices are reporting data. Check your internet connection "
-                    "or data logger status."
-                ),
-                timestamp=now,
-                metadata={"devices_total": devices_total},
-            ))
-        elif devices_total > 1 and devices_online < devices_total:
-            offline_count = devices_total - devices_online
-            alerts.append(InsightData(
-                id="anomaly-some-offline",
-                type="warning",
-                category="anomaly",
-                title=f"{offline_count} Device(s) Offline",
-                message=(
-                    f"{offline_count} of {devices_total} devices are not reporting. "
-                    f"Check connectivity for offline devices."
-                ),
-                timestamp=now,
-                metadata={"offline_count": offline_count, "devices_total": devices_total},
-            ))
-
-        return alerts
+            log = AIInsightsLog(
+                id=uuid4(),
+                site_id=site_id,
+                tier=tier,
+                model=model,
+                period=period,
+                billing_month=billing_month,
+                daily_insights=daily_insights or [],
+                anomaly_alerts=anomaly_alerts or [],
+                monthly_analysis=monthly_analysis,
+                yearly_analysis=yearly_analysis,
+                input_stats=input_stats or {},
+            )
+            async with self._session_factory() as session:
+                repo = SQLAlchemyAIInsightsLogRepository(session)
+                await repo.add(log)
+                await session.commit()
+        except Exception as exc:
+            logger.warning("[insights] Failed to persist insights log: %s", exc)
 
     # =========================================================================
-    # Weekly Digest
+    # Weekly digest (arithmetic, no LLM)
     # =========================================================================
 
     async def _generate_weekly_digest(
@@ -789,45 +954,28 @@ class AIInsightsService:
         site_id: UUID,
         import_rate_pkr: float,
     ) -> Optional[WeeklyDigestData]:
-        """
-        Generate weekly digest from System B historical data.
-
-        Fetches the 7-day energy chart and calculates totals.
-        For now, previous-week comparison shows 0 (no two-week API yet).
-        """
         try:
-            current_week_data = await self._system_b.get_site_energy_chart(
-                site_id=site_id,
-                period="week",
+            data = await self._system_b.get_site_energy_chart(
+                site_id=site_id, period="week",
             )
-            data_points = current_week_data.get("data", [])
-
-            if not data_points:
-                logger.debug("No weekly data from System B for site %s", site_id)
+            points = data.get("data", [])
+            if not points:
                 return None
 
-            # Aggregate current week
-            total_pv_kwh = sum(float(p.get("pv_kwh", 0) or 0) for p in data_points)
-            total_load_kwh = sum(float(p.get("load_kwh", 0) or 0) for p in data_points)
-            total_import_kwh = sum(float(p.get("grid_import_kwh", 0) or 0) for p in data_points)
-
-            # Self-sufficiency calculation
-            self_consumed_kwh = max(0.0, total_load_kwh - total_import_kwh)
-            self_sufficiency = (
-                (self_consumed_kwh / total_load_kwh * 100)
-                if total_load_kwh > 0
-                else (100.0 if total_pv_kwh > 0 else 0.0)
+            total_pv    = sum(float(p.get("pv_kwh",         0) or 0) for p in points)
+            total_load  = sum(float(p.get("load_kwh",        0) or 0) for p in points)
+            total_import= sum(float(p.get("grid_import_kwh", 0) or 0) for p in points)
+            self_cons   = max(0.0, total_load - total_import)
+            self_suf    = (self_cons / total_load * 100) if total_load > 0 else (
+                100.0 if total_pv > 0 else 0.0
             )
-            total_saved_pkr = round(self_consumed_kwh * import_rate_pkr)
-
-            # Tip of the week
+            saved_pkr   = round(self_cons * import_rate_pkr)
             tip = WEEKLY_TIPS[date.today().weekday() % len(WEEKLY_TIPS)]
 
             return WeeklyDigestData(
-                total_generated_kwh=round(total_pv_kwh, 1),
-                total_saved_pkr=float(total_saved_pkr),
-                self_sufficiency_pct=round(self_sufficiency, 1),
-                # Previous week comparison: not yet available (needs 14-day API)
+                total_generated_kwh=round(total_pv, 1),
+                total_saved_pkr=float(saved_pkr),
+                self_sufficiency_pct=round(self_suf, 1),
                 prev_week_generated_kwh=0.0,
                 prev_week_saved_pkr=0.0,
                 prev_week_self_sufficiency_pct=0.0,
@@ -836,7 +984,281 @@ class AIInsightsService:
                 self_sufficiency_change_pct=0.0,
                 tip_of_the_week=tip,
             )
-
-        except (SystemBClientError, Exception) as e:
-            logger.warning("Failed to generate weekly digest for site %s: %s", site_id, e)
+        except Exception as exc:
+            logger.warning("[insights] Weekly digest failed for site %s: %s", site_id, exc)
             return None
+
+    # =========================================================================
+    # Rule-based fallback generators
+    # =========================================================================
+
+    def _rule_daily(
+        self,
+        stats: Dict[str, Any],
+        import_rate_pkr: float,
+        now: datetime,
+    ) -> List[InsightData]:
+        insights: List[InsightData] = []
+        hour = now.hour
+        energy_today = stats["energy_today_kwh"]
+        self_consumed = stats["self_consumed_kwh"]
+        self_suf = stats["self_sufficiency_pct"]
+        co2_saved = stats["co2_saved_kg"]
+        peak_kw = stats["peak_power_kw"]
+
+        if energy_today > 0:
+            insights.append(InsightData(
+                id="prod-daily", type="positive" if energy_today >= 5 else "neutral",
+                category="production", title="Today's Solar Generation",
+                message=(
+                    f"Generated {energy_today:.1f} kWh today"
+                    + (f", avoiding {co2_saved:.1f} kg CO₂" if co2_saved > 0.1 else "")
+                ),
+                timestamp=now,
+                metadata={"energy_today_kwh": round(energy_today, 1)},
+            ))
+
+        savings_pkr = round(self_consumed * import_rate_pkr)
+        if savings_pkr > 0:
+            insights.append(InsightData(
+                id="save-daily", type="positive", category="savings",
+                title="Money Saved Today",
+                message=f"Saved Rs. {savings_pkr:,} using {self_consumed:.1f} kWh of solar instead of grid power.",
+                timestamp=now,
+                metadata={"savings_pkr": savings_pkr},
+            ))
+
+        if self_suf >= 80:
+            insights.append(InsightData(
+                id="suf-high", type="positive", category="production",
+                title="High Solar Independence",
+                message=f"{self_suf:.0f}% of your energy came from solar today — nearly grid-independent!",
+                timestamp=now,
+            ))
+        elif self_suf >= 50:
+            insights.append(InsightData(
+                id="suf-mid", type="neutral", category="production",
+                title="Solar Coverage",
+                message=f"Solar covered {self_suf:.0f}% of your energy needs today.",
+                timestamp=now,
+            ))
+
+        if 9 <= hour <= 15:
+            insights.append(InsightData(
+                id="tip-solar-hours", type="tip", category="recommendation",
+                title="Peak Solar Hours",
+                message="Best time for high-load appliances — AC, washer, dishwasher. Solar is at peak.",
+                timestamp=now,
+            ))
+        elif 16 <= hour <= 20:
+            insights.append(InsightData(
+                id="tip-evening", type="tip", category="recommendation",
+                title="Evening Load Tip",
+                message="Solar reducing. Use battery for evening loads to avoid grid import costs.",
+                timestamp=now,
+            ))
+        else:
+            tip = WEEKLY_TIPS[date.today().weekday() % len(WEEKLY_TIPS)]
+            insights.append(InsightData(
+                id="tip-weekly", type="tip", category="recommendation",
+                title="Energy Saving Tip", message=tip, timestamp=now,
+            ))
+
+        return insights
+
+    def _rule_anomalies(
+        self,
+        stats: Dict[str, Any],
+        now: datetime,
+    ) -> List[InsightData]:
+        alerts: List[InsightData] = []
+        hour = now.hour
+        max_temp       = stats.get("max_inverter_temp_c", 0.0)
+        avg_soc        = stats["avg_soc_pct"]
+        energy_today   = stats["energy_today_kwh"]
+        peak_kw        = stats["peak_power_kw"]
+        devices_online = stats["devices_online"]
+        devices_total  = stats["devices_total"]
+
+        if max_temp >= INVERTER_TEMP_HIGH_C:
+            note = " (may also be a sensor scaling artifact)" if max_temp > 100 else ""
+            alerts.append(InsightData(
+                id="anomaly-overtemp", type="warning", category="anomaly",
+                title="High Inverter Temperature",
+                message=f"Inverter at {max_temp:.0f}°C — above safe range. Check ventilation.{note}",
+                timestamp=now, metadata={"max_inverter_temp_c": round(max_temp, 1)},
+            ))
+        elif max_temp >= INVERTER_TEMP_WARN_C:
+            alerts.append(InsightData(
+                id="anomaly-hightemp", type="warning", category="anomaly",
+                title="Elevated Inverter Temperature",
+                message=f"Inverter at {max_temp:.0f}°C. Ensure adequate ventilation.",
+                timestamp=now, metadata={"max_inverter_temp_c": round(max_temp, 1)},
+            ))
+
+        if 9 <= hour <= 16 and devices_online > 0 and energy_today < 0.5 and peak_kw < 0.3:
+            alerts.append(InsightData(
+                id="anomaly-low-gen", type="warning", category="anomaly",
+                title="Unusually Low Solar Generation",
+                message="Very low generation for this time of day. Check panels or inverter if sky is clear.",
+                timestamp=now,
+            ))
+
+        if 0 < avg_soc < 15:
+            alerts.append(InsightData(
+                id="anomaly-batt-crit", type="warning", category="anomaly",
+                title="Battery Critically Low",
+                message=f"Battery at {avg_soc:.0f}%. Reduce non-essential loads.",
+                timestamp=now, metadata={"soc_pct": round(avg_soc, 1)},
+            ))
+        elif 0 < avg_soc < 25:
+            alerts.append(InsightData(
+                id="anomaly-batt-low", type="warning", category="anomaly",
+                title="Battery Level Low",
+                message=f"Battery at {avg_soc:.0f}%. Will recharge during next solar window.",
+                timestamp=now, metadata={"soc_pct": round(avg_soc, 1)},
+            ))
+
+        if devices_total > 0 and devices_online == 0:
+            alerts.append(InsightData(
+                id="anomaly-all-offline", type="warning", category="anomaly",
+                title="All Devices Offline",
+                message="No devices reporting data. Check internet or data logger status.",
+                timestamp=now,
+            ))
+        elif devices_total > 1 and devices_online < devices_total:
+            n = devices_total - devices_online
+            alerts.append(InsightData(
+                id="anomaly-some-offline", type="warning", category="anomaly",
+                title=f"{n} Device(s) Offline",
+                message=f"{n} of {devices_total} devices not reporting. Check connectivity.",
+                timestamp=now,
+            ))
+
+        return alerts
+
+    # =========================================================================
+    # Serialization helpers
+    # =========================================================================
+
+    def _insight_to_dict(self, insight: InsightData) -> Dict[str, Any]:
+        return {
+            "id":       insight.id,
+            "type":     insight.type,
+            "category": insight.category,
+            "title":    insight.title,
+            "message":  insight.message,
+            "timestamp":insight.timestamp.isoformat(),
+            "metadata": insight.metadata,
+        }
+
+    def _parse_insight_list(
+        self, items: List[Dict[str, Any]], now: datetime
+    ) -> List[InsightData]:
+        result = []
+        for item in items:
+            try:
+                result.append(InsightData(
+                    id=item["id"], type=item["type"],
+                    category=item["category"], title=item["title"],
+                    message=item["message"], timestamp=now,
+                    metadata=item.get("metadata", {}),
+                ))
+            except (KeyError, TypeError) as exc:
+                logger.warning("Skipping malformed insight from Claude: %s — %s", item, exc)
+        return result
+
+
+# =============================================================================
+# _Default dict for safe format_map (missing keys → left as {key})
+# =============================================================================
+
+class _Default(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
+# =============================================================================
+# Hardcoded prompt templates (exact copies of what is seeded in the migration)
+# =============================================================================
+
+_HARDCODED_HOURLY_SYSTEM = """You are an expert solar energy analyst for Pakistani residential and commercial solar installations. You generate concise, actionable insights for system owners.
+
+Write in clear English. Keep messages under 200 characters.
+Use Pakistani context: PKR currency, DISCO net metering, load shedding (bijli gul), Karachi/Lahore climate.
+Consider battery state-of-charge when recommending EV charging windows.
+If load shedding is predicted, recommend optimal battery charge level before the outage window."""
+
+_HARDCODED_HOURLY_USER = """Analyse the following real-time solar site data and generate insights.
+
+## Current Site Data ({time_pkt} PKT)
+- Solar generation today: {energy_today_kwh} kWh  |  Peak: {peak_power_kw} kW
+- Current load: {load_power_w} W
+- Current grid power: {grid_power_w} W  (positive=import, negative=export)
+- Current battery power: {battery_power_w} W  (positive=charging, negative=discharging)
+- Battery SoC: {avg_soc_pct}%
+- Self-consumed solar today: {self_consumed_kwh} kWh
+- Grid import today: {grid_import_today_kwh} kWh  |  Export: {grid_export_today_kwh} kWh
+- Self-sufficiency: {self_sufficiency_pct}%
+- CO₂ avoided: {co2_saved_kg} kg  |  Money saved: Rs. {savings_pkr} (@ Rs. {import_rate_pkr}/kWh)
+- Battery charged today: {battery_charge_today_kwh} kWh  |  Discharged: {battery_discharge_today_kwh} kWh
+- Devices online: {devices_online}/{devices_total}
+- {inverter_temp_line}
+
+## System Alerts
+{system_alerts_block}
+
+## Load Shedding Status & Prediction
+{load_shedding_block}
+
+## Instructions
+- Generate 2–4 daily_insights: generation performance, savings, self-sufficiency, load-shedding readiness, EV charging window (if battery > 70% SoC and solar surplus exists), and one time-of-day tip.
+- Generate anomaly_alerts ONLY for real problems (low generation during daylight, very low battery, devices offline, high temperature, predicted outage with low battery).
+- If inverter temperature ≥ {warn_temp_c}°C, include an overheating anomaly alert.
+- If an outage is predicted in the next 2–4 hours and SoC < 60%, warn the user to let the battery charge.
+- Be specific with numbers. Avoid filler text.
+- Call the `return_insights` tool with your response."""
+
+_HARDCODED_MONTHLY_SYSTEM = """You are an expert solar energy analyst preparing a monthly performance report for a Pakistani solar installation.
+
+Write in clear English. Use Pakistani context (PKR, DISCO, load shedding, seasonal patterns).
+Be analytical and specific. Reference actual numbers from the data provided.
+Focus on actionable improvements for the next billing month."""
+
+_HARDCODED_MONTHLY_USER = """Generate a monthly performance analysis for {billing_month} ({days_elapsed} days elapsed).
+
+## Monthly Energy Summary
+- Solar generation: {total_pv_kwh} kWh
+- Total consumption: {total_load_kwh} kWh
+- Grid import: {total_import_kwh} kWh  |  Export: {total_export_kwh} kWh
+- Self-sufficiency: {self_sufficiency_pct}%
+- Money saved: Rs. {savings_pkr} (@ Rs. {import_rate_pkr}/kWh)
+
+## Load Shedding This Month
+- Total outage hours: {outage_hours}h across {outage_events} events
+
+## Daily Breakdown (last 10 days)
+{chart_snippet}
+
+Call the `return_monthly_analysis` tool with your analysis."""
+
+_HARDCODED_YEARLY_SYSTEM = """You are an expert solar energy analyst preparing a year-to-date performance review for a Pakistani solar installation.
+
+Write in clear English. Use Pakistani context (PKR, DISCO net metering, seasonal monsoon/winter patterns).
+Be strategic. Identify long-term trends, ROI progress, and seasonal patterns.
+Compare months and identify the best/worst performing periods."""
+
+_HARDCODED_YEARLY_USER = """Generate a year-to-date analysis as of {month_label}.
+
+## Year-to-Date Energy Summary ({year})
+- Total solar generation: {total_pv_kwh} kWh
+- Total consumption: {total_load_kwh} kWh
+- Grid import: {total_import_kwh} kWh  |  Export: {total_export_kwh} kWh
+- Self-sufficiency: {self_sufficiency_pct}%
+- Total savings: Rs. {savings_pkr} (@ Rs. {import_rate_pkr}/kWh)
+- CO₂ avoided: {co2_saved_kg} kg
+
+## Monthly Breakdown
+{chart_snippet}
+
+Call the `return_yearly_analysis` tool with your analysis."""

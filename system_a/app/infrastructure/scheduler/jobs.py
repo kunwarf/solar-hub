@@ -43,6 +43,10 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     from .billing_jobs import register_billing_jobs
     register_billing_jobs(scheduler)
 
+    # AI jobs: outage detection + future insight prefetch
+    from .ai_jobs import register_ai_jobs
+    register_ai_jobs(scheduler)
+
 
 async def sync_hourly_job() -> None:
     """

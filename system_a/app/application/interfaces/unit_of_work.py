@@ -19,6 +19,11 @@ from .repositories import (
     DashboardPreferencesRepository,
     CustomPresetRepository,
 )
+from ...infrastructure.database.repositories.ai_repository import (
+    SQLAlchemyGridOutageRepository,
+    SQLAlchemyAIInsightsLogRepository,
+    SQLAlchemyAIPromptTemplateRepository,
+)
 
 
 class UnitOfWork(ABC):
@@ -43,6 +48,10 @@ class UnitOfWork(ABC):
     alert_rules: AlertRuleRepository
     dashboard_preferences: DashboardPreferencesRepository
     custom_presets: CustomPresetRepository
+    # AI Intelligence layer
+    grid_outages: SQLAlchemyGridOutageRepository
+    ai_insights_log: SQLAlchemyAIInsightsLogRepository
+    ai_prompt_templates: SQLAlchemyAIPromptTemplateRepository
 
     async def __aenter__(self) -> 'UnitOfWork':
         """Enter the context manager."""

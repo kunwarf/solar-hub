@@ -30,6 +30,8 @@ from .admin_users import router as admin_users_router
 from .ai_insights import router as ai_insights_router
 # AI Chat
 from .chat import router as chat_router
+# Admin AI Prompts
+from .admin_ai_prompts import router as admin_ai_prompts_router
 # Public endpoints served to authenticated end-users
 from .public_providers import router as public_providers_router
 # Deprecated: telemetry_sync and performance_metrics moved to System B
@@ -67,6 +69,8 @@ api_router.include_router(admin_users_router)
 api_router.include_router(ai_insights_router)
 # AI Chat
 api_router.include_router(chat_router)
+# Admin AI Prompts
+api_router.include_router(admin_ai_prompts_router)
 # Public endpoints for end-users
 api_router.include_router(public_providers_router)
 # api_router.include_router(performance_metrics_router)

@@ -358,6 +358,67 @@ export const auditLogService = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// AI Prompt Templates
+// ---------------------------------------------------------------------------
+
+export interface PromptVariable {
+  name: string;
+  description: string;
+  example?: string;
+}
+
+export interface PromptTemplate {
+  id: string;
+  key: string;
+  tier: 'hourly' | 'monthly' | 'yearly';
+  prompt_type: 'system' | 'user';
+  template: string;
+  variables: PromptVariable[];
+  version: number;
+  is_active: boolean;
+  updated_at?: string;
+}
+
+export interface PromptTemplateVersion {
+  id: string;
+  template_id: string;
+  version: number;
+  template: string;
+  changed_at: string;
+  change_note?: string;
+}
+
+export const aiPromptsService = {
+  list: async (): Promise<PromptTemplate[]> => {
+    const response = await adminApiClient.get('/admin/ai-prompts');
+    return response.data.items ?? response.data;
+  },
+
+  get: async (key: string): Promise<PromptTemplate> => {
+    const response = await adminApiClient.get(`/admin/ai-prompts/${key}`);
+    return response.data;
+  },
+
+  update: async (key: string, template: string, changeNote?: string): Promise<PromptTemplate> => {
+    const response = await adminApiClient.put(`/admin/ai-prompts/${key}`, {
+      template,
+      change_note: changeNote,
+    });
+    return response.data;
+  },
+
+  listVersions: async (key: string): Promise<PromptTemplateVersion[]> => {
+    const response = await adminApiClient.get(`/admin/ai-prompts/${key}/versions`);
+    return response.data.items ?? response.data;
+  },
+
+  revert: async (key: string, version: number): Promise<PromptTemplate> => {
+    const response = await adminApiClient.post(`/admin/ai-prompts/${key}/revert/${version}`);
+    return response.data;
+  },
+};
+
 export default {
   adminAuth: adminAuthService,
   providers: providersService,
@@ -365,4 +426,5 @@ export default {
   loadShedding: loadSheddingService,
   adminUsers: adminUsersService,
   auditLog: auditLogService,
+  aiPrompts: aiPromptsService,
 };
