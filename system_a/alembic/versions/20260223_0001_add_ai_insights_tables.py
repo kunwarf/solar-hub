@@ -119,8 +119,8 @@ def upgrade() -> None:
         sa.Column("billing_month", sa.Date, nullable=True),
 
         # Claude output – parsed and stored as JSONB
-        sa.Column("daily_insights",  JSONB, nullable=False, server_default="'[]'::jsonb"),
-        sa.Column("anomaly_alerts",  JSONB, nullable=False, server_default="'[]'::jsonb"),
+        sa.Column("daily_insights",  JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column("anomaly_alerts",  JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
         sa.Column("monthly_analysis", JSONB, nullable=True),  # monthly tier only
         sa.Column("yearly_analysis",  JSONB, nullable=True),  # yearly  tier only
 
@@ -179,7 +179,7 @@ def upgrade() -> None:
 
         # Variable manifest for admin UI reference panel
         # JSON array: [{"name":"pv_power_w","type":"number","description":"..."}]
-        sa.Column("variables", JSONB, nullable=False, server_default="'[]'::jsonb"),
+        sa.Column("variables", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
 
         # Target model (informational)
         sa.Column("model",      sa.String(100), nullable=True),
