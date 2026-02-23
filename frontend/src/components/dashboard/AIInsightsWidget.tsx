@@ -334,7 +334,7 @@ export const AIInsightsWidget = ({ widgetsData, weeklyEnergyData, siteId }: AIIn
   const { data: backendInsights, isLoading: insightsLoading } = useQuery({
     queryKey: ['insights', siteId],
     queryFn: () => dashboardService.getInsights(siteId),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!siteId,
     staleTime: 5 * 60 * 1000,  // 5 minutes
     retry: 1,
   });

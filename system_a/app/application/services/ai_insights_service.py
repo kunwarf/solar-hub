@@ -14,7 +14,7 @@ Architecture:
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -23,6 +23,13 @@ from ...infrastructure.cache.telemetry_cache import TelemetryCacheReader
 from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
 
 logger = logging.getLogger(__name__)
+
+# Pakistan Standard Time: UTC+5, no DST
+_PKT = timezone(timedelta(hours=5))
+
+# Inverter temperature thresholds
+INVERTER_TEMP_WARN_C = 75.0   # elevated — monitor closely
+INVERTER_TEMP_HIGH_C = 90.0   # critical — flag as anomaly
 
 # Pakistan grid carbon intensity (kg CO2 per kWh)
 CO2_KG_PER_KWH = 0.7
@@ -209,6 +216,7 @@ class AIInsightsService:
             InsightsResponse with daily insights, anomaly alerts, and weekly digest
         """
         now = datetime.now(timezone.utc)
+        now_pkt = now.astimezone(_PKT)  # All time-based logic uses PKT (UTC+5)
 
         logger.info(
             "[insights] Request for site=%s devices=%s import_rate=%.1f",
@@ -246,7 +254,7 @@ class AIInsightsService:
             )
             try:
                 daily_insights, anomaly_alerts = await self._generate_insights_with_claude(
-                    site_stats, import_rate_pkr, now
+                    site_stats, import_rate_pkr, now_pkt
                 )
                 logger.info(
                     "Claude insights generated successfully for site %s "
@@ -261,8 +269,8 @@ class AIInsightsService:
                     site_id,
                     exc,
                 )
-                daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now)
-                anomaly_alerts = self._generate_anomaly_alerts(site_stats, now)
+                daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now_pkt)
+                anomaly_alerts = self._generate_anomaly_alerts(site_stats, now_pkt)
         else:
             logger.info(
                 "Using rule-based insights for site %s "
@@ -271,8 +279,8 @@ class AIInsightsService:
                 bool(self._claude_client),
                 settings.ai.enabled,
             )
-            daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now)
-            anomaly_alerts = self._generate_anomaly_alerts(site_stats, now)
+            daily_insights = self._generate_daily_insights(site_stats, import_rate_pkr, now_pkt)
+            anomaly_alerts = self._generate_anomaly_alerts(site_stats, now_pkt)
 
         # Weekly digest always uses System B (pure arithmetic, no LLM needed)
         weekly_digest = await self._generate_weekly_digest(site_id, import_rate_pkr)
@@ -308,8 +316,9 @@ class AIInsightsService:
         Uses tool use to enforce a strict JSON output schema so the response
         can be deserialized without any string parsing.
         """
-        hour = now.hour
+        hour = now.hour  # PKT hour (now is already in PKT timezone)
         savings_pkr = round(stats["self_consumed_kwh"] * import_rate_pkr)
+        max_temp_c = stats.get("max_inverter_temp_c", 0.0)
 
         system_prompt = (
             "You are an expert solar energy analyst for Pakistani residential and commercial "
@@ -317,6 +326,13 @@ class AIInsightsService:
             "Write in clear English. Keep messages under 200 characters. "
             "Use Pakistani context: PKR currency, DISCO net metering, load shedding, Karachi/Lahore climate."
         )
+
+        temp_line = (
+            f"- Inverter temperature: {max_temp_c:.0f}°C"
+            + (" ⚠ CRITICAL — above safe range" if max_temp_c >= INVERTER_TEMP_HIGH_C else
+               " ⚠ Elevated" if max_temp_c >= INVERTER_TEMP_WARN_C else "")
+            + (" (reading >100°C may indicate a sensor scaling artifact)" if max_temp_c > 100 else "")
+        ) if max_temp_c > 0 else "- Inverter temperature: not available"
 
         user_prompt = f"""Analyse the following real-time solar site data and generate insights.
 
@@ -335,10 +351,12 @@ class AIInsightsService:
 - CO₂ saved today: {stats['co2_saved_kg']:.2f} kg
 - Money saved today: Rs. {savings_pkr:,} (at Rs. {import_rate_pkr}/kWh)
 - Devices online: {stats['devices_online']} / {stats['devices_total']}
+{temp_line}
 
 ## Instructions
 - Generate 2-4 daily_insights covering: generation performance, savings, self-sufficiency, and one actionable tip for the current time of day.
-- Generate anomaly_alerts ONLY if there are real problems (low generation during daylight, very low battery, devices offline). Do not generate alerts if everything is fine.
+- Generate anomaly_alerts ONLY if there are real problems (low generation during daylight, very low battery, devices offline, high temperature). Do not generate alerts if everything is fine.
+- If inverter temperature ≥ {INVERTER_TEMP_WARN_C:.0f}°C, include an anomaly alert about overheating risk. If >100°C, also note this may be a sensor scaling artifact worth verifying.
 - Be specific with numbers. Avoid generic filler text.
 - Call the `return_insights` tool with your response.
 """
@@ -405,6 +423,7 @@ class AIInsightsService:
         total_soc = 0.0
         soc_count = 0
         peak_power_kw = 0.0
+        max_inverter_temp_c = 0.0
         devices_online = 0
         devices_total = len(device_serials)
 
@@ -424,6 +443,13 @@ class AIInsightsService:
             battery = telemetry.get("battery", {})
             # Grid import/export kWh live in 'raw' (System B stores them there, not in energy_today)
             raw = telemetry.get("raw", {})
+            # Temperature — check both structured 'temperatures' sub-key and raw device keys
+            temps = telemetry.get("temperatures", {})
+            inv_temp_c = float(temps.get("inverter_c") or raw.get("inverter_temp_c") or 0)
+            heat_sink_c = float(raw.get("heat_sink_temp_c") or 0)
+            device_peak_temp = max(inv_temp_c, heat_sink_c)
+            if device_peak_temp > max_inverter_temp_c:
+                max_inverter_temp_c = device_peak_temp
 
             pv_w = float(power.get("pv_total_w", 0) or 0)
             load_w = float(power.get("load_w", 0) or 0)
@@ -456,6 +482,12 @@ class AIInsightsService:
                 total_soc += soc
                 soc_count += 1
 
+            if device_peak_temp > 0:
+                logger.debug(
+                    "[insights] Device %s temperatures: inverter=%.1f°C heat_sink=%.1f°C",
+                    serial, inv_temp_c, heat_sink_c,
+                )
+
         avg_soc = total_soc / soc_count if soc_count > 0 else 0.0
 
         # Self-sufficiency: solar directly consumed vs total load
@@ -476,6 +508,7 @@ class AIInsightsService:
             "grid_export_today_kwh": total_grid_export_today_kwh,
             "avg_soc_pct": avg_soc,
             "peak_power_kw": peak_power_kw,
+            "max_inverter_temp_c": max_inverter_temp_c,
             "self_sufficiency_pct": self_sufficiency_pct,
             "self_consumed_kwh": self_consumed_kwh,
             "devices_online": devices_online,
@@ -632,6 +665,41 @@ class AIInsightsService:
         avg_soc = stats["avg_soc_pct"]
         devices_online = stats["devices_online"]
         devices_total = stats["devices_total"]
+
+        # --- Inverter overtemperature ---
+        max_temp = stats.get("max_inverter_temp_c", 0.0)
+        if max_temp >= INVERTER_TEMP_HIGH_C:
+            artifact_note = (
+                " (Note: readings above 100°C may also indicate a sensor scaling issue"
+                " — verify the reading physically.)"
+                if max_temp > 100 else ""
+            )
+            alerts.append(InsightData(
+                id="anomaly-overtemp",
+                type="warning",
+                category="anomaly",
+                title="High Inverter Temperature",
+                message=(
+                    f"Inverter temperature is {max_temp:.0f}°C — above safe operating range. "
+                    f"Ensure ventilation is clear and the unit is not in direct sunlight."
+                    + artifact_note
+                ),
+                timestamp=now,
+                metadata={"max_inverter_temp_c": round(max_temp, 1)},
+            ))
+        elif max_temp >= INVERTER_TEMP_WARN_C:
+            alerts.append(InsightData(
+                id="anomaly-hightemp",
+                type="warning",
+                category="anomaly",
+                title="Elevated Inverter Temperature",
+                message=(
+                    f"Inverter temperature is {max_temp:.0f}°C. Monitor closely — "
+                    f"ensure adequate ventilation to prevent overheating."
+                ),
+                timestamp=now,
+                metadata={"max_inverter_temp_c": round(max_temp, 1)},
+            ))
 
         # --- Low generation during daylight (panel issue or heavy cloud cover) ---
         if (
