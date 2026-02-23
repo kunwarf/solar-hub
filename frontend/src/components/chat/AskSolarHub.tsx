@@ -295,13 +295,13 @@ export const AskSolarHub = () => {
     }
   }, [isOpen]);
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim()) return;
+  const sendMessage = useCallback(async (text: string) => {
+    if (!text.trim()) return;
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: input.trim(),
+      content: text.trim(),
       timestamp: new Date(),
     };
 
@@ -318,7 +318,7 @@ export const AskSolarHub = () => {
     await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
 
     // Detect intent and generate response
-    const intent = detectIntent(userMessage.content);
+    const intent = detectIntent(text.trim());
     const response = generateResponse(intent);
 
     const assistantMessage: ChatMessage = {
@@ -338,11 +338,14 @@ export const AskSolarHub = () => {
 
     setMessages(prev => [...prev, assistantMessage]);
     setIsTyping(false);
-  }, [input]);
+  }, []);
+
+  const handleSend = useCallback(() => {
+    sendMessage(input);
+  }, [input, sendMessage]);
 
   const handleSuggestion = (query: string) => {
-    setInput(query);
-    setTimeout(() => handleSend(), 100);
+    sendMessage(query);
   };
 
   const handleLinkClick = (url: string) => {
