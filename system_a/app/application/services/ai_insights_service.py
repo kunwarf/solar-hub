@@ -7,13 +7,13 @@ Tier 1 – Hourly (claude-haiku-4-5-20251001):
     Data: live telemetry + battery kWh today + system alerts + LS prediction.
     Produces: daily_insights + anomaly_alerts.
 
-Tier 2 – Monthly (claude-3-5-sonnet-20241022):
+Tier 2 – Monthly (claude-sonnet-4-6):
     Called once per calendar day.
     Cache TTL: 24 hours.  Redis key: insights:monthly:{site_id}:{billing_date}
     Data: 30-day System B energy chart + billing data + outage history.
     Produces: monthly_analysis block.
 
-Tier 3 – Yearly (claude-3-5-sonnet-20241022):
+Tier 3 – Yearly (claude-sonnet-4-6):
     Called once per billing month (on first load after billing month rolls over).
     Cache TTL: 30 days.  Redis key: insights:yearly:{site_id}:{year}:{month}
     Data: 365-day System B energy chart + year-to-date billing + outage YTD.
@@ -50,8 +50,8 @@ _TTL_YEARLY_S  = 2592000    # 30 days
 
 # Models per tier
 _MODEL_HOURLY  = "claude-haiku-4-5-20251001"
-_MODEL_MONTHLY = "claude-3-5-sonnet-20241022"
-_MODEL_YEARLY  = "claude-3-5-sonnet-20241022"
+_MODEL_MONTHLY = "claude-sonnet-4-6"
+_MODEL_YEARLY  = "claude-sonnet-4-6"
 
 # Thresholds
 INVERTER_TEMP_WARN_C = 75.0
@@ -348,7 +348,12 @@ class AIInsightsService:
         cached = await self._redis_get(cache_key)
         if cached:
             logger.info("[insights] Hourly cache HIT for site=%s", site_id)
-            return {**cached, "source": "cache"}
+            now_dt = datetime.now(timezone.utc)
+            return {
+                "daily_insights": self._parse_insight_list(cached.get("daily_insights", []), now_dt),
+                "anomaly_alerts": self._parse_insight_list(cached.get("anomaly_alerts", []), now_dt),
+                "source": "cache",
+            }
 
         # Gather data
         site_stats = await self._gather_site_stats(device_serials)
