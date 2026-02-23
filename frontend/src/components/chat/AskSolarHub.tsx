@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  MessageCircle, 
-  X, 
-  Send, 
-  Sparkles, 
-  Clock, 
-  TrendingUp, 
-  Battery, 
-  Sun, 
+import {
+  MessageCircle,
+  X,
+  Send,
+  Sparkles,
+  Clock,
+  TrendingUp,
+  Battery,
+  Sun,
   Zap,
   Calendar,
   ArrowRight,
@@ -22,6 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { energyStats } from '@/data/mockData';
+import dashboardService from '@/api/services/dashboard.service';
 
 // Types for chat interface - structured for AI integration
 export interface ChatMessage {
@@ -36,6 +37,7 @@ export interface ChatMessage {
     chart?: 'mini-bar' | 'mini-line' | 'progress';
     chartData?: number[];
     link?: { label: string; url: string };
+    source?: 'backend' | 'local';
   };
 }
 
@@ -272,7 +274,11 @@ const MiniChart = ({ type, data }: { type: 'mini-bar' | 'mini-line' | 'progress'
   return null;
 };
 
-export const AskSolarHub = () => {
+interface AskSolarHubProps {
+  siteId?: string;
+}
+
+export const AskSolarHub = ({ siteId }: AskSolarHubProps = {}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -309,36 +315,47 @@ export const AskSolarHub = () => {
     setInput('');
     setIsTyping(true);
 
-    // Haptic feedback
     if ('vibrate' in navigator) {
       navigator.vibrate(10);
     }
 
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
+    let assistantMessage: ChatMessage;
 
-    // Detect intent and generate response
-    const intent = detectIntent(text.trim());
-    const response = generateResponse(intent);
-
-    const assistantMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: response.content,
-      timestamp: new Date(),
-      data: {
-        value: response.value,
-        unit: response.unit,
-        trend: response.trend,
-        chart: response.chart,
-        chartData: response.chartData,
-        link: response.link,
-      },
-    };
+    try {
+      // Try backend first — returns real telemetry + Claude (or rule-based) reply
+      const { reply } = await dashboardService.sendChatMessage(text.trim(), siteId);
+      assistantMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: reply,
+        timestamp: new Date(),
+        data: { source: 'backend' as const },
+      };
+    } catch {
+      // Backend unavailable — fall back to local intent engine
+      await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400));
+      const intent = detectIntent(text.trim());
+      const response = generateResponse(intent);
+      assistantMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: response.content,
+        timestamp: new Date(),
+        data: {
+          value: response.value,
+          unit: response.unit,
+          trend: response.trend,
+          chart: response.chart,
+          chartData: response.chartData,
+          link: response.link,
+          source: 'local' as const,
+        },
+      };
+    }
 
     setMessages(prev => [...prev, assistantMessage]);
     setIsTyping(false);
-  }, []);
+  }, [siteId]);
 
   const handleSend = useCallback(() => {
     sendMessage(input);
@@ -480,6 +497,12 @@ export const AskSolarHub = () => {
                               : 'bg-muted rounded-bl-md'
                           )}
                         >
+                          {msg.role === 'assistant' && msg.data?.source === 'backend' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded mb-1.5">
+                              <Zap className="w-2.5 h-2.5" />
+                              Live
+                            </span>
+                          )}
                           <p className="text-sm whitespace-pre-wrap">
                             {msg.content.split(/(\*\*[^*]+\*\*)/).map((part, i) => {
                               if (part.startsWith('**') && part.endsWith('**')) {

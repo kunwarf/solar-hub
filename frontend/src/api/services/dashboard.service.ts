@@ -753,6 +753,28 @@ class DashboardService {
   }
 
   // =========================================================================
+  // AI Chat
+  // =========================================================================
+
+  /**
+   * Send a free-form question to the AI chat backend.
+   * Returns a plain-text reply based on real telemetry data.
+   * Claude (claude-haiku) is used when AI_API_KEY is set on the server.
+   */
+  async sendChatMessage(
+    message: string,
+    siteId?: string,
+    importRatePkr?: number,
+  ): Promise<{ reply: string }> {
+    const body: Record<string, string | number> = { message };
+    if (siteId) body.site_id = siteId;
+    if (importRatePkr !== undefined) body.import_rate_pkr = importRatePkr;
+
+    const response = await apiClient.post<{ reply: string }>('/chat', body);
+    return response.data;
+  }
+
+  // =========================================================================
   // Dashboard Preferences & Custom Presets
   // =========================================================================
 
