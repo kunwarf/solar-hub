@@ -168,9 +168,9 @@ async def get_insights(
             tip_of_the_week=result.weekly_digest.tip_of_the_week,
         ) if result.weekly_digest else None,
         monthly_analysis=MonthlyAnalysisSchema(**result.monthly_analysis)
-            if result.monthly_analysis else None,
+            if isinstance(result.monthly_analysis, dict) else None,
         yearly_analysis=YearlyAnalysisSchema(**result.yearly_analysis)
-            if result.yearly_analysis else None,
+            if isinstance(result.yearly_analysis, dict) else None,
         generated_at=result.generated_at,
         source=result.source,
     )
