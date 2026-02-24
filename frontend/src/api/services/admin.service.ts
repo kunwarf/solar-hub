@@ -377,6 +377,7 @@ export interface PromptTemplate {
   variables: PromptVariable[];
   version: number;
   is_active: boolean;
+  model?: string;
   updated_at?: string;
 }
 
@@ -415,6 +416,11 @@ export const aiPromptsService = {
 
   revert: async (key: string, version: number): Promise<PromptTemplate> => {
     const response = await adminApiClient.post(`/admin/ai-prompts/${key}/revert/${version}`);
+    return response.data;
+  },
+
+  setTierModel: async (tier: string, model: string): Promise<{ tier: string; model: string }> => {
+    const response = await adminApiClient.put(`/admin/ai-prompts/tier/${tier}/model`, { model });
     return response.data;
   },
 };

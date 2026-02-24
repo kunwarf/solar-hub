@@ -8,7 +8,7 @@
  * The page shows a variable reference panel so admins know what
  * {placeholders} are available in each template.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,13 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sparkles,
   ChevronDown,
   Save,
@@ -72,9 +79,27 @@ import {
 // ---------------------------------------------------------------------------
 
 const TIER_LABELS: Record<string, string> = {
-  hourly: "Hourly (Haiku)",
-  monthly: "Monthly (Sonnet)",
-  yearly: "Yearly (Sonnet)",
+  hourly: "Hourly",
+  monthly: "Monthly",
+  yearly: "Yearly",
+};
+
+const TIER_DESCRIPTIONS: Record<string, string> = {
+  hourly: "Called every hour using live telemetry. Cached 60 minutes.",
+  monthly: "Called once per day with billing month data. Cached 24 hours.",
+  yearly: "Called once per billing month with year-to-date data. Cached 30 days.",
+};
+
+const AVAILABLE_MODELS = [
+  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5 (Fastest)" },
+  { value: "claude-sonnet-4-6",         label: "Sonnet 4.6 (Balanced)" },
+  { value: "claude-opus-4-6",           label: "Opus 4.6 (Most Capable)" },
+];
+
+const TIER_MODEL_DEFAULTS: Record<string, string> = {
+  hourly:  "claude-haiku-4-5-20251001",
+  monthly: "claude-sonnet-4-6",
+  yearly:  "claude-sonnet-4-6",
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -301,11 +326,44 @@ function EditorDialog({ template, onClose }: EditorDialogProps) {
 // ---------------------------------------------------------------------------
 
 export default function AIPrompts() {
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState<PromptTemplate | null>(null);
+  const [tierModels, setTierModels] = useState<Record<string, string>>(TIER_MODEL_DEFAULTS);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["adminAiPrompts"],
     queryFn: aiPromptsService.list,
+  });
+
+  // Initialise tier models from the first template per tier that has a model set
+  useEffect(() => {
+    if (data) {
+      const resolved: Record<string, string> = { ...TIER_MODEL_DEFAULTS };
+      for (const tmpl of data) {
+        if (tmpl.model && !resolved[tmpl.tier + "_set"]) {
+          resolved[tmpl.tier] = tmpl.model;
+          resolved[tmpl.tier + "_set"] = "1"; // mark as loaded from server
+        }
+      }
+      // Clean up sentinel keys
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(resolved)) {
+        if (!k.endsWith("_set")) clean[k] = v;
+      }
+      setTierModels(clean);
+    }
+  }, [data]);
+
+  const setTierModelMutation = useMutation({
+    mutationFn: ({ tier, model }: { tier: string; model: string }) =>
+      aiPromptsService.setTierModel(tier, model),
+    onSuccess: (_data, { tier, model }) => {
+      setTierModels((prev) => ({ ...prev, [tier]: model }));
+      const label = AVAILABLE_MODELS.find((m) => m.value === model)?.label ?? model;
+      toast.success(`${TIER_LABELS[tier]} tier model updated to ${label}.`);
+      queryClient.invalidateQueries({ queryKey: ["adminAiPrompts"] });
+    },
+    onError: () => toast.error("Failed to update model."),
   });
 
   const grouped = data ? groupByTier(data) : {};
@@ -366,15 +424,36 @@ export default function AIPrompts() {
           return (
             <Card key={tier}>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${TIER_COLORS[tier]}`}>
-                    {TIER_LABELS[tier]}
-                  </span>
+                <CardTitle className="flex items-center justify-between gap-2 text-base">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${TIER_COLORS[tier]}`}>
+                      {TIER_LABELS[tier]}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-normal">Model:</span>
+                    <Select
+                      value={tierModels[tier] ?? TIER_MODEL_DEFAULTS[tier]}
+                      onValueChange={(model) =>
+                        setTierModelMutation.mutate({ tier, model })
+                      }
+                      disabled={setTierModelMutation.isPending}
+                    >
+                      <SelectTrigger className="h-7 w-[200px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AVAILABLE_MODELS.map((m) => (
+                          <SelectItem key={m.value} value={m.value} className="text-xs">
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  {tier === "hourly" && "Called every hour. Uses claude-haiku-4-5-20251001. Cached 60 minutes."}
-                  {tier === "monthly" && "Called once per day with billing month data. Uses claude-3-5-sonnet. Cached 24 hours."}
-                  {tier === "yearly" && "Called once per billing month with year-to-date data. Uses claude-3-5-sonnet. Cached 30 days."}
+                  {TIER_DESCRIPTIONS[tier]}
                 </CardDescription>
               </CardHeader>
               <CardContent>

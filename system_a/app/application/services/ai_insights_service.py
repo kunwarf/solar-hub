@@ -1,19 +1,19 @@
 """
 AI Insights Service — Three-Tier Architecture.
 
-Tier 1 – Hourly (claude-haiku-4-5-20251001):
+Tier 1 – Hourly (default: claude-haiku-4-5-20251001, admin-configurable):
     Triggered on login / page reload, then re-fetched every clock hour.
     Cache TTL: 60 minutes.  Redis key: insights:hourly:{site_id}
     Data: live telemetry + battery kWh today + system alerts + LS prediction.
     Produces: daily_insights + anomaly_alerts.
 
-Tier 2 – Monthly (claude-sonnet-4-6):
+Tier 2 – Monthly (default: claude-sonnet-4-6, admin-configurable):
     Called once per calendar day.
     Cache TTL: 24 hours.  Redis key: insights:monthly:{site_id}:{billing_date}
     Data: 30-day System B energy chart + billing data + outage history.
     Produces: monthly_analysis block.
 
-Tier 3 – Yearly (claude-sonnet-4-6):
+Tier 3 – Yearly (default: claude-sonnet-4-6, admin-configurable):
     Called once per billing month (on first load after billing month rolls over).
     Cache TTL: 30 days.  Redis key: insights:yearly:{site_id}:{year}:{month}
     Data: 365-day System B energy chart + year-to-date billing + outage YTD.
@@ -49,10 +49,12 @@ _TTL_HOURLY_OFFLINE_S = 300    # 5 min   (any device offline — refreshes fast 
 _TTL_MONTHLY_S        = 86400  # 24 hours
 _TTL_YEARLY_S         = 2592000  # 30 days
 
-# Models per tier
-_MODEL_HOURLY  = "claude-haiku-4-5-20251001"
-_MODEL_MONTHLY = "claude-sonnet-4-6"
-_MODEL_YEARLY  = "claude-sonnet-4-6"
+# Default models per tier — overridden at runtime via PromptTemplateLoader
+_TIER_MODEL_DEFAULTS: Dict[str, str] = {
+    "hourly":  "claude-haiku-4-5-20251001",
+    "monthly": "claude-sonnet-4-6",
+    "yearly":  "claude-sonnet-4-6",
+}
 
 # Pakistan seasonal solar generation window (start_hour, end_hour) in PKT
 # Used to calculate EV charging window and hours remaining
@@ -305,6 +307,16 @@ class AIInsightsService:
                 self._prompt_loader = PromptTemplateLoader(self._session_factory)
         return self._prompt_loader
 
+    async def _resolve_model(self, tier: str) -> str:
+        """Resolve the Claude model for a tier via loader, falling back to defaults."""
+        loader = self._get_prompt_loader()
+        if loader:
+            try:
+                return await loader.get_model_for_tier(tier)
+            except Exception as exc:
+                logger.debug("[insights] Could not resolve model for tier=%s: %s", tier, exc)
+        return _TIER_MODEL_DEFAULTS.get(tier, "claude-sonnet-4-6")
+
     # =========================================================================
     # Public API
     # =========================================================================
@@ -389,12 +401,16 @@ class AIInsightsService:
         ls_block = await self._gather_load_shedding_block(site_id)
         battery_kwh = self._extract_battery_kwh(site_stats)
 
+        # Resolve model for this tier
+        hourly_model = await self._resolve_model("hourly")
+
         # Try Claude
         if self._claude and settings.ai.enabled:
             try:
                 daily, anomalies = await self._claude_hourly(
                     site_stats, import_rate_pkr, now_pkt,
                     alerts_block, ls_block, battery_kwh,
+                    model=hourly_model,
                 )
                 source = "claude"
             except Exception as exc:
@@ -427,7 +443,7 @@ class AIInsightsService:
         await self._persist_insights_log(
             site_id=site_id,
             tier="hourly",
-            model=_MODEL_HOURLY if source == "claude" else "rule_based",
+            model=hourly_model if source == "claude" else "rule_based",
             period=now_pkt.strftime("%Y-%m-%dT%H:00"),
             billing_month=None,
             daily_insights=[self._insight_to_dict(i) for i in daily],
@@ -448,6 +464,7 @@ class AIInsightsService:
         alerts_block: str,
         ls_block: str,
         battery_kwh: Dict[str, float],
+        model: str = "claude-haiku-4-5-20251001",
     ) -> tuple:
         loader = self._get_prompt_loader()
         now_pkt_str = now.strftime("%H:%M %a %d %b")
@@ -502,7 +519,7 @@ class AIInsightsService:
             user_prompt   = _HARDCODED_HOURLY_USER.format_map(_Default(variables))
 
         response = await self._claude.messages.create(
-            model=_MODEL_HOURLY,
+            model=model,
             max_tokens=1024,
             system=system_prompt,
             tools=[_HOURLY_TOOL],
@@ -543,9 +560,11 @@ class AIInsightsService:
         if not (self._claude and settings.ai.enabled):
             return None
 
+        monthly_model = await self._resolve_model("monthly")
         try:
             text = await self._claude_monthly(
                 site_id, import_rate_pkr, bm, today, now_pkt,
+                model=monthly_model,
             )
         except Exception as exc:
             logger.warning("[insights] Monthly Claude failed: %s", exc)
@@ -555,7 +574,7 @@ class AIInsightsService:
         await self._persist_insights_log(
             site_id=site_id,
             tier="monthly",
-            model=_MODEL_MONTHLY,
+            model=monthly_model,
             period=bm.isoformat(),
             billing_month=bm,
             monthly_analysis=text,
@@ -569,6 +588,7 @@ class AIInsightsService:
         billing_month_start: date,
         today: date,
         now_pkt: datetime,
+        model: str = "claude-sonnet-4-6",
     ) -> str:
         # Fetch 30-day energy chart from System B
         try:
@@ -627,7 +647,7 @@ class AIInsightsService:
             user_prompt   = _HARDCODED_MONTHLY_USER.format_map(_Default(variables))
 
         response = await self._claude.messages.create(
-            model=_MODEL_MONTHLY,
+            model=model,
             max_tokens=1500,
             system=system_prompt,
             tools=[_MONTHLY_TOOL],
@@ -669,8 +689,9 @@ class AIInsightsService:
         if not (self._claude and settings.ai.enabled):
             return None
 
+        yearly_model = await self._resolve_model("yearly")
         try:
-            text = await self._claude_yearly(site_id, import_rate_pkr, now_pkt)
+            text = await self._claude_yearly(site_id, import_rate_pkr, now_pkt, model=yearly_model)
         except Exception as exc:
             logger.warning("[insights] Yearly Claude failed: %s", exc)
             return None
@@ -679,7 +700,7 @@ class AIInsightsService:
         await self._persist_insights_log(
             site_id=site_id,
             tier="yearly",
-            model=_MODEL_YEARLY,
+            model=yearly_model,
             period=f"{year}-{month:02d}",
             billing_month=now_pkt.date().replace(day=1),
             yearly_analysis=text,
@@ -691,6 +712,7 @@ class AIInsightsService:
         site_id: UUID,
         import_rate_pkr: float,
         now_pkt: datetime,
+        model: str = "claude-sonnet-4-6",
     ) -> str:
         try:
             yearly_data = await self._system_b.get_site_energy_chart(
@@ -741,7 +763,7 @@ class AIInsightsService:
             user_prompt   = _HARDCODED_YEARLY_USER.format_map(_Default(variables))
 
         response = await self._claude.messages.create(
-            model=_MODEL_YEARLY,
+            model=model,
             max_tokens=2000,
             system=system_prompt,
             tools=[_YEARLY_TOOL],

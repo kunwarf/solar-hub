@@ -11,6 +11,7 @@ Endpoints:
     GET    /admin/ai-prompts              — list all templates
     GET    /admin/ai-prompts/{key}        — get one template + variable reference
     PUT    /admin/ai-prompts/{key}        — update template text (creates version)
+    PUT    /admin/ai-prompts/tier/{tier}/model     — set Claude model for a tier
     GET    /admin/ai-prompts/{key}/versions        — list all versions for a key
     GET    /admin/ai-prompts/{key}/versions/{ver}  — get a specific version
     POST   /admin/ai-prompts/{key}/revert/{ver}    — revert to a specific version
@@ -49,6 +50,7 @@ class PromptTemplateResponse(BaseModel):
     variables: List[dict]   # list of {name, description, example} dicts
     version: int
     is_active: bool
+    model: Optional[str] = None
     updated_at: Optional[datetime] = None
 
 
@@ -59,12 +61,22 @@ class PromptTemplateListItem(BaseModel):
     prompt_type: str
     version: int
     is_active: bool
+    model: Optional[str] = None
     updated_at: Optional[datetime] = None
 
 
 class PromptTemplateUpdate(BaseModel):
     template: str
     change_note: Optional[str] = None
+
+
+class TierModelUpdate(BaseModel):
+    model: str
+
+
+class TierModelResponse(BaseModel):
+    tier: str
+    model: str
 
 
 class PromptTemplateVersionResponse(BaseModel):
@@ -100,6 +112,7 @@ def _template_to_response(tmpl) -> PromptTemplateResponse:
         variables=tmpl.variables or [],
         version=tmpl.version,
         is_active=tmpl.is_active,
+        model=tmpl.model,
         updated_at=tmpl.updated_at,
     )
 
@@ -141,12 +154,84 @@ async def list_prompt_templates(
                 prompt_type=t.prompt_type,
                 version=t.version,
                 is_active=t.is_active,
+                model=t.model,
                 updated_at=t.updated_at,
             )
             for t in templates
         ],
         total=len(templates),
     )
+
+
+@router.put(
+    "/tier/{tier}/model",
+    response_model=TierModelResponse,
+    summary="Set the Claude model for a tier",
+)
+async def set_tier_model(
+    tier: str,
+    body: TierModelUpdate,
+    current_admin: User = Depends(require_ops_admin),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+):
+    """
+    Set the Claude model used for all templates in a given tier.
+
+    Updates the `model` column on every template in that tier and invalidates
+    the Redis ai_model:{tier} cache so the change takes effect immediately.
+
+    Valid tiers: hourly, monthly, yearly
+    Valid models: claude-haiku-4-5-20251001, claude-sonnet-4-6, claude-opus-4-6
+    """
+    valid_tiers = {"hourly", "monthly", "yearly"}
+    if tier not in valid_tiers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid tier '{tier}'. Must be one of: {', '.join(sorted(valid_tiers))}",
+        )
+
+    valid_models = {
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6",
+        "claude-opus-4-6",
+    }
+    if body.model not in valid_models:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid model '{body.model}'. Must be one of: {', '.join(sorted(valid_models))}",
+        )
+
+    async with uow:
+        all_templates = await uow.ai_prompt_templates.list_all()
+        tier_templates = [t for t in all_templates if t.tier == tier]
+
+        if not tier_templates:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No templates found for tier '{tier}'.",
+            )
+
+        for tmpl in tier_templates:
+            tmpl.model = body.model
+            await uow.ai_prompt_templates.update(tmpl)
+
+        await uow.commit()
+
+    # Invalidate Redis ai_model:{tier} cache
+    try:
+        from ...application.services.prompt_template_loader import PromptTemplateLoader
+        from ...infrastructure.database.connection import DatabaseManager
+        loader = PromptTemplateLoader(DatabaseManager.get_session_factory())
+        await loader.invalidate_model(tier)
+        logger.info("[ai_prompts] Model cache invalidated for tier=%s", tier)
+    except Exception as exc:
+        logger.warning("[ai_prompts] Model cache invalidation failed for tier=%s: %s", tier, exc)
+
+    logger.info(
+        "[ai_prompts] Tier '%s' model set to '%s' by admin=%s",
+        tier, body.model, current_admin.id,
+    )
+    return TierModelResponse(tier=tier, model=body.model)
 
 
 @router.get(

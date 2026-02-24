@@ -20,8 +20,16 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-_REDIS_TTL_SECONDS = 300   # 5-minute cache
-_REDIS_KEY_PREFIX  = "prompt_tmpl:"
+_REDIS_TTL_SECONDS  = 300   # 5-minute cache for prompt templates
+_REDIS_KEY_PREFIX   = "prompt_tmpl:"
+_REDIS_MODEL_PREFIX = "ai_model:"     # cache key: ai_model:{tier}
+_MODEL_REDIS_TTL    = 300             # 5-minute cache for tier models
+
+_MODEL_DEFAULTS: Dict[str, str] = {
+    "hourly":  "claude-haiku-4-5-20251001",
+    "monthly": "claude-sonnet-4-6",
+    "yearly":  "claude-sonnet-4-6",
+}
 
 
 class PromptTemplateLoader:
@@ -63,6 +71,65 @@ class PromptTemplateLoader:
             logger.info("Prompt template cache invalidated for key=%s", key)
         except Exception as exc:
             logger.warning("Could not invalidate prompt cache for key=%s: %s", key, exc)
+
+    async def get_model_for_tier(self, tier: str) -> str:
+        """
+        Return the Claude model configured for a given tier.
+
+        Lookup chain:
+          1. Redis: key ai_model:{tier}  (TTL 5 min)
+          2. DB: any active template for that tier with a non-null model column
+          3. Hardcoded defaults
+        """
+        redis_key = f"{_REDIS_MODEL_PREFIX}{tier}"
+
+        # 1. Redis
+        try:
+            from ...infrastructure.cache.redis_cache import RedisManager
+            redis = await RedisManager.get_client()
+            cached = await redis.get(redis_key)
+            if cached:
+                return cached if isinstance(cached, str) else cached.decode()
+        except Exception as exc:
+            logger.debug("Redis unavailable for model tier=%s: %s", tier, exc)
+
+        # 2. DB — find any active template in this tier that has a model set
+        try:
+            async with self._session_factory() as session:
+                from ...infrastructure.database.repositories.ai_repository import (
+                    SQLAlchemyAIPromptTemplateRepository,
+                )
+                repo = SQLAlchemyAIPromptTemplateRepository(session)
+                templates = await repo.list_all()
+                for tmpl in templates:
+                    if tmpl.tier == tier and tmpl.model:
+                        model = tmpl.model
+                        # Populate Redis cache
+                        try:
+                            from ...infrastructure.cache.redis_cache import RedisManager
+                            redis = await RedisManager.get_client()
+                            await redis.setex(redis_key, _MODEL_REDIS_TTL, model)
+                        except Exception:
+                            pass
+                        logger.debug("Loaded model for tier=%s from DB: %s", tier, model)
+                        return model
+        except Exception as exc:
+            logger.warning("DB unavailable for model tier=%s: %s", tier, exc)
+
+        # 3. Hardcoded default
+        default = _MODEL_DEFAULTS.get(tier, "claude-sonnet-4-6")
+        logger.debug("Using hardcoded model default for tier=%s: %s", tier, default)
+        return default
+
+    async def invalidate_model(self, tier: str) -> None:
+        """Evict the tier model from Redis so the next request re-fetches from DB."""
+        try:
+            from ...infrastructure.cache.redis_cache import RedisManager
+            redis = await RedisManager.get_client()
+            await redis.delete(f"{_REDIS_MODEL_PREFIX}{tier}")
+            logger.info("Model cache invalidated for tier=%s", tier)
+        except Exception as exc:
+            logger.warning("Could not invalidate model cache for tier=%s: %s", tier, exc)
 
     # =========================================================================
     # Loading chain: Redis → DB → hardcoded
