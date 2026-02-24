@@ -127,6 +127,10 @@ class BillingPrices(ValueObject):
     # Fixed monthly charge
     fixed_charge_per_billing_month: Decimal = Decimal("0")
 
+    # NEPRA surcharges (informational; already baked into import prices by resolver)
+    fpa_per_kwh: Decimal = Decimal("0")
+    qta_per_kwh: Decimal = Decimal("0")
+
 
 @dataclass(frozen=True)
 class CreditPool(ValueObject):

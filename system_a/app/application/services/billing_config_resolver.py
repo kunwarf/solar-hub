@@ -121,12 +121,16 @@ class BillingConfigResolver:
         )
 
         tou_config = TouConfig.from_dict(schedule.tou_windows)
+        fpa = Decimal(str(schedule.fuel_price_adjustment))
+        qta = Decimal(str(schedule.quarterly_tariff_adjustment))
         prices = BillingPrices(
-            price_offpeak_import=Decimal(str(schedule.price_offpeak_import)),
-            price_peak_import=Decimal(str(schedule.price_peak_import)),
+            price_offpeak_import=Decimal(str(schedule.price_offpeak_import)) + fpa + qta,
+            price_peak_import=Decimal(str(schedule.price_peak_import)) + fpa + qta,
             price_offpeak_settlement=Decimal(str(schedule.price_offpeak_settlement)),
             price_peak_settlement=Decimal(str(schedule.price_peak_settlement)),
             fixed_charge_per_billing_month=Decimal(str(schedule.fixed_charge)),
+            fpa_per_kwh=fpa,
+            qta_per_kwh=qta,
         )
 
         return BillingConfig(
@@ -178,12 +182,16 @@ class BillingConfigResolver:
             site_config.fixed_proration_mode if site_config else FixedProrationMode.NONE
         )
         tou_config = TouConfig.from_dict(schedule.tou_windows)
+        fpa = Decimal(str(schedule.fuel_price_adjustment))
+        qta = Decimal(str(schedule.quarterly_tariff_adjustment))
         prices = BillingPrices(
-            price_offpeak_import=Decimal(str(schedule.price_offpeak_import)),
-            price_peak_import=Decimal(str(schedule.price_peak_import)),
+            price_offpeak_import=Decimal(str(schedule.price_offpeak_import)) + fpa + qta,
+            price_peak_import=Decimal(str(schedule.price_peak_import)) + fpa + qta,
             price_offpeak_settlement=Decimal(str(schedule.price_offpeak_settlement)),
             price_peak_settlement=Decimal(str(schedule.price_peak_settlement)),
             fixed_charge_per_billing_month=Decimal(str(schedule.fixed_charge)),
+            fpa_per_kwh=fpa,
+            qta_per_kwh=qta,
         )
         resolved = BillingConfig(
             site_id=site_id,
