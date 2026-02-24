@@ -65,7 +65,7 @@ class GridOutageModel(Base):
                         default=datetime.utcnow)
 
     def to_domain(self) -> "GridOutage":
-        from .....domain.entities.ai_entities import GridOutage
+        from ....domain.entities.ai_entities import GridOutage
         return GridOutage(
             id=self.id,
             site_id=self.site_id,
@@ -84,7 +84,7 @@ class GridOutageModel(Base):
 
     @classmethod
     def from_domain(cls, outage: "GridOutage") -> "GridOutageModel":
-        from .....domain.entities.ai_entities import GridOutage
+        from ....domain.entities.ai_entities import GridOutage
         return cls(
             id=outage.id,
             site_id=outage.site_id,
@@ -157,7 +157,7 @@ class AIInsightsLogModel(Base):
                           default=datetime.utcnow)
 
     def to_domain(self) -> "AIInsightsLog":
-        from .....domain.entities.ai_entities import AIInsightsLog
+        from ....domain.entities.ai_entities import AIInsightsLog
         return AIInsightsLog(
             id=self.id,
             site_id=self.site_id,
@@ -178,7 +178,7 @@ class AIInsightsLogModel(Base):
 
     @classmethod
     def from_domain(cls, log: "AIInsightsLog") -> "AIInsightsLogModel":
-        from .....domain.entities.ai_entities import AIInsightsLog
+        from ....domain.entities.ai_entities import AIInsightsLog
         return cls(
             id=log.id,
             site_id=log.site_id,
@@ -255,7 +255,7 @@ class AIPromptTemplateModel(Base):
                             order_by="AIPromptTemplateVersionModel.version.desc()")
 
     def to_domain(self) -> "AIPromptTemplate":
-        from .....domain.entities.ai_entities import AIPromptTemplate
+        from ....domain.entities.ai_entities import AIPromptTemplate
         return AIPromptTemplate(
             id=self.id,
             key=self.key,
@@ -277,7 +277,7 @@ class AIPromptTemplateModel(Base):
 
     @classmethod
     def from_domain(cls, t: "AIPromptTemplate") -> "AIPromptTemplateModel":
-        from .....domain.entities.ai_entities import AIPromptTemplate
+        from ....domain.entities.ai_entities import AIPromptTemplate
         return cls(
             id=t.id,
             key=t.key,
@@ -343,7 +343,7 @@ class AIPromptTemplateVersionModel(Base):
     template_obj = relationship("AIPromptTemplateModel", back_populates="versions")
 
     def to_domain(self) -> "AIPromptTemplateVersion":
-        from .....domain.entities.ai_entities import AIPromptTemplateVersion
+        from ....domain.entities.ai_entities import AIPromptTemplateVersion
         return AIPromptTemplateVersion(
             id=self.id,
             template_id=self.template_id,
@@ -357,7 +357,7 @@ class AIPromptTemplateVersionModel(Base):
 
     @classmethod
     def from_domain(cls, v: "AIPromptTemplateVersion") -> "AIPromptTemplateVersionModel":
-        from .....domain.entities.ai_entities import AIPromptTemplateVersion
+        from ....domain.entities.ai_entities import AIPromptTemplateVersion
         return cls(
             id=v.id,
             template_id=v.template_id,

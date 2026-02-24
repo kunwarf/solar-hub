@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -14,8 +15,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useToast } from '@/hooks/use-toast';
 import { useTariff } from '@/contexts/TariffContext';
 import { BillBreakdownChart } from '@/components/tariff/BillBreakdownChart';
-import { 
-  DISCO_LIST, 
+import { sitesService } from '@/api/services/sites.service';
+import type { Site } from '@/api/types';
+import {
+  DISCO_LIST,
   CONSUMER_CATEGORY_LABELS,
   RESIDENTIAL_SUBCATEGORY_LABELS,
   CONNECTION_TYPE_LABELS,
@@ -31,48 +34,111 @@ import {
   ConnectionType,
   DiscoCode,
 } from '@/data/pakistanTariffs';
-import { 
-  Zap, 
-  Building2, 
-  Factory, 
-  Tractor, 
-  Home, 
-  Info, 
+import {
+  Zap,
+  Building2,
+  Factory,
+  Tractor,
+  Home,
+  Info,
   Calculator,
   Save,
   RotateCcw,
   MapPin,
   Receipt,
   SunMedium,
-  Gauge,
+  Loader2,
 } from 'lucide-react';
 
 const TariffSettings = () => {
   const { toast } = useToast();
-  const { 
-    config, 
-    updateConfig, 
+  const [searchParams] = useSearchParams();
+  const {
+    config,
+    updateConfig,
     resetConfig,
     calculateMonthlyBill,
   } = useTariff();
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [site, setSite] = useState<Site | null>(null);
 
   // Test calculation state
   const [testUnits, setTestUnits] = useState(350);
   const [testExport, setTestExport] = useState(100);
   const testBill = calculateMonthlyBill(testUnits, testExport);
 
-  const handleSave = () => {
-    toast({
-      title: "Tariff Settings Saved",
-      description: "Your electricity tariff configuration has been updated.",
-    });
+  // Load site on mount to get existing disco_provider + tariff_category
+  const loadSite = useCallback(async () => {
+    const urlSiteId = searchParams.get('site_id');
+    try {
+      let loadedSite: Site | null = null;
+      if (urlSiteId) {
+        loadedSite = await sitesService.getSite(urlSiteId);
+      } else {
+        const result = await sitesService.listSites();
+        if (result?.items?.length > 0) {
+          loadedSite = result.items[0];
+        }
+      }
+      if (loadedSite) {
+        setSite(loadedSite);
+        // Pre-populate local tariff config from site configuration
+        const cfg = loadedSite.configuration;
+        if (cfg.disco_provider) {
+          updateConfig({ disco: cfg.disco_provider as DiscoCode });
+        }
+        if (cfg.tariff_category) {
+          updateConfig({ consumerCategory: cfg.tariff_category as ConsumerCategory });
+        }
+      }
+    } catch {
+      // Site not critical for local calculator — continue silently
+    }
+  }, [searchParams, updateConfig]);
+
+  useEffect(() => { loadSite(); }, [loadSite]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // Save disco_provider + tariff_category to backend if we have a site
+      if (site) {
+        const existingCfg = site.configuration;
+        await sitesService.updateSite(site.id, {
+          configuration: {
+            system_capacity_kw: existingCfg.system_capacity_kw,
+            panel_count: existingCfg.panel_count,
+            panel_wattage: existingCfg.panel_wattage,
+            inverter_capacity_kw: existingCfg.inverter_capacity_kw,
+            battery_capacity_kwh: existingCfg.battery_capacity_kwh,
+            grid_connection_type: existingCfg.grid_connection_type,
+            net_metering_enabled: config.netMeteringEnabled,
+            disco_provider: config.disco,
+            tariff_category: config.consumerCategory,
+          } as any,
+        });
+      }
+      toast({
+        title: 'Tariff Settings Saved',
+        description: 'Your electricity tariff configuration has been updated.',
+      });
+    } catch {
+      toast({
+        title: 'Save Failed',
+        description: 'Failed to save tariff settings. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleReset = () => {
     resetConfig();
     toast({
-      title: "Settings Reset",
-      description: "Tariff settings have been reset to defaults.",
+      title: 'Settings Reset',
+      description: 'Tariff settings have been reset to defaults.',
     });
   };
 
@@ -304,50 +370,6 @@ const TariffSettings = () => {
           </Card>
         </motion.div>
 
-        {/* Monthly Adjustments */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gauge className="h-5 w-5 text-primary" />
-                Monthly Adjustments
-              </CardTitle>
-              <CardDescription>
-                Fuel Price Adjustment (FPA) and Quarterly Tariff Adjustment (QTA)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Fuel Price Adjustment (Rs/kWh)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={config.fuelPriceAdjustment}
-                    onChange={(e) => updateConfig({ fuelPriceAdjustment: parseFloat(e.target.value) || 0 })}
-                  />
-                  <p className="text-xs text-muted-foreground">Updated monthly based on fuel costs</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Quarterly Tariff Adjustment (Rs/kWh)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={config.quarterlyTariffAdjustment}
-                    onChange={(e) => updateConfig({ quarterlyTariffAdjustment: parseFloat(e.target.value) || 0 })}
-                  />
-                  <p className="text-xs text-muted-foreground">Adjusted quarterly by NEPRA</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
         {/* Tariff Slabs Reference */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -519,12 +541,16 @@ const TariffSettings = () => {
 
         {/* Action Buttons */}
         <div className="flex gap-3 justify-end">
-          <Button variant="outline" onClick={handleReset}>
+          <Button variant="outline" onClick={handleReset} disabled={isSaving}>
             <RotateCcw className="h-4 w-4 mr-2" />
             Reset to Defaults
           </Button>
-          <Button onClick={handleSave}>
-            <Save className="h-4 w-4 mr-2" />
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
             Save Settings
           </Button>
         </div>

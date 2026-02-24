@@ -90,12 +90,17 @@ class OutageDetectionService:
         grid_on, primary_serial = await self._detect_grid_state(device_serials)
         state_key = _STATE_KEY.format(site_id=site_id)
 
+        redis = None
         try:
             from ...infrastructure.cache.redis_manager import RedisManager
             redis = await RedisManager.get_client()
             current_state = await redis.get(state_key)
         except Exception:
             current_state = None
+
+        if redis is None:
+            # Redis unavailable — skip state tracking to avoid false outage events
+            return
 
         now = datetime.now(timezone.utc)
 

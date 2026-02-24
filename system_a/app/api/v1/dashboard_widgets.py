@@ -1601,14 +1601,15 @@ async def get_outages(
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
-    """Get outage data for the outages management page."""
-    import random
-    from datetime import time as dt_time
+    """Get outage data for the outages management page (real DB data)."""
+    from zoneinfo import ZoneInfo
+
+    PKT = ZoneInfo("Asia/Karachi")
 
     site_info = await get_site_with_devices(current_user, uow, site_id)
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
 
-    # Get current grid status from telemetry
+    # ── Live telemetry: battery SOC + load ──────────────────────────────────
     grid_connected = True
     total_soc = 0.0
     soc_count = 0
@@ -1618,121 +1619,74 @@ async def get_outages(
     for serial in site_info.device_serials:
         telemetry = telemetry_batch.get(serial)
         if telemetry:
-            status_info = telemetry.get("status", {})
-            if not status_info.get("grid_connected", True):
+            if not telemetry.get("status", {}).get("grid_connected", True):
                 grid_connected = False
-            battery = telemetry.get("battery", {})
-            soc = battery.get("soc_pct", 0)
+            soc = telemetry.get("battery", {}).get("soc_pct", 0)
             if soc > 0:
                 total_soc += soc
                 soc_count += 1
-            power = telemetry.get("power", {})
-            total_load_w += power.get("load_w", 0)
+            total_load_w += telemetry.get("power", {}).get("load_w", 0)
 
     avg_soc = total_soc / soc_count if soc_count > 0 else 0
-    total_battery_kwh = battery_capacity_kwh * len(site_info.device_serials)
-    usable_kwh = (avg_soc / 100) * total_battery_kwh
-    load_kw = total_load_w / 1000 if total_load_w > 0 else 1
+    usable_kwh = (avg_soc / 100) * battery_capacity_kwh * max(len(site_info.device_serials), 1)
+    load_kw = total_load_w / 1000 if total_load_w > 0 else 1.0
     coverage_hours = round(usable_kwh / load_kw, 1) if load_kw > 0 else 0
 
     now = datetime.now(timezone.utc)
 
-    # Build grid status
-    grid_status = GridStatusData(
-        online=grid_connected,
-        last_change=now.isoformat(),
-        current_outage=None,
-        battery_level=round(avg_soc),
-        estimated_backup_hours=coverage_hours,
-        current_load=round(load_kw, 2),
+    # ── Real outage history from DB ──────────────────────────────────────────
+    raw_outages = await uow.grid_outages.get_recent(
+        site_info.site_id, days=days
     )
 
-    # Generate realistic outage history (derived from patterns)
-    # In production, this would come from a dedicated outages table
-    outage_history: List[OutageRecord] = []
-    today_outages: List[OutageRecord] = []
+    def _to_record(o) -> OutageRecord:
+        duration = o.duration_minutes or 0
+        battery_approx = round((duration / 60) * 0.8, 2)
+        backup_status = "full" if duration <= 180 else ("partial" if duration <= 300 else "none")
+        outage_type = "scheduled" if o.was_predicted else "unscheduled"
+        start_pkt = o.started_at.astimezone(PKT)
+        end_pkt = o.ended_at.astimezone(PKT) if o.ended_at else now.astimezone(PKT)
+        return OutageRecord(
+            id=str(o.id),
+            date=start_pkt.strftime("%Y-%m-%d"),
+            start_time=o.started_at.isoformat(),
+            end_time=o.ended_at.isoformat() if o.ended_at else now.isoformat(),
+            duration=duration,
+            type=outage_type,
+            battery_used=battery_approx,
+            backup_status=backup_status,
+        )
+
+    outage_history: List[OutageRecord] = [_to_record(o) for o in raw_outages]
+
+    # Today's outages (PKT date)
+    today_str = now.astimezone(PKT).strftime("%Y-%m-%d")
+    today_outages: List[OutageRecord] = [o for o in outage_history if o.date == today_str]
+
+    # Weekly summaries (past 7 days)
     week_summaries: List[DailyOutageSummary] = []
-
-    # Typical outage slots for Pakistan
-    outage_slots = [
-        (6, 120), (10, 150), (14, 180), (18, 120), (22, 90)
-    ]
-    month = now.month
-    is_summer = 5 <= month <= 9
-
-    total_outages = 0
-    total_duration = 0
-    longest = 0
-    total_backup = 0
-    total_battery_used = 0.0
-
-    for day_offset in range(days):
-        day_date = now - timedelta(days=day_offset)
+    for day_offset in range(7):
+        day_date = now.astimezone(PKT) - timedelta(days=day_offset)
         day_str = day_date.strftime("%Y-%m-%d")
+        day_records = [o for o in outage_history if o.date == day_str]
+        week_summaries.append(DailyOutageSummary(
+            date=day_str,
+            outage_count=len(day_records),
+            total_duration=sum(o.duration for o in day_records),
+        ))
 
-        # 80% chance of outages, more in summer
-        if random.random() < (0.85 if is_summer else 0.7):
-            num_outages = random.randint(2, 4) if is_summer else random.randint(1, 2)
-            day_outages: List[OutageRecord] = []
-            used_slots = set()
-
-            for i in range(num_outages):
-                slot_idx = random.choice([s for s in range(len(outage_slots)) if s not in used_slots])
-                used_slots.add(slot_idx)
-                slot_hour, base_dur = outage_slots[slot_idx]
-
-                duration = random.randint(60, 180) if is_summer else random.randint(30, 120)
-                start_dt = day_date.replace(hour=slot_hour, minute=random.randint(0, 30), second=0, microsecond=0)
-                end_dt = start_dt + timedelta(minutes=duration)
-                battery_used = (duration / 60) * (0.5 + random.random())
-
-                backup_status = "full"
-                if duration > 180:
-                    backup_status = "partial"
-                if duration > 300:
-                    backup_status = "none"
-
-                type_rand = random.random()
-                outage_type = "scheduled" if type_rand < 0.7 else ("unscheduled" if type_rand < 0.9 else "unknown")
-
-                record = OutageRecord(
-                    id=f"outage-{day_str}-{i}",
-                    date=day_str,
-                    start_time=start_dt.isoformat(),
-                    end_time=end_dt.isoformat(),
-                    duration=duration,
-                    type=outage_type,
-                    battery_used=round(battery_used, 2),
-                    backup_status=backup_status,
-                )
-                day_outages.append(record)
-                outage_history.append(record)
-
-                total_outages += 1
-                total_duration += duration
-                longest = max(longest, duration)
-                if backup_status != "none":
-                    total_backup += duration
-                total_battery_used += battery_used
-
-            if day_offset == 0:
-                today_outages = day_outages
-
-            if day_offset < 7:
-                week_summaries.append(DailyOutageSummary(
-                    date=day_str,
-                    outage_count=len(day_outages),
-                    total_duration=sum(o.duration for o in day_outages),
-                ))
-        else:
-            if day_offset < 7:
-                week_summaries.append(DailyOutageSummary(date=day_str, outage_count=0, total_duration=0))
-
-    avg_duration = total_duration // total_outages if total_outages > 0 else 0
+    # Monthly stats (last 30 days)
+    recent_30 = [o for o in outage_history]
+    total_outages_count = len(recent_30)
+    total_duration = sum(o.duration for o in recent_30)
+    avg_duration = total_duration // total_outages_count if total_outages_count > 0 else 0
+    longest = max((o.duration for o in recent_30), default=0)
+    total_backup = sum(o.duration for o in recent_30 if o.backup_status != "none")
+    total_battery_used = sum(o.battery_used for o in recent_30)
     hours_avoided = round(total_backup / 60, 1)
 
     monthly_stats = MonthlyOutageStats(
-        total_outages=total_outages,
+        total_outages=total_outages_count,
         total_duration=total_duration,
         avg_duration=avg_duration,
         longest_outage=longest,
@@ -1741,25 +1695,58 @@ async def get_outages(
         hours_avoided=hours_avoided,
     )
 
-    # Generate alerts
-    alerts = [
-        OutageAlert(
-            id="alert-1",
+    # ── Active outage + last change ──────────────────────────────────────────
+    active_outage = await uow.grid_outages.get_active_outage(site_info.site_id)
+    last_outage = await uow.grid_outages.get_last_outage(site_info.site_id)
+
+    current_outage_record: Optional[OutageRecord] = None
+    if active_outage:
+        current_outage_record = _to_record(active_outage)
+        grid_connected = False
+
+    last_change = active_outage.started_at if active_outage else (
+        last_outage.ended_at if last_outage and last_outage.ended_at else now
+    )
+
+    grid_status = GridStatusData(
+        online=grid_connected,
+        last_change=last_change.isoformat(),
+        current_outage=current_outage_record,
+        battery_level=round(avg_soc),
+        estimated_backup_hours=coverage_hours,
+        current_load=round(load_kw, 2),
+    )
+
+    # ── Alerts derived from real data ────────────────────────────────────────
+    alerts: List[OutageAlert] = []
+    if active_outage:
+        duration_so_far = int((now - active_outage.started_at).total_seconds() / 60)
+        alerts.append(OutageAlert(
+            id=f"alert-active-{active_outage.id}",
+            type="grid_down",
+            message=f"Grid outage in progress — {duration_so_far} min so far",
+            timestamp=active_outage.started_at.isoformat(),
+            read=False,
+            priority="high",
+        ))
+    elif last_outage and last_outage.ended_at:
+        alerts.append(OutageAlert(
+            id=f"alert-restored-{last_outage.id}",
             type="grid_restored",
-            message="Grid power restored after outage",
-            timestamp=now.isoformat(),
+            message=f"Grid restored after {last_outage.duration_minutes or 0} min outage",
+            timestamp=last_outage.ended_at.isoformat(),
             read=False,
             priority="low",
-        ),
-        OutageAlert(
-            id="alert-2",
+        ))
+    if coverage_hours > 0:
+        alerts.append(OutageAlert(
+            id="alert-battery",
             type="prediction",
-            message=f"Battery will last {coverage_hours} more hours at current load",
+            message=f"Battery will last ~{coverage_hours} more hours at current load ({round(load_kw, 1)} kW)",
             timestamp=now.isoformat(),
             read=False,
-            priority="medium",
-        ),
-    ]
+            priority="medium" if avg_soc < 30 else "low",
+        ))
 
     return OutagesResponse(
         organization_id=site_info.organization_id,
@@ -1769,7 +1756,7 @@ async def get_outages(
         today_outages=today_outages,
         week_summaries=week_summaries,
         monthly_stats=monthly_stats,
-        outage_history=outage_history[:100],  # Limit to 100 records
+        outage_history=outage_history[:100],
         alerts=alerts,
     )
 

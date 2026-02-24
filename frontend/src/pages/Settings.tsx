@@ -34,7 +34,6 @@ import {
   RotateCcw,
   MapPin,
   Clock,
-  Wifi,
   Home,
   Layers,
   Battery,
@@ -58,13 +57,6 @@ interface SystemConfig {
     longitude: string;
   };
   timezone: string;
-  mqtt: {
-    host: string;
-    port: string;
-    baseTopic: string;
-    clientId: string;
-    homeAssistantDiscovery: boolean;
-  };
 }
 
 interface InverterArray {
@@ -118,13 +110,6 @@ const SettingsPage = () => {
       longitude: "74.3436",
     },
     timezone: "Asia/Karachi",
-    mqtt: {
-      host: "192.168.88.18",
-      port: "1883",
-      baseTopic: "solar/fleet",
-      clientId: "solar-hub",
-      homeAssistantDiscovery: true,
-    },
   });
 
   // Home Configuration
@@ -183,13 +168,6 @@ const SettingsPage = () => {
         longitude: "74.3436",
       },
       timezone: "Asia/Karachi",
-      mqtt: {
-        host: "192.168.88.18",
-        port: "1883",
-        baseTopic: "solar/fleet",
-        clientId: "solar-hub",
-        homeAssistantDiscovery: true,
-      },
     });
     setHomeConfig({
       id: "home",
@@ -337,10 +315,6 @@ const SettingsPage = () => {
               <TabsTrigger value="system" className="gap-2">
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">System</span>
-              </TabsTrigger>
-              <TabsTrigger value="connection" className="gap-2">
-                <Wifi className="w-4 h-4" />
-                <span className="hidden sm:inline">Connection</span>
               </TabsTrigger>
               <TabsTrigger value="hierarchy" className="gap-2">
                 <Layers className="w-4 h-4" />
@@ -626,121 +600,6 @@ const SettingsPage = () => {
                             ))}
                           </SelectContent>
                         </Select>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </motion.div>
-          </TabsContent>
-
-          {/* Connection Settings (MQTT) */}
-          <TabsContent value="connection">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-4"
-            >
-              <Accordion type="multiple" defaultValue={["mqtt"]} className="space-y-4">
-                <AccordionItem value="mqtt" className="glass-card border-0">
-                  <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
-                        <Wifi className="w-5 h-5 text-primary" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-foreground">MQTT Configuration</p>
-                        <p className="text-sm text-muted-foreground">Configure MQTT broker connection settings</p>
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-6">
-                    <div className="space-y-6 pt-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor="mqttHost">MQTT Host</Label>
-                          <p className="text-xs text-muted-foreground">MQTT broker hostname or IP address</p>
-                          <Input
-                            id="mqttHost"
-                            value={systemConfig.mqtt.host}
-                            onChange={(e) =>
-                              setSystemConfig({
-                                ...systemConfig,
-                                mqtt: { ...systemConfig.mqtt, host: e.target.value },
-                              })
-                            }
-                            placeholder="192.168.1.1"
-                            className="bg-secondary/50"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="mqttPort">MQTT Port</Label>
-                          <p className="text-xs text-muted-foreground">MQTT broker port number</p>
-                          <Input
-                            id="mqttPort"
-                            type="number"
-                            value={systemConfig.mqtt.port}
-                            onChange={(e) =>
-                              setSystemConfig({
-                                ...systemConfig,
-                                mqtt: { ...systemConfig.mqtt, port: e.target.value },
-                              })
-                            }
-                            placeholder="1883"
-                            className="bg-secondary/50"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="baseTopic">Base Topic</Label>
-                          <p className="text-xs text-muted-foreground">Base MQTT topic for all messages</p>
-                          <Input
-                            id="baseTopic"
-                            value={systemConfig.mqtt.baseTopic}
-                            onChange={(e) =>
-                              setSystemConfig({
-                                ...systemConfig,
-                                mqtt: { ...systemConfig.mqtt, baseTopic: e.target.value },
-                              })
-                            }
-                            placeholder="solar/fleet"
-                            className="bg-secondary/50"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="clientId">Client ID</Label>
-                          <p className="text-xs text-muted-foreground">MQTT client identifier</p>
-                          <Input
-                            id="clientId"
-                            value={systemConfig.mqtt.clientId}
-                            onChange={(e) =>
-                              setSystemConfig({
-                                ...systemConfig,
-                                mqtt: { ...systemConfig.mqtt, clientId: e.target.value },
-                              })
-                            }
-                            placeholder="solar-hub"
-                            className="bg-secondary/50"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30">
-                        <div>
-                          <p className="font-medium text-foreground">Home Assistant Discovery</p>
-                          <p className="text-sm text-muted-foreground">Enable Home Assistant device discovery</p>
-                        </div>
-                        <Switch
-                          checked={systemConfig.mqtt.homeAssistantDiscovery}
-                          onCheckedChange={(checked) =>
-                            setSystemConfig({
-                              ...systemConfig,
-                              mqtt: { ...systemConfig.mqtt, homeAssistantDiscovery: checked },
-                            })
-                          }
-                        />
                       </div>
                     </div>
                   </AccordionContent>
