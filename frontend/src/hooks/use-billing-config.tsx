@@ -29,9 +29,12 @@ interface BillingConfigContextType {
   getCurrencySymbol: () => string;
   // Backend sync
   loadFromBackend: (siteId: string) => Promise<void>;
-  saveToBackend: (siteId: string) => Promise<NetMeteringConfig>;
+  saveToBackend: (siteId: string, anchorDayOnly?: boolean) => Promise<NetMeteringConfig>;
   isSyncing: boolean;
   lastSyncedAt: Date | null;
+  // Provider schedule flag — true when site uses admin-managed rates
+  hasProviderSchedule: boolean;
+  setHasProviderSchedule: (v: boolean) => void;
 }
 
 const defaultConfig: BillingConfig = {
@@ -117,6 +120,7 @@ export function BillingConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<BillingConfig>(defaultConfig);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [hasProviderSchedule, setHasProviderSchedule] = useState(false);
 
   const getCurrencySymbol = () => currencySymbols[config.currency] || config.currency;
 
@@ -139,9 +143,13 @@ export function BillingConfigProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveToBackend = useCallback(
-    async (siteId: string): Promise<NetMeteringConfig> => {
+    async (siteId: string, anchorDayOnly = false): Promise<NetMeteringConfig> => {
       setIsSyncing(true);
       try {
+        // When provider schedule is active (or anchorDayOnly flag set), only the anchor_day
+        // matters — the billing engine will override prices from the provider schedule.
+        // We still send the full config so the backend upsert works, but prices are the
+        // current loaded values (unchanged by the user since only anchor_day is editable).
         const backendConfig = frontendToBackend(config, siteId);
         const result = await billingService.saveNetMeteringConfig(backendConfig);
         setLastSyncedAt(new Date());
@@ -164,6 +172,8 @@ export function BillingConfigProvider({ children }: { children: ReactNode }) {
         saveToBackend,
         isSyncing,
         lastSyncedAt,
+        hasProviderSchedule,
+        setHasProviderSchedule,
       }}
     >
       {children}

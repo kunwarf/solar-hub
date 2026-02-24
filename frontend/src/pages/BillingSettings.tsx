@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -8,38 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  Globe,
-  Zap,
-  Calculator,
-  CheckCircle,
   ArrowLeft,
-  ArrowRight,
   Save,
-  RotateCcw,
-  Clock,
-  Plus,
-  Trash2,
-  DollarSign,
-  TrendingUp,
-  LayoutDashboard,
   Loader2,
+  Building2,
+  Zap,
+  AlertCircle,
+  Info,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import { useBillingConfig, defaultConfig, type PeakWindow } from "@/hooks/use-billing-config";
+import { useBillingConfig } from "@/hooks/use-billing-config";
 import { sitesService } from "@/api/services/sites.service";
 
 const BillingSettingsPage = () => {
@@ -48,644 +25,104 @@ const BillingSettingsPage = () => {
   const urlSiteId = searchParams.get("site_id");
   const [siteId, setSiteId] = useState<string>(urlSiteId || "");
   const [isLoadingSite, setIsLoadingSite] = useState(!urlSiteId);
-  const { config, setConfig, loadFromBackend, saveToBackend, isSyncing } = useBillingConfig();
-  const [isFirstTime, setIsFirstTime] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Auto-fetch site ID if not provided in URL
-  useEffect(() => {
-    console.log('[BillingSettings] useEffect triggered');
-    console.log('[BillingSettings] urlSiteId from URL params:', urlSiteId);
-    console.log('[BillingSettings] Current siteId state:', siteId);
-    console.log('[BillingSettings] isLoadingSite:', isLoadingSite);
+  // Site metadata for provider schedule detection
+  const [siteDiscoProvider, setSiteDiscoProvider] = useState<string | null>(null);
+  const [siteTariffCategory, setSiteTariffCategory] = useState<string | null>(null);
+  const [isFetchingSiteMeta, setIsFetchingSiteMeta] = useState(false);
 
+  const { config, setConfig, loadFromBackend, saveToBackend, isSyncing } = useBillingConfig();
+
+  // Does the site have a disco provider + tariff category assigned?
+  // If yes, rates are managed by admin provider schedule.
+  const hasProviderSchedule = !!(siteDiscoProvider && siteTariffCategory);
+
+  // Auto-fetch site ID if not in URL
+  useEffect(() => {
     const fetchSiteId = async () => {
       if (urlSiteId) {
-        console.log('[BillingSettings] Using urlSiteId from URL:', urlSiteId);
         setSiteId(urlSiteId);
         setIsLoadingSite(false);
         return;
       }
-
-      console.log('[BillingSettings] No urlSiteId, fetching sites from API...');
       try {
-        // Fetch user's sites and use the first one
         const result = await sitesService.listSites();
-        console.log('[BillingSettings] Sites fetched successfully:', result);
-        console.log('[BillingSettings] Result type:', typeof result);
-        console.log('[BillingSettings] Result has items?:', 'items' in (result || {}));
-        console.log('[BillingSettings] Result.items:', result?.items);
-        console.log('[BillingSettings] Number of sites:', result?.items?.length);
-
-        if (result?.items && result.items.length > 0) {
-          const firstSiteId = result.items[0].id;
-          console.log('[BillingSettings] Using first site ID:', firstSiteId);
-          console.log('[BillingSettings] First site details:', result.items[0]);
-          setSiteId(firstSiteId);
-          console.log('[BillingSettings] Navigating to /billing/settings with site_id:', firstSiteId);
-          // Update URL to include site_id
-          navigate(`/billing/settings?site_id=${firstSiteId}`, { replace: true });
+        if (result?.items?.length > 0) {
+          const firstId = result.items[0].id;
+          setSiteId(firstId);
+          navigate(`/billing/settings?site_id=${firstId}`, { replace: true });
         } else {
-          console.warn('[BillingSettings] No sites returned from API');
-          toast({
-            title: "No Sites Found",
-            description: "Please create a site first before configuring billing.",
-            variant: "destructive",
-          });
+          toast({ title: "No Sites Found", description: "Create a site first.", variant: "destructive" });
         }
-      } catch (error) {
-        console.error('[BillingSettings] Failed to fetch sites:', error);
-        console.error('[BillingSettings] Error details:', JSON.stringify(error, null, 2));
-        toast({
-          title: "Error",
-          description: "Failed to load site information.",
-          variant: "destructive",
-        });
+      } catch {
+        toast({ title: "Error", description: "Failed to load site information.", variant: "destructive" });
       } finally {
         setIsLoadingSite(false);
-        console.log('[BillingSettings] fetchSiteId completed, isLoadingSite set to false');
       }
     };
-
     fetchSiteId();
   }, [urlSiteId, navigate]);
 
-  // Load config from backend on mount
+  // Load billing config from backend once we have siteId
   useEffect(() => {
-    console.log('[BillingSettings] Config loading useEffect triggered');
-    console.log('[BillingSettings] siteId:', siteId);
-    console.log('[BillingSettings] siteId !== "default-site-id":', siteId !== "default-site-id");
-    console.log('[BillingSettings] !isLoadingSite:', !isLoadingSite);
-    console.log('[BillingSettings] Will load config?:', siteId && siteId !== "default-site-id" && !isLoadingSite);
-
-    if (siteId && siteId !== "default-site-id" && !isLoadingSite) {
-      console.log('[BillingSettings] Loading config from backend for site:', siteId);
+    if (siteId && !isLoadingSite) {
       loadFromBackend(siteId);
-    } else {
-      console.log('[BillingSettings] Skipping config load - conditions not met');
     }
   }, [siteId, loadFromBackend, isLoadingSite]);
 
-  const steps = [
-    { number: 1, title: "Global Settings", icon: Globe },
-    { number: 2, title: "Tariff & Net-Metering", icon: Zap },
-    { number: 3, title: "Fixed Charges & Forecast", icon: Calculator },
-    { number: 4, title: "Review & Save", icon: CheckCircle },
-  ];
-
-  const handleAddPeakWindow = () => {
-    const newWindow: PeakWindow = {
-      id: Date.now().toString(),
-      start: "09:00",
-      end: "17:00",
-    };
-    setConfig({ ...config, peakWindows: [...config.peakWindows, newWindow] });
-  };
-
-  const handleRemovePeakWindow = (id: string) => {
-    setConfig({
-      ...config,
-      peakWindows: config.peakWindows.filter((w) => w.id !== id),
-    });
-  };
-
-  const handleUpdatePeakWindow = (id: string, field: "start" | "end", value: string) => {
-    setConfig({
-      ...config,
-      peakWindows: config.peakWindows.map((w) =>
-        w.id === id ? { ...w, [field]: value } : w
-      ),
-    });
-  };
+  // Fetch site metadata to check if provider schedule applies
+  useEffect(() => {
+    if (!siteId || isLoadingSite) return;
+    setIsFetchingSiteMeta(true);
+    sitesService.getSite(siteId)
+      .then((site: any) => {
+        const config = site?.configuration ?? site;
+        setSiteDiscoProvider(config?.disco_provider ?? config?.discoProvider ?? null);
+        setSiteTariffCategory(config?.tariff_category ?? config?.tariffCategory ?? null);
+      })
+      .catch(() => {
+        // Site meta not critical — just means we show full form
+      })
+      .finally(() => setIsFetchingSiteMeta(false));
+  }, [siteId, isLoadingSite]);
 
   const handleSave = async () => {
-    console.log('[BillingSettings] handleSave called');
-    console.log('[BillingSettings] Current siteId:', siteId);
-    console.log('[BillingSettings] Config to save:', config);
-
     if (!siteId) {
-      console.error('[BillingSettings] No siteId - cannot save');
-      toast({
-        title: "No Site Selected",
-        description: "Please select a site before saving billing configuration.",
-        variant: "destructive",
-      });
+      toast({ title: "No Site Selected", variant: "destructive" });
       return;
     }
-
-    console.log('[BillingSettings] Saving config for site:', siteId);
     setIsSaving(true);
     try {
-      console.log('[BillingSettings] Calling saveToBackend...');
       await saveToBackend(siteId);
-      console.log('[BillingSettings] Save successful');
-      toast({
-        title: "Configuration Saved",
-        description: "Billing settings have been saved to the server.",
-      });
-      setIsFirstTime(false);
-      console.log('[BillingSettings] Navigating back to /billing');
+      toast({ title: "Configuration Saved", description: "Billing settings have been saved." });
       navigate(`/billing?site_id=${siteId}`);
-    } catch (err) {
-      console.error('[BillingSettings] Save error:', err);
-      console.error('[BillingSettings] Error details:', JSON.stringify(err, null, 2));
-      toast({
-        title: "Save Failed",
-        description: "Failed to save billing configuration. Please try again.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Save Failed", description: "Please try again.", variant: "destructive" });
     } finally {
       setIsSaving(false);
-      console.log('[BillingSettings] handleSave completed');
     }
   };
 
-  const handleReset = () => {
-    setConfig(defaultConfig);
-    toast({
-      title: "Settings Reset",
-      description: "Billing configuration restored to defaults.",
-    });
-  };
-
-  const renderStepIndicator = () => (
-    <div className="flex items-center justify-center gap-2 mb-8">
-      {steps.map((step, index) => (
-        <div key={step.number} className="flex items-center">
-          <button
-            onClick={() => setCurrentStep(step.number)}
-            className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center font-medium transition-all",
-              currentStep === step.number
-                ? "bg-primary text-primary-foreground"
-                : currentStep > step.number
-                ? "bg-green-500 text-white"
-                : "bg-secondary text-muted-foreground"
-            )}
-          >
-            {currentStep > step.number ? (
-              <CheckCircle className="w-5 h-5" />
-            ) : (
-              step.number
-            )}
-          </button>
-          {index < steps.length - 1 && (
-            <div
-              className={cn(
-                "w-12 h-0.5 mx-1",
-                currentStep > step.number ? "bg-green-500" : "bg-secondary"
-              )}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderGlobalSettings = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-foreground">1. Global Billing Settings</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label>Currency</Label>
-          <Select
-            value={config.currency}
-            onValueChange={(value) => setConfig({ ...config, currency: value })}
-          >
-            <SelectTrigger className="bg-secondary/50">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="PKR">PKR (₨)</SelectItem>
-              <SelectItem value="USD">USD ($)</SelectItem>
-              <SelectItem value="EUR">EUR (€)</SelectItem>
-              <SelectItem value="GBP">GBP (£)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Billing Anchor Day (1-28)</Label>
-          <Input
-            type="number"
-            min={1}
-            max={28}
-            value={config.anchorDay}
-            onChange={(e) => setConfig({ ...config, anchorDay: Number(e.target.value) })}
-            className="bg-secondary/50"
-          />
-          <p className="text-xs text-muted-foreground">Your billing cycle starts on this day of each month</p>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderTariffSettings = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-foreground">2. Tariff & Net-Metering</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label>Off-peak price (per kWh)</Label>
-          <Input
-            type="number"
-            value={config.offPeakPrice}
-            onChange={(e) => setConfig({ ...config, offPeakPrice: Number(e.target.value) })}
-            className="bg-secondary/50"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Peak price (per kWh)</Label>
-          <Input
-            type="number"
-            value={config.peakPrice}
-            onChange={(e) => setConfig({ ...config, peakPrice: Number(e.target.value) })}
-            className="bg-secondary/50"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Off-peak settlement price</Label>
-          <Input
-            type="number"
-            value={config.offPeakSettlement}
-            onChange={(e) => setConfig({ ...config, offPeakSettlement: Number(e.target.value) })}
-            className="bg-secondary/50"
-          />
-          <p className="text-xs text-muted-foreground">Price paid for excess export credits at cycle end</p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Peak settlement price</Label>
-          <Input
-            type="number"
-            value={config.peakSettlement}
-            onChange={(e) => setConfig({ ...config, peakSettlement: Number(e.target.value) })}
-            className="bg-secondary/50"
-          />
-          <p className="text-xs text-muted-foreground">Price paid for excess peak export credits at cycle end</p>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Label>Peak Time Windows</Label>
-          <Button variant="outline" size="sm" onClick={handleAddPeakWindow} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add Window
-          </Button>
-        </div>
-        <div className="space-y-3">
-          {config.peakWindows.map((window) => (
-            <div key={window.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
-              <Input
-                type="time"
-                value={window.start}
-                onChange={(e) => handleUpdatePeakWindow(window.id, "start", e.target.value)}
-                className="bg-secondary/50 w-32"
-              />
-              <span className="text-muted-foreground">to</span>
-              <Input
-                type="time"
-                value={window.end}
-                onChange={(e) => handleUpdatePeakWindow(window.id, "end", e.target.value)}
-                className="bg-secondary/50 w-32"
-              />
-              {config.peakWindows.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleRemovePeakWindow(window.id)}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderForecastSettings = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-foreground">3. Fixed Charges & Forecast</h3>
-      <div className="space-y-2">
-        <Label>Fixed charge per billing month</Label>
-        <Input
-          type="number"
-          value={config.fixedCharge}
-          onChange={(e) => setConfig({ ...config, fixedCharge: Number(e.target.value) })}
-          className="bg-secondary/50"
-        />
-        <p className="text-xs text-muted-foreground">Meter rent, service fee, etc.</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="space-y-2">
-          <Label>Forecast method</Label>
-          <Select
-            value={config.forecastMethod}
-            onValueChange={(value) => setConfig({ ...config, forecastMethod: value })}
-          >
-            <SelectTrigger className="bg-secondary/50">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="trend">Trend-based</SelectItem>
-              <SelectItem value="average">Simple Average</SelectItem>
-              <SelectItem value="seasonal">Seasonal</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Look-back months</Label>
-          <Input
-            type="number"
-            value={config.lookbackMonths}
-            onChange={(e) => setConfig({ ...config, lookbackMonths: Number(e.target.value) })}
-            className="bg-secondary/50"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Default months ahead</Label>
-          <Input
-            type="number"
-            value={config.defaultMonthsAhead}
-            onChange={(e) => setConfig({ ...config, defaultMonthsAhead: Number(e.target.value) })}
-            className="bg-secondary/50"
-          />
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderReviewScreen = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-foreground">4. Review & Save</h3>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Billing Cycle */}
-        <div className="p-4 rounded-lg bg-secondary/30 space-y-3">
-          <div className="flex items-center gap-2">
-            <Globe className="w-5 h-5 text-primary" />
-            <span className="font-medium text-foreground">Billing Cycle</span>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Currency</span>
-              <span className="text-foreground font-medium">{config.currency}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Anchor Day</span>
-              <span className="text-foreground font-medium">{config.anchorDay}th of each month</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Tariff Rates */}
-        <div className="p-4 rounded-lg bg-secondary/30 space-y-3">
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-primary" />
-            <span className="font-medium text-foreground">Tariff Rates</span>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Off-peak</span>
-              <span className="text-foreground font-medium">{config.currency} {config.offPeakPrice}/kWh</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Peak</span>
-              <span className="text-foreground font-medium">{config.currency} {config.peakPrice}/kWh</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Settlement Rates */}
-        <div className="p-4 rounded-lg bg-secondary/30 space-y-3">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            <span className="font-medium text-foreground">Settlement Rates</span>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Off-peak Export</span>
-              <span className="text-foreground font-medium">{config.currency} {config.offPeakSettlement}/kWh</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Peak Export</span>
-              <span className="text-foreground font-medium">{config.currency} {config.peakSettlement}/kWh</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Peak Windows */}
-        <div className="p-4 rounded-lg bg-secondary/30 space-y-3">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
-            <span className="font-medium text-foreground">Peak Hours</span>
-          </div>
-          <div className="space-y-2">
-            {config.peakWindows.map((window, index) => (
-              <Badge key={window.id} variant="outline" className="mr-2">
-                {window.start} - {window.end}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        {/* Fixed Charges */}
-        <div className="p-4 rounded-lg bg-secondary/30 space-y-3">
-          <div className="flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-primary" />
-            <span className="font-medium text-foreground">Fixed Charges</span>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Monthly Fixed</span>
-              <span className="text-foreground font-medium">{config.currency} {config.fixedCharge}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Forecast Settings */}
-        <div className="p-4 rounded-lg bg-secondary/30 space-y-3">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            <span className="font-medium text-foreground">Forecast</span>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Method</span>
-              <span className="text-foreground font-medium capitalize">{config.forecastMethod}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Look-back</span>
-              <span className="text-foreground font-medium">{config.lookbackMonths} months</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderWizard = () => (
-    <div className="space-y-6">
-      {renderStepIndicator()}
-
-      <motion.div
-        key={currentStep}
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -20 }}
-        className="glass-card p-6"
-      >
-        {currentStep === 1 && renderGlobalSettings()}
-        {currentStep === 2 && renderTariffSettings()}
-        {currentStep === 3 && renderForecastSettings()}
-        {currentStep === 4 && renderReviewScreen()}
-      </motion.div>
-
-      <div className="flex justify-between">
-        <Button
-          variant="outline"
-          onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-          disabled={currentStep === 1}
-          className="gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </Button>
-        
-        {currentStep < 4 ? (
-          <Button onClick={() => setCurrentStep(currentStep + 1)} className="gap-2">
-            Next
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-        ) : (
-          <Button onClick={handleSave} className="gap-2" disabled={isSaving || isSyncing}>
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {isSaving ? "Saving..." : "Save Configuration"}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderAccordion = () => (
-    <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={["global", "tariff", "forecast"]} className="space-y-4">
-        <AccordionItem value="global" className="glass-card border-0">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Globe className="w-5 h-5 text-primary" />
-              </div>
-              <div className="text-left">
-                <p className="font-medium text-foreground">Global Billing Settings</p>
-                <p className="text-sm text-muted-foreground">Currency and billing cycle configuration</p>
-              </div>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            <div className="pt-4">{renderGlobalSettings()}</div>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem value="tariff" className="glass-card border-0">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Zap className="w-5 h-5 text-primary" />
-              </div>
-              <div className="text-left">
-                <p className="font-medium text-foreground">Tariff & Net-Metering</p>
-                <p className="text-sm text-muted-foreground">Pricing, settlement rates, and peak hours</p>
-              </div>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            <div className="pt-4">{renderTariffSettings()}</div>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem value="forecast" className="glass-card border-0">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Calculator className="w-5 h-5 text-primary" />
-              </div>
-              <div className="text-left">
-                <p className="font-medium text-foreground">Fixed Charges & Forecast</p>
-                <p className="text-sm text-muted-foreground">Monthly fees and forecasting configuration</p>
-              </div>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            <div className="pt-4">{renderForecastSettings()}</div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-
-      {/* Summary Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-6"
-      >
-        {renderReviewScreen()}
-      </motion.div>
-
-      {/* Action Buttons */}
-      <div className="flex flex-wrap gap-4">
-        <Button onClick={handleSave} className="gap-2" disabled={isSaving || isSyncing}>
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {isSaving ? "Saving..." : "Save Changes"}
-        </Button>
-        <Button variant="outline" onClick={handleReset} className="gap-2" disabled={isSaving}>
-          <RotateCcw className="w-4 h-4" />
-          Reset to Defaults
-        </Button>
-      </div>
-    </div>
-  );
-
-  // Show loading state while fetching site
   if (isLoadingSite) {
     return (
       <AppLayout>
-        <AppHeader
-          title="Billing Setup"
-          subtitle="Loading site information..."
-        />
+        <AppHeader title="Billing Settings" subtitle="Loading..." />
         <div className="p-6 flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-            <p className="text-muted-foreground">Loading site information...</p>
-          </div>
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </AppLayout>
     );
   }
 
-  // Show error if no site ID
   if (!siteId) {
     return (
       <AppLayout>
-        <AppHeader
-          title="Billing Setup"
-          subtitle="No site available"
-        />
+        <AppHeader title="Billing Settings" subtitle="No site available" />
         <div className="p-6">
           <div className="glass-card p-6 text-center">
             <p className="text-muted-foreground mb-4">No site found. Please create a site first.</p>
-            <Button onClick={() => navigate("/sites")}>
-              Go to Sites
-            </Button>
+            <Button onClick={() => navigate("/devices")}>Go to Devices</Button>
           </div>
         </div>
       </AppLayout>
@@ -695,44 +132,142 @@ const BillingSettingsPage = () => {
   return (
     <AppLayout>
       <AppHeader
-        title="Billing Setup"
-        subtitle="Configure billing cycle, tariffs, net-metering and forecasting"
+        title="Billing Settings"
+        subtitle="Review your tariff rates and set your billing anchor day"
       />
 
-      <div className="p-6 space-y-6">
-        {/* Top Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/billing")} className="gap-2">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Button>
-          
-          {!isFirstTime && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsFirstTime(true)}
-              className="gap-2"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Switch to Wizard View
-            </Button>
-          )}
-          
-          {isFirstTime && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsFirstTime(false)}
-              className="gap-2"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Switch to Accordion View
-            </Button>
+      <div className="p-6 space-y-6 max-w-2xl">
+        {/* Back */}
+        <Button variant="ghost" size="sm" onClick={() => navigate("/billing")} className="gap-2">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Billing
+        </Button>
+
+        {/* ── Section 1: Provider Info ── */}
+        <div className="glass-card p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-primary" />
+            <h2 className="font-semibold text-foreground">Provider</h2>
+          </div>
+
+          {isFetchingSiteMeta ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading provider info…
+            </div>
+          ) : hasProviderSchedule ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">DISCO Provider</p>
+                <Badge variant="outline" className="mt-1">{siteDiscoProvider}</Badge>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Tariff Category</p>
+                <Badge variant="outline" className="mt-1">{siteTariffCategory}</Badge>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                No DISCO provider or tariff category assigned to this site. Rates below come from
+                your manual configuration. Contact your administrator to assign a provider schedule.
+              </p>
+            </div>
           )}
         </div>
 
-        {isFirstTime ? renderWizard() : renderAccordion()}
+        {/* ── Section 2: Effective Rates (read-only) ── */}
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-primary" />
+              <h2 className="font-semibold text-foreground">Effective Rates</h2>
+            </div>
+            {hasProviderSchedule && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Info className="w-3 h-3" />
+                Managed by admin
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 rounded-lg bg-secondary/40 space-y-1">
+              <p className="text-xs text-muted-foreground">Off-peak Import</p>
+              <p className="font-semibold">₨{config.offPeakPrice.toFixed(4)}/kWh</p>
+            </div>
+            <div className="p-3 rounded-lg bg-secondary/40 space-y-1">
+              <p className="text-xs text-muted-foreground">Peak Import</p>
+              <p className="font-semibold">₨{config.peakPrice.toFixed(4)}/kWh</p>
+            </div>
+            <div className="p-3 rounded-lg bg-secondary/40 space-y-1">
+              <p className="text-xs text-muted-foreground">Off-peak Settlement</p>
+              <p className="font-semibold">₨{config.offPeakSettlement.toFixed(4)}/kWh</p>
+            </div>
+            <div className="p-3 rounded-lg bg-secondary/40 space-y-1">
+              <p className="text-xs text-muted-foreground">Peak Settlement</p>
+              <p className="font-semibold">₨{config.peakSettlement.toFixed(4)}/kWh</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 rounded-lg bg-secondary/40 space-y-1">
+              <p className="text-xs text-muted-foreground">Fixed Monthly Charge</p>
+              <p className="font-semibold">₨{config.fixedCharge.toFixed(2)}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-secondary/40 space-y-1">
+              <p className="text-xs text-muted-foreground">Peak Windows</p>
+              <p className="font-semibold text-sm">
+                {config.peakWindows.map((w) => `${w.start}–${w.end}`).join(", ")}
+              </p>
+            </div>
+          </div>
+
+          {!hasProviderSchedule && (
+            <p className="text-xs text-muted-foreground">
+              These rates come from your manual billing configuration. An admin can assign a
+              provider schedule to manage rates centrally.
+            </p>
+          )}
+        </div>
+
+        {/* ── Section 3: Anchor Day (editable) ── */}
+        <div className="glass-card p-5 space-y-4">
+          <h2 className="font-semibold text-foreground">Billing Anchor Day</h2>
+          <p className="text-sm text-muted-foreground">
+            Your billing cycle starts on this day of each month. For example, if set to 15, your
+            bill covers the 15th of each month to the 14th of the next.
+          </p>
+
+          <div className="flex items-center gap-4 max-w-xs">
+            <Label className="w-24 shrink-0">Anchor Day</Label>
+            <Input
+              type="number"
+              min={1}
+              max={28}
+              value={config.anchorDay}
+              onChange={(e) => setConfig((c) => ({ ...c, anchorDay: Number(e.target.value) }))}
+              className="w-24"
+            />
+            <span className="text-sm text-muted-foreground">of each month</span>
+          </div>
+        </div>
+
+        {/* ── Save ── */}
+        <div className="flex gap-3">
+          <Button onClick={handleSave} disabled={isSaving || isSyncing} className="gap-2">
+            {(isSaving || isSyncing) ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save Anchor Day
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/billing")} disabled={isSaving}>
+            Cancel
+          </Button>
+        </div>
       </div>
     </AppLayout>
   );

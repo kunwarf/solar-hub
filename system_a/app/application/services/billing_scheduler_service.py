@@ -92,12 +92,20 @@ class BillingSchedulerService:
         site_repo: SQLAlchemySiteRepository,
         calculator: NetMeteringCalculator,
         system_b_telemetry_repo: Optional[SystemBTelemetryRepository] = None,
+        config_resolver=None,  # Optional[BillingConfigResolver] — avoids circular import
     ):
         self._nm_repo = net_metering_repo
         self._telemetry_repo = telemetry_repo
         self._system_b_telemetry_repo = system_b_telemetry_repo
         self._site_repo = site_repo
         self._calculator = calculator
+        self._config_resolver = config_resolver
+
+    async def _get_billing_config(self, site_id: UUID):
+        """Get effective billing config: provider schedule preferred over per-site."""
+        if self._config_resolver is not None:
+            return await self._config_resolver.resolve(site_id)
+        return await self._nm_repo.get_billing_config_by_site(site_id)
 
     @staticmethod
     def _get_hour_in_timezone(timestamp: datetime, timezone_str: str) -> int:
@@ -209,8 +217,8 @@ class BillingSchedulerService:
         """
         logger.debug("Computing daily snapshot for site %s date %s", site_id, target_date)
 
-        # Get billing config
-        config = await self._nm_repo.get_billing_config_by_site(site_id)
+        # Get billing config (resolver prefers provider schedule over per-site config)
+        config = await self._get_billing_config(site_id)
         if not config:
             logger.warning("No billing config for site %s, skipping", site_id)
             return DailyJobResult(
@@ -382,7 +390,7 @@ class BillingSchedulerService:
         Returns:
             True if successful
         """
-        config = await self._nm_repo.get_billing_config_by_site(site_id)
+        config = await self._get_billing_config(site_id)
         if not config:
             raise ValueError(f"No billing config for site {site_id}")
 

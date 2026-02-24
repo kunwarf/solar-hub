@@ -359,6 +359,127 @@ export const auditLogService = {
 };
 
 // ---------------------------------------------------------------------------
+// Provider Billing Schedules
+// ---------------------------------------------------------------------------
+
+export interface TouWindow {
+  start_hour: number;
+  end_hour: number;
+}
+
+export interface TouWindows {
+  peak_windows: TouWindow[];
+  timezone: string;
+}
+
+export interface BillingSchedule {
+  id: string;
+  providerId: string;
+  tariffCategory: string;
+  priceOffpeakImport: number;
+  pricePeakImport: number;
+  priceOffpeakSettlement: number;
+  pricePeakSettlement: number;
+  fixedCharge: number;
+  touWindows: TouWindows;
+  defaultAnchorDay: number;
+  currency: string;
+  netMeteringEnabled: boolean;
+  status: 'active' | 'inactive' | 'draft';
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+function mapBillingSchedule(raw: any): BillingSchedule {
+  return {
+    id: raw.id,
+    providerId: raw.provider_id,
+    tariffCategory: raw.tariff_category,
+    priceOffpeakImport: raw.price_offpeak_import,
+    pricePeakImport: raw.price_peak_import,
+    priceOffpeakSettlement: raw.price_offpeak_settlement,
+    pricePeakSettlement: raw.price_peak_settlement,
+    fixedCharge: raw.fixed_charge,
+    touWindows: raw.tou_windows ?? { peak_windows: [], timezone: 'Asia/Karachi' },
+    defaultAnchorDay: raw.default_anchor_day ?? 15,
+    currency: raw.currency ?? 'PKR',
+    netMeteringEnabled: raw.net_metering_enabled ?? true,
+    status: raw.status,
+    effectiveFrom: raw.effective_from,
+    effectiveTo: raw.effective_to ?? null,
+    description: raw.description ?? null,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at ?? null,
+  };
+}
+
+export const billingSchedulesService = {
+  list: async (params?: { providerId?: string; category?: string; status?: string }): Promise<BillingSchedule[]> => {
+    const apiParams: Record<string, any> = { limit: 200 };
+    if (params?.providerId) apiParams.provider_id = params.providerId;
+    if (params?.category) apiParams.category = params.category;
+    if (params?.status) apiParams.status = params.status;
+    const response = await adminApiClient.get('/admin/billing-schedules', { params: apiParams });
+    const data = response.data;
+    const items = Array.isArray(data) ? data : (data.items ?? []);
+    return items.map(mapBillingSchedule);
+  },
+
+  getById: async (id: string): Promise<BillingSchedule> => {
+    const response = await adminApiClient.get(`/admin/billing-schedules/${id}`);
+    return mapBillingSchedule(response.data);
+  },
+
+  create: async (data: Omit<BillingSchedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<BillingSchedule> => {
+    const response = await adminApiClient.post('/admin/billing-schedules', {
+      provider_id: data.providerId,
+      tariff_category: data.tariffCategory,
+      price_offpeak_import: data.priceOffpeakImport,
+      price_peak_import: data.pricePeakImport,
+      price_offpeak_settlement: data.priceOffpeakSettlement,
+      price_peak_settlement: data.pricePeakSettlement,
+      fixed_charge: data.fixedCharge,
+      tou_windows: data.touWindows,
+      default_anchor_day: data.defaultAnchorDay,
+      currency: data.currency,
+      net_metering_enabled: data.netMeteringEnabled,
+      status: data.status,
+      effective_from: data.effectiveFrom,
+      effective_to: data.effectiveTo,
+      description: data.description,
+    });
+    return mapBillingSchedule(response.data);
+  },
+
+  update: async (id: string, data: Partial<Omit<BillingSchedule, 'id' | 'createdAt' | 'updatedAt'>>): Promise<BillingSchedule> => {
+    const payload: Record<string, any> = {};
+    if (data.tariffCategory !== undefined) payload.tariff_category = data.tariffCategory;
+    if (data.priceOffpeakImport !== undefined) payload.price_offpeak_import = data.priceOffpeakImport;
+    if (data.pricePeakImport !== undefined) payload.price_peak_import = data.pricePeakImport;
+    if (data.priceOffpeakSettlement !== undefined) payload.price_offpeak_settlement = data.priceOffpeakSettlement;
+    if (data.pricePeakSettlement !== undefined) payload.price_peak_settlement = data.pricePeakSettlement;
+    if (data.fixedCharge !== undefined) payload.fixed_charge = data.fixedCharge;
+    if (data.touWindows !== undefined) payload.tou_windows = data.touWindows;
+    if (data.defaultAnchorDay !== undefined) payload.default_anchor_day = data.defaultAnchorDay;
+    if (data.currency !== undefined) payload.currency = data.currency;
+    if (data.netMeteringEnabled !== undefined) payload.net_metering_enabled = data.netMeteringEnabled;
+    if (data.status !== undefined) payload.status = data.status;
+    if (data.effectiveFrom !== undefined) payload.effective_from = data.effectiveFrom;
+    if (data.effectiveTo !== undefined) payload.effective_to = data.effectiveTo;
+    if (data.description !== undefined) payload.description = data.description;
+    const response = await adminApiClient.put(`/admin/billing-schedules/${id}`, payload);
+    return mapBillingSchedule(response.data);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await adminApiClient.delete(`/admin/billing-schedules/${id}`);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // AI Prompt Templates
 // ---------------------------------------------------------------------------
 

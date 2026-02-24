@@ -51,6 +51,7 @@ import SystemSettings from "./pages/admin/SystemSettings";
 import AdminUsers from "./pages/admin/AdminUsers";
 import LoadSheddingSchedules from "./pages/admin/LoadSheddingSchedules";
 import AIPrompts from "./pages/admin/AIPrompts";
+import BillingSchedules from "./pages/admin/BillingSchedules";
 
 const queryClient = new QueryClient();
 
@@ -106,6 +107,7 @@ const App = () => (
                               <Route path="/admin/tariffs" element={<AdminGuard requiredPermission="manage_tariffs"><TariffManagement /></AdminGuard>} />
                               <Route path="/admin/load-shedding" element={<AdminGuard requiredPermission="manage_load_shedding"><LoadSheddingSchedules /></AdminGuard>} />
                               <Route path="/admin/users" element={<AdminGuard requiredPermission="manage_users"><AdminUsers /></AdminGuard>} />
+                              <Route path="/admin/billing-schedules" element={<AdminGuard requiredPermission="manage_tariffs"><BillingSchedules /></AdminGuard>} />
                               <Route path="/admin/ai-prompts" element={<AdminGuard><AIPrompts /></AdminGuard>} />
                               <Route path="/admin/firmware-versions" element={<AdminGuard requiredPermission="manage_firmware"><FirmwareVersions /></AdminGuard>} />
                               <Route path="/admin/ota-campaigns" element={<AdminGuard requiredPermission="manage_campaigns"><OTACampaigns /></AdminGuard>} />

@@ -1,17 +1,20 @@
 """
 SQLAlchemy repositories for admin portal entities.
 """
+from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....domain.entities.admin import (
     AdminAuditLog,
+    BillingScheduleStatus,
     ElectricityProvider,
     ElectricityTariff,
     LoadSheddingSchedule,
+    ProviderBillingSchedule,
     ProviderStatus,
     TariffStatus,
 )
@@ -20,6 +23,7 @@ from ..models.admin_models import (
     ElectricityProviderModel,
     ElectricityTariffModel,
     LoadSheddingScheduleModel,
+    ProviderBillingScheduleModel,
 )
 
 
@@ -325,3 +329,126 @@ class SQLAlchemyAdminAuditLogRepository:
             query = query.where(AdminAuditLogModel.resource_type == resource_type)
         result = await self._session.execute(query)
         return result.scalar() or 0
+
+
+# ---------------------------------------------------------------------------
+# Provider Billing Schedule Repository
+# ---------------------------------------------------------------------------
+
+class SQLAlchemyProviderBillingScheduleRepository:
+    """Repository for provider billing schedule CRUD operations."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, id: UUID) -> Optional[ProviderBillingSchedule]:
+        result = await self._session.execute(
+            select(ProviderBillingScheduleModel).where(ProviderBillingScheduleModel.id == id)
+        )
+        model = result.scalar_one_or_none()
+        return model.to_domain() if model else None
+
+    async def get_active_for_provider_category(
+        self,
+        provider_id: UUID,
+        tariff_category: str,
+    ) -> Optional[ProviderBillingSchedule]:
+        """
+        Get the active billing schedule for a provider + tariff category.
+
+        Case-insensitive category match. Returns None if no active schedule found.
+        This is the critical lookup used by the billing engine.
+        """
+        today = date.today()
+        query = (
+            select(ProviderBillingScheduleModel)
+            .where(
+                and_(
+                    ProviderBillingScheduleModel.provider_id == provider_id,
+                    func.lower(ProviderBillingScheduleModel.tariff_category) == tariff_category.lower(),
+                    ProviderBillingScheduleModel.status == BillingScheduleStatus.ACTIVE,
+                    ProviderBillingScheduleModel.effective_from <= today,
+                    or_(
+                        ProviderBillingScheduleModel.effective_to.is_(None),
+                        ProviderBillingScheduleModel.effective_to >= today,
+                    ),
+                )
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(query)
+        model = result.scalar_one_or_none()
+        return model.to_domain() if model else None
+
+    async def list_all(
+        self,
+        provider_id: Optional[UUID] = None,
+        category: Optional[str] = None,
+        status: Optional[BillingScheduleStatus] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[ProviderBillingSchedule]:
+        query = select(ProviderBillingScheduleModel)
+        if provider_id is not None:
+            query = query.where(ProviderBillingScheduleModel.provider_id == provider_id)
+        if category is not None:
+            query = query.where(
+                func.lower(ProviderBillingScheduleModel.tariff_category) == category.lower()
+            )
+        if status is not None:
+            query = query.where(ProviderBillingScheduleModel.status == status)
+        query = (
+            query.order_by(ProviderBillingScheduleModel.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.execute(query)
+        return [m.to_domain() for m in result.scalars().all()]
+
+    async def count(
+        self,
+        provider_id: Optional[UUID] = None,
+        category: Optional[str] = None,
+        status: Optional[BillingScheduleStatus] = None,
+    ) -> int:
+        query = select(func.count()).select_from(ProviderBillingScheduleModel)
+        if provider_id is not None:
+            query = query.where(ProviderBillingScheduleModel.provider_id == provider_id)
+        if category is not None:
+            query = query.where(
+                func.lower(ProviderBillingScheduleModel.tariff_category) == category.lower()
+            )
+        if status is not None:
+            query = query.where(ProviderBillingScheduleModel.status == status)
+        result = await self._session.execute(query)
+        return result.scalar() or 0
+
+    async def add(self, schedule: ProviderBillingSchedule) -> ProviderBillingSchedule:
+        model = ProviderBillingScheduleModel.from_domain(schedule)
+        self._session.add(model)
+        await self._session.flush()
+        return model.to_domain()
+
+    async def update(self, schedule: ProviderBillingSchedule) -> ProviderBillingSchedule:
+        result = await self._session.execute(
+            select(ProviderBillingScheduleModel).where(
+                ProviderBillingScheduleModel.id == schedule.id
+            )
+        )
+        model = result.scalar_one_or_none()
+        if model:
+            model.update_from_domain(schedule)
+            await self._session.flush()
+            return model.to_domain()
+        return schedule
+
+    async def delete(self, id: UUID) -> bool:
+        result = await self._session.execute(
+            select(ProviderBillingScheduleModel).where(ProviderBillingScheduleModel.id == id)
+        )
+        model = result.scalar_one_or_none()
+        if model:
+            await self._session.delete(model)
+            await self._session.flush()
+            return True
+        return False

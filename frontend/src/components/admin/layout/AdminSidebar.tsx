@@ -13,6 +13,7 @@ import {
   Wifi,
   Cloud,
   Package,
+  Receipt,
   Rocket,
   Users,
   ChevronRight,
@@ -67,6 +68,12 @@ export function AdminSidebar() {
           title: "Tariff Management",
           href: "/admin/tariffs",
           icon: <DollarSign className="w-4 h-4" />,
+          permission: "manage_tariffs",
+        },
+        {
+          title: "Billing Schedules",
+          href: "/admin/billing-schedules",
+          icon: <Receipt className="w-4 h-4" />,
           permission: "manage_tariffs",
         },
         {

@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from ...domain.entities.admin import (
+    BillingScheduleStatus,
     ProviderStatus,
     TariffCategory,
     TariffStatus,
@@ -295,6 +296,78 @@ class PublicProviderResponse(BaseModel):
     region: str
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Provider Billing Schedule Schemas
+# ---------------------------------------------------------------------------
+
+class BillingScheduleCreate(BaseModel):
+    provider_id: UUID
+    tariff_category: str = Field(min_length=1, max_length=50, description="e.g. 'residential', 'A-1'")
+    price_offpeak_import: float = Field(..., ge=0, description="Off-peak import price per kWh")
+    price_peak_import: float = Field(..., ge=0, description="Peak import price per kWh")
+    price_offpeak_settlement: float = Field(..., ge=0, description="Off-peak settlement price")
+    price_peak_settlement: float = Field(..., ge=0, description="Peak settlement price")
+    fixed_charge: float = Field(0.0, ge=0, description="Fixed monthly charge")
+    tou_windows: Dict[str, Any] = Field(
+        default={"peak_windows": [{"start_hour": 17, "end_hour": 22}], "timezone": "Asia/Karachi"},
+        description='TOU windows: {"peak_windows": [{"start_hour": 17, "end_hour": 22}], "timezone": "Asia/Karachi"}',
+    )
+    default_anchor_day: int = Field(15, ge=1, le=28)
+    currency: str = Field("PKR", max_length=10)
+    net_metering_enabled: bool = True
+    status: BillingScheduleStatus = BillingScheduleStatus.ACTIVE
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
+    description: Optional[str] = None
+
+
+class BillingScheduleUpdate(BaseModel):
+    tariff_category: Optional[str] = Field(None, min_length=1, max_length=50)
+    price_offpeak_import: Optional[float] = Field(None, ge=0)
+    price_peak_import: Optional[float] = Field(None, ge=0)
+    price_offpeak_settlement: Optional[float] = Field(None, ge=0)
+    price_peak_settlement: Optional[float] = Field(None, ge=0)
+    fixed_charge: Optional[float] = Field(None, ge=0)
+    tou_windows: Optional[Dict[str, Any]] = None
+    default_anchor_day: Optional[int] = Field(None, ge=1, le=28)
+    currency: Optional[str] = Field(None, max_length=10)
+    net_metering_enabled: Optional[bool] = None
+    status: Optional[BillingScheduleStatus] = None
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
+    description: Optional[str] = None
+
+
+class BillingScheduleResponse(BaseModel):
+    id: UUID
+    provider_id: UUID
+    tariff_category: str
+    price_offpeak_import: float
+    price_peak_import: float
+    price_offpeak_settlement: float
+    price_peak_settlement: float
+    fixed_charge: float
+    tou_windows: Dict[str, Any]
+    default_anchor_day: int
+    currency: str
+    net_metering_enabled: bool
+    status: BillingScheduleStatus
+    effective_from: date
+    effective_to: Optional[date]
+    description: Optional[str]
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
+class BillingScheduleListResponse(BaseModel):
+    items: List[BillingScheduleResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class PublicTariffResponse(BaseModel):

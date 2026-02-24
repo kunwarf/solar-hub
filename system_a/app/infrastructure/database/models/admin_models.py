@@ -5,15 +5,19 @@ from datetime import date
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, Column, Date, Enum, Float, ForeignKey, String, Text
+from decimal import Decimal
+
+from sqlalchemy import Boolean, Column, Date, Enum, Float, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 
 from .base import BaseModel
 from ....domain.entities.admin import (
     AdminAuditLog,
+    BillingScheduleStatus,
     ElectricityProvider,
     ElectricityTariff,
     LoadSheddingSchedule,
+    ProviderBillingSchedule,
     ProviderStatus,
     TariffCategory,
     TariffStatus,
@@ -270,3 +274,113 @@ class AdminAuditLogModel(BaseModel):
             created_at=log.created_at,
             version=log.version,
         )
+
+
+class ProviderBillingScheduleModel(BaseModel):
+    """SQLAlchemy model for provider_billing_schedules table."""
+
+    __tablename__ = "provider_billing_schedules"
+
+    provider_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electricity_providers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tariff_category = Column(String(50), nullable=False)
+
+    # Prices stored as NUMERIC for precision
+    price_offpeak_import = Column(Numeric(10, 4), nullable=False)
+    price_peak_import = Column(Numeric(10, 4), nullable=False)
+    price_offpeak_settlement = Column(Numeric(10, 4), nullable=False)
+    price_peak_settlement = Column(Numeric(10, 4), nullable=False)
+    fixed_charge = Column(Numeric(10, 2), nullable=False, default=0)
+
+    tou_windows = Column(JSONB, nullable=False)
+    default_anchor_day = Column(Integer, nullable=False, default=15)
+    currency = Column(String(10), nullable=False, default="PKR")
+    net_metering_enabled = Column(Boolean, nullable=False, default=True)
+
+    status = Column(
+        Enum(
+            BillingScheduleStatus,
+            name="billing_schedule_status",
+            values_callable=lambda e: [x.value for x in e],
+        ),
+        nullable=False,
+        default=BillingScheduleStatus.ACTIVE,
+        index=True,
+    )
+    effective_from = Column(Date, nullable=False)
+    effective_to = Column(Date, nullable=True)
+    description = Column(Text, nullable=True)
+
+    def to_domain(self) -> ProviderBillingSchedule:
+        schedule = ProviderBillingSchedule(
+            id=self.id,
+            provider_id=self.provider_id,
+            tariff_category=self.tariff_category,
+            price_offpeak_import=Decimal(str(self.price_offpeak_import)),
+            price_peak_import=Decimal(str(self.price_peak_import)),
+            price_offpeak_settlement=Decimal(str(self.price_offpeak_settlement)),
+            price_peak_settlement=Decimal(str(self.price_peak_settlement)),
+            fixed_charge=Decimal(str(self.fixed_charge or 0)),
+            tou_windows=self.tou_windows or {
+                "peak_windows": [{"start_hour": 17, "end_hour": 22}],
+                "timezone": "Asia/Karachi",
+            },
+            default_anchor_day=self.default_anchor_day or 15,
+            currency=self.currency or "PKR",
+            net_metering_enabled=bool(self.net_metering_enabled),
+            status=self.status,
+            effective_from=self.effective_from,
+            effective_to=self.effective_to,
+            description=self.description,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+            version=self.version,
+        )
+        schedule._domain_events = []
+        return schedule
+
+    @classmethod
+    def from_domain(cls, s: ProviderBillingSchedule) -> "ProviderBillingScheduleModel":
+        return cls(
+            id=s.id,
+            provider_id=s.provider_id,
+            tariff_category=s.tariff_category,
+            price_offpeak_import=s.price_offpeak_import,
+            price_peak_import=s.price_peak_import,
+            price_offpeak_settlement=s.price_offpeak_settlement,
+            price_peak_settlement=s.price_peak_settlement,
+            fixed_charge=s.fixed_charge,
+            tou_windows=s.tou_windows,
+            default_anchor_day=s.default_anchor_day,
+            currency=s.currency,
+            net_metering_enabled=s.net_metering_enabled,
+            status=s.status,
+            effective_from=s.effective_from,
+            effective_to=s.effective_to,
+            description=s.description,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+            version=s.version,
+        )
+
+    def update_from_domain(self, s: ProviderBillingSchedule) -> None:
+        self.tariff_category = s.tariff_category
+        self.price_offpeak_import = s.price_offpeak_import
+        self.price_peak_import = s.price_peak_import
+        self.price_offpeak_settlement = s.price_offpeak_settlement
+        self.price_peak_settlement = s.price_peak_settlement
+        self.fixed_charge = s.fixed_charge
+        self.tou_windows = s.tou_windows
+        self.default_anchor_day = s.default_anchor_day
+        self.currency = s.currency
+        self.net_metering_enabled = s.net_metering_enabled
+        self.status = s.status
+        self.effective_from = s.effective_from
+        self.effective_to = s.effective_to
+        self.description = s.description
+        self.updated_at = s.updated_at
+        self.version = s.version

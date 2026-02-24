@@ -24,6 +24,9 @@ from ...infrastructure.database.repositories.ai_repository import (
     SQLAlchemyAIInsightsLogRepository,
     SQLAlchemyAIPromptTemplateRepository,
 )
+from ...infrastructure.database.repositories.admin_repository import (
+    SQLAlchemyProviderBillingScheduleRepository,
+)
 
 
 class UnitOfWork(ABC):
@@ -52,6 +55,8 @@ class UnitOfWork(ABC):
     grid_outages: SQLAlchemyGridOutageRepository
     ai_insights_log: SQLAlchemyAIInsightsLogRepository
     ai_prompt_templates: SQLAlchemyAIPromptTemplateRepository
+    # Provider billing schedules
+    provider_billing_schedules: SQLAlchemyProviderBillingScheduleRepository
 
     async def __aenter__(self) -> 'UnitOfWork':
         """Enter the context manager."""

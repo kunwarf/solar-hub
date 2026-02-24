@@ -56,18 +56,32 @@ async def daily_billing_job() -> None:
         from ...infrastructure.database.repositories.site_repository import (
             SQLAlchemySiteRepository,
         )
+        from ...infrastructure.database.repositories.admin_repository import (
+            SQLAlchemyElectricityProviderRepository,
+            SQLAlchemyProviderBillingScheduleRepository,
+        )
         from ...domain.services.net_metering_calculator import NetMeteringCalculator
         from ...application.services.billing_scheduler_service import (
             BillingSchedulerService,
         )
+        from ...application.services.billing_config_resolver import BillingConfigResolver
 
         uow = await get_unit_of_work()
         async with uow:
+            nm_repo = SQLAlchemyNetMeteringRepository(uow._session)
+            site_repo = SQLAlchemySiteRepository(uow._session)
+            resolver = BillingConfigResolver(
+                nm_repo=nm_repo,
+                site_repo=site_repo,
+                provider_repo=SQLAlchemyElectricityProviderRepository(uow._session),
+                schedule_repo=SQLAlchemyProviderBillingScheduleRepository(uow._session),
+            )
             service = BillingSchedulerService(
-                net_metering_repo=SQLAlchemyNetMeteringRepository(uow._session),
+                net_metering_repo=nm_repo,
                 telemetry_repo=SQLAlchemyTelemetryRepository(uow._session),
-                site_repo=SQLAlchemySiteRepository(uow._session),
+                site_repo=site_repo,
                 calculator=NetMeteringCalculator(),
+                config_resolver=resolver,
             )
 
             # Process yesterday's billing

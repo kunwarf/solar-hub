@@ -22,6 +22,7 @@ from .repositories.admin_repository import (
     SQLAlchemyElectricityTariffRepository,
     SQLAlchemyLoadSheddingScheduleRepository,
     SQLAlchemyAdminAuditLogRepository,
+    SQLAlchemyProviderBillingScheduleRepository,
 )
 from .repositories.ai_repository import (
     SQLAlchemyGridOutageRepository,
@@ -64,6 +65,8 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
         self._grid_outages: Optional[SQLAlchemyGridOutageRepository] = None
         self._ai_insights_log: Optional[SQLAlchemyAIInsightsLogRepository] = None
         self._ai_prompt_templates: Optional[SQLAlchemyAIPromptTemplateRepository] = None
+        # Provider billing schedules
+        self._provider_billing_schedules: Optional[SQLAlchemyProviderBillingScheduleRepository] = None
 
     async def __aenter__(self) -> "SQLAlchemyUnitOfWork":
         """Enter async context - create session."""
@@ -211,6 +214,15 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._ai_prompt_templates = SQLAlchemyAIPromptTemplateRepository(self._session)
         return self._ai_prompt_templates
 
+    @property
+    def provider_billing_schedules(self) -> SQLAlchemyProviderBillingScheduleRepository:
+        """Get provider billing schedule repository."""
+        if self._provider_billing_schedules is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._provider_billing_schedules = SQLAlchemyProviderBillingScheduleRepository(self._session)
+        return self._provider_billing_schedules
+
     async def commit(self) -> None:
         """Commit current transaction."""
         if self._session:
@@ -246,6 +258,7 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._grid_outages = None
             self._ai_insights_log = None
             self._ai_prompt_templates = None
+            self._provider_billing_schedules = None
 
     def collect_domain_events(self) -> List[DomainEvent]:
         """
