@@ -323,6 +323,10 @@ class ProviderBillingSchedule(AggregateRoot):
     # Fixed monthly charge
     fixed_charge: Decimal = field(default_factory=lambda: Decimal("0"))
 
+    # NEPRA-mandated surcharges (admin-configurable)
+    fuel_price_adjustment: Decimal = field(default_factory=lambda: Decimal("0"))
+    quarterly_tariff_adjustment: Decimal = field(default_factory=lambda: Decimal("0"))
+
     # TOU configuration as JSON dict (same format as TouConfig)
     tou_windows: Dict[str, Any] = field(default_factory=lambda: {
         "peak_windows": [{"start_hour": 17, "end_hour": 22}],
@@ -350,6 +354,8 @@ class ProviderBillingSchedule(AggregateRoot):
         price_offpeak_settlement: Decimal,
         price_peak_settlement: Decimal,
         fixed_charge: Decimal = Decimal("0"),
+        fuel_price_adjustment: Decimal = Decimal("0"),
+        quarterly_tariff_adjustment: Decimal = Decimal("0"),
         tou_windows: Optional[Dict[str, Any]] = None,
         default_anchor_day: int = 15,
         currency: str = "PKR",
@@ -367,6 +373,8 @@ class ProviderBillingSchedule(AggregateRoot):
             price_offpeak_settlement=price_offpeak_settlement,
             price_peak_settlement=price_peak_settlement,
             fixed_charge=fixed_charge,
+            fuel_price_adjustment=fuel_price_adjustment,
+            quarterly_tariff_adjustment=quarterly_tariff_adjustment,
             tou_windows=tou_windows or {
                 "peak_windows": [{"start_hour": 17, "end_hour": 22}],
                 "timezone": "Asia/Karachi",
@@ -388,6 +396,8 @@ class ProviderBillingSchedule(AggregateRoot):
         price_offpeak_settlement: Decimal,
         price_peak_settlement: Decimal,
         fixed_charge: Decimal,
+        fuel_price_adjustment: Decimal,
+        quarterly_tariff_adjustment: Decimal,
         tou_windows: Dict[str, Any],
         default_anchor_day: int,
         currency: str,
@@ -403,6 +413,8 @@ class ProviderBillingSchedule(AggregateRoot):
         self.price_offpeak_settlement = price_offpeak_settlement
         self.price_peak_settlement = price_peak_settlement
         self.fixed_charge = fixed_charge
+        self.fuel_price_adjustment = fuel_price_adjustment
+        self.quarterly_tariff_adjustment = quarterly_tariff_adjustment
         self.tou_windows = tou_windows
         self.default_anchor_day = default_anchor_day
         self.currency = currency

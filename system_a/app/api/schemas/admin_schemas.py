@@ -310,6 +310,8 @@ class BillingScheduleCreate(BaseModel):
     price_offpeak_settlement: float = Field(..., ge=0, description="Off-peak settlement price")
     price_peak_settlement: float = Field(..., ge=0, description="Peak settlement price")
     fixed_charge: float = Field(0.0, ge=0, description="Fixed monthly charge")
+    fuel_price_adjustment: float = Field(0.0, ge=0, description="NEPRA Fuel Price Adjustment surcharge per kWh")
+    quarterly_tariff_adjustment: float = Field(0.0, ge=0, description="NEPRA Quarterly Tariff Adjustment surcharge per kWh")
     tou_windows: Dict[str, Any] = Field(
         default={"peak_windows": [{"start_hour": 17, "end_hour": 22}], "timezone": "Asia/Karachi"},
         description='TOU windows: {"peak_windows": [{"start_hour": 17, "end_hour": 22}], "timezone": "Asia/Karachi"}',
@@ -330,6 +332,8 @@ class BillingScheduleUpdate(BaseModel):
     price_offpeak_settlement: Optional[float] = Field(None, ge=0)
     price_peak_settlement: Optional[float] = Field(None, ge=0)
     fixed_charge: Optional[float] = Field(None, ge=0)
+    fuel_price_adjustment: Optional[float] = Field(None, ge=0)
+    quarterly_tariff_adjustment: Optional[float] = Field(None, ge=0)
     tou_windows: Optional[Dict[str, Any]] = None
     default_anchor_day: Optional[int] = Field(None, ge=1, le=28)
     currency: Optional[str] = Field(None, max_length=10)
@@ -349,6 +353,8 @@ class BillingScheduleResponse(BaseModel):
     price_offpeak_settlement: float
     price_peak_settlement: float
     fixed_charge: float
+    fuel_price_adjustment: float
+    quarterly_tariff_adjustment: float
     tou_windows: Dict[str, Any]
     default_anchor_day: int
     currency: str

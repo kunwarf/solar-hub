@@ -295,6 +295,8 @@ class ProviderBillingScheduleModel(BaseModel):
     price_offpeak_settlement = Column(Numeric(10, 4), nullable=False)
     price_peak_settlement = Column(Numeric(10, 4), nullable=False)
     fixed_charge = Column(Numeric(10, 2), nullable=False, default=0)
+    fuel_price_adjustment = Column(Numeric(10, 4), nullable=False, default=0)
+    quarterly_tariff_adjustment = Column(Numeric(10, 4), nullable=False, default=0)
 
     tou_windows = Column(JSONB, nullable=False)
     default_anchor_day = Column(Integer, nullable=False, default=15)
@@ -325,6 +327,8 @@ class ProviderBillingScheduleModel(BaseModel):
             price_offpeak_settlement=Decimal(str(self.price_offpeak_settlement)),
             price_peak_settlement=Decimal(str(self.price_peak_settlement)),
             fixed_charge=Decimal(str(self.fixed_charge or 0)),
+            fuel_price_adjustment=Decimal(str(self.fuel_price_adjustment or 0)),
+            quarterly_tariff_adjustment=Decimal(str(self.quarterly_tariff_adjustment or 0)),
             tou_windows=self.tou_windows or {
                 "peak_windows": [{"start_hour": 17, "end_hour": 22}],
                 "timezone": "Asia/Karachi",
@@ -354,6 +358,8 @@ class ProviderBillingScheduleModel(BaseModel):
             price_offpeak_settlement=s.price_offpeak_settlement,
             price_peak_settlement=s.price_peak_settlement,
             fixed_charge=s.fixed_charge,
+            fuel_price_adjustment=s.fuel_price_adjustment,
+            quarterly_tariff_adjustment=s.quarterly_tariff_adjustment,
             tou_windows=s.tou_windows,
             default_anchor_day=s.default_anchor_day,
             currency=s.currency,
@@ -374,6 +380,8 @@ class ProviderBillingScheduleModel(BaseModel):
         self.price_offpeak_settlement = s.price_offpeak_settlement
         self.price_peak_settlement = s.price_peak_settlement
         self.fixed_charge = s.fixed_charge
+        self.fuel_price_adjustment = s.fuel_price_adjustment
+        self.quarterly_tariff_adjustment = s.quarterly_tariff_adjustment
         self.tou_windows = s.tou_windows
         self.default_anchor_day = s.default_anchor_day
         self.currency = s.currency

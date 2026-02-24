@@ -381,6 +381,8 @@ export interface BillingSchedule {
   priceOffpeakSettlement: number;
   pricePeakSettlement: number;
   fixedCharge: number;
+  fuelPriceAdjustment: number;
+  quarterlyTariffAdjustment: number;
   touWindows: TouWindows;
   defaultAnchorDay: number;
   currency: string;
@@ -403,6 +405,8 @@ function mapBillingSchedule(raw: any): BillingSchedule {
     priceOffpeakSettlement: raw.price_offpeak_settlement,
     pricePeakSettlement: raw.price_peak_settlement,
     fixedCharge: raw.fixed_charge,
+    fuelPriceAdjustment: raw.fuel_price_adjustment ?? 0,
+    quarterlyTariffAdjustment: raw.quarterly_tariff_adjustment ?? 0,
     touWindows: raw.tou_windows ?? { peak_windows: [], timezone: 'Asia/Karachi' },
     defaultAnchorDay: raw.default_anchor_day ?? 15,
     currency: raw.currency ?? 'PKR',
@@ -442,6 +446,8 @@ export const billingSchedulesService = {
       price_offpeak_settlement: data.priceOffpeakSettlement,
       price_peak_settlement: data.pricePeakSettlement,
       fixed_charge: data.fixedCharge,
+      fuel_price_adjustment: data.fuelPriceAdjustment,
+      quarterly_tariff_adjustment: data.quarterlyTariffAdjustment,
       tou_windows: data.touWindows,
       default_anchor_day: data.defaultAnchorDay,
       currency: data.currency,
@@ -462,6 +468,8 @@ export const billingSchedulesService = {
     if (data.priceOffpeakSettlement !== undefined) payload.price_offpeak_settlement = data.priceOffpeakSettlement;
     if (data.pricePeakSettlement !== undefined) payload.price_peak_settlement = data.pricePeakSettlement;
     if (data.fixedCharge !== undefined) payload.fixed_charge = data.fixedCharge;
+    if (data.fuelPriceAdjustment !== undefined) payload.fuel_price_adjustment = data.fuelPriceAdjustment;
+    if (data.quarterlyTariffAdjustment !== undefined) payload.quarterly_tariff_adjustment = data.quarterlyTariffAdjustment;
     if (data.touWindows !== undefined) payload.tou_windows = data.touWindows;
     if (data.defaultAnchorDay !== undefined) payload.default_anchor_day = data.defaultAnchorDay;
     if (data.currency !== undefined) payload.currency = data.currency;

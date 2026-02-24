@@ -52,6 +52,8 @@ const defaultForm = (): Omit<BillingSchedule, "id" | "createdAt" | "updatedAt"> 
   priceOffpeakSettlement: 0,
   pricePeakSettlement: 0,
   fixedCharge: 0,
+  fuelPriceAdjustment: 0,
+  quarterlyTariffAdjustment: 0,
   touWindows: {
     peak_windows: [{ start_hour: 17, end_hour: 22 }],
     timezone: "Asia/Karachi",
@@ -143,6 +145,8 @@ export default function BillingSchedules() {
       priceOffpeakSettlement: s.priceOffpeakSettlement,
       pricePeakSettlement: s.pricePeakSettlement,
       fixedCharge: s.fixedCharge,
+      fuelPriceAdjustment: s.fuelPriceAdjustment,
+      quarterlyTariffAdjustment: s.quarterlyTariffAdjustment,
       touWindows: s.touWindows,
       defaultAnchorDay: s.defaultAnchorDay,
       currency: s.currency,
@@ -430,6 +434,38 @@ export default function BillingSchedules() {
                     setForm((f) => ({ ...f, defaultAnchorDay: Number(e.target.value) }))
                   }
                 />
+              </div>
+            </div>
+
+            {/* Monthly Adjustments (NEPRA surcharges) */}
+            <div>
+              <h4 className="text-sm font-semibold mb-1">Monthly Adjustments (₨/kWh)</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                NEPRA-mandated surcharges applied on top of base import prices each billing cycle.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Fuel Price Adjustment (FPA)</Label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    value={form.fuelPriceAdjustment}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, fuelPriceAdjustment: Number(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Quarterly Tariff Adjustment (QTA)</Label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    value={form.quarterlyTariffAdjustment}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, quarterlyTariffAdjustment: Number(e.target.value) }))
+                    }
+                  />
+                </div>
               </div>
             </div>
 
