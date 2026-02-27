@@ -200,21 +200,54 @@ DEFAULT_METER_SETTINGS = {
 }
 
 
+# Manufacturer-specific inverter setting overrides
+# These are merged on top of DEFAULT_INVERTER_SETTINGS
+_MANUFACTURER_INVERTER_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    "powdrive": {
+        "power_limits": {
+            "max_charge_power_w": 3500,
+            "max_discharge_power_w": 3500,
+            "max_grid_export_power_w": 3500,
+        },
+        "telemetry": {
+            # Powdrive uses negative values for battery charging (opposite convention)
+            "battery_power_sign_convention": "negative_charging",
+        },
+    },
+    "senergy": {
+        "power_limits": {
+            "max_charge_power_w": 5000,
+            "max_discharge_power_w": 5000,
+            "max_grid_export_power_w": 5000,
+        },
+        "telemetry": {
+            "battery_power_sign_convention": "positive_charging",
+        },
+    },
+}
+
+
 def get_default_settings(device_type: str, manufacturer: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
     """
-    Get default settings for a device type.
-    Can be extended to support manufacturer/model-specific defaults.
+    Get default settings for a device type, with optional manufacturer/model-specific overrides.
     """
+    import copy
     defaults = {
         "inverter": DEFAULT_INVERTER_SETTINGS,
         "battery": DEFAULT_BATTERY_SETTINGS,
         "meter": DEFAULT_METER_SETTINGS,
     }
 
-    base_settings = defaults.get(device_type.lower(), {})
+    base_settings = copy.deepcopy(defaults.get(device_type.lower(), {}))
 
-    # TODO: Add manufacturer/model-specific overrides here
-    # Example: if manufacturer == "SolarEdge" and model == "SE5000":
-    #     base_settings.update(SE5000_SPECIFIC_SETTINGS)
+    # Apply manufacturer-specific overrides for inverters
+    if device_type.lower() == "inverter" and manufacturer:
+        overrides = _MANUFACTURER_INVERTER_OVERRIDES.get(manufacturer.lower())
+        if overrides:
+            for section_key, section_values in overrides.items():
+                if section_key in base_settings and isinstance(base_settings[section_key], dict):
+                    base_settings[section_key].update(section_values)
+                else:
+                    base_settings[section_key] = section_values
 
     return base_settings

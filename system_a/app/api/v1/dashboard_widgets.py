@@ -11,6 +11,7 @@ These endpoints:
 - Provide both aggregated and per-device breakdown data
 - Use Redis cache for site/device relationships (cache-first, DB fallback)
 """
+import asyncio
 import logging
 import math
 from datetime import date, datetime, timedelta, timezone
@@ -1172,32 +1173,43 @@ async def get_comparison(
     day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
     try:
+        now = datetime.now(timezone.utc)
         if period == "week":
-            # Get last 14 days of data (current week + previous week)
-            energy_data = await system_b_client.get_site_energy_chart(
-                site_id=site_info.site_id,
-                period="week",  # This gives us 7 days
+            # Fetch current 7 days and previous 7 days using separate custom-range calls
+            current_week_end = now
+            current_week_start = now - timedelta(days=7)
+            prev_week_end = current_week_start
+            prev_week_start = now - timedelta(days=14)
+
+            current_data, prev_data = await asyncio.gather(
+                system_b_client.get_site_energy_chart(
+                    site_id=site_info.site_id,
+                    period="custom",
+                    start_time=current_week_start,
+                    end_time=current_week_end,
+                    bucket_interval="1 day",
+                ),
+                system_b_client.get_site_energy_chart(
+                    site_id=site_info.site_id,
+                    period="custom",
+                    start_time=prev_week_start,
+                    end_time=prev_week_end,
+                    bucket_interval="1 day",
+                ),
             )
 
-            # We need both weeks, so let's fetch 14 days manually
-            # TODO: Enhance System B to support custom date ranges
-            # For now, aggregate from available data
             current_by_day: Dict[int, float] = {}
             previous_by_day: Dict[int, float] = {}
 
-            for point in energy_data.get("data", []):
+            for point in current_data.get("data", []):
                 timestamp = datetime.fromisoformat(point["timestamp"])
-                days_ago = (datetime.now(timezone.utc) - timestamp).days
-                pv_kwh = point.get("pv_kwh", 0)
+                weekday = timestamp.weekday()
+                current_by_day[weekday] = current_by_day.get(weekday, 0) + (point.get("pv_kwh") or 0)
 
-                if days_ago < 7:
-                    # Current week
-                    weekday = timestamp.weekday()
-                    current_by_day[weekday] = current_by_day.get(weekday, 0) + pv_kwh
-                elif days_ago < 14:
-                    # Previous week
-                    weekday = timestamp.weekday()
-                    previous_by_day[weekday] = previous_by_day.get(weekday, 0) + pv_kwh
+            for point in prev_data.get("data", []):
+                timestamp = datetime.fromisoformat(point["timestamp"])
+                weekday = timestamp.weekday()
+                previous_by_day[weekday] = previous_by_day.get(weekday, 0) + (point.get("pv_kwh") or 0)
 
             for i in range(7):
                 data_points.append(ComparisonPoint(
@@ -1206,29 +1218,51 @@ async def get_comparison(
                     previous=round(previous_by_day.get(i, 0), 1),
                 ))
         else:
-            # Month period - compare last 4 weeks with previous 4 weeks
-            energy_data = await system_b_client.get_site_energy_chart(
-                site_id=site_info.site_id,
-                period="month",  # This gives us 30 days
+            # Month period - compare last 4 weeks with previous 4 weeks using two custom calls
+            current_month_end = now
+            current_month_start = now - timedelta(days=28)
+            prev_month_end = current_month_start
+            prev_month_start = now - timedelta(days=56)
+
+            current_data, prev_data = await asyncio.gather(
+                system_b_client.get_site_energy_chart(
+                    site_id=site_info.site_id,
+                    period="custom",
+                    start_time=current_month_start,
+                    end_time=current_month_end,
+                    bucket_interval="1 day",
+                ),
+                system_b_client.get_site_energy_chart(
+                    site_id=site_info.site_id,
+                    period="custom",
+                    start_time=prev_month_start,
+                    end_time=prev_month_end,
+                    bucket_interval="1 day",
+                ),
             )
 
-            week_data = [0.0] * 8  # 4 current weeks + 4 previous weeks
+            current_week_totals = [0.0] * 4
+            prev_week_totals = [0.0] * 4
 
-            for point in energy_data.get("data", []):
+            for point in current_data.get("data", []):
                 timestamp = datetime.fromisoformat(point["timestamp"])
-                days_ago = (datetime.now(timezone.utc) - timestamp).days
-                pv_kwh = point.get("pv_kwh", 0)
+                days_ago = (now - timestamp).days
+                week_idx = min(days_ago // 7, 3)
+                current_week_totals[week_idx] += point.get("pv_kwh") or 0
 
-                week_idx = days_ago // 7
-                if week_idx < 8:
-                    week_data[week_idx] += pv_kwh
+            for point in prev_data.get("data", []):
+                timestamp = datetime.fromisoformat(point["timestamp"])
+                days_ago = (now - timestamp).days - 28
+                week_idx = min(days_ago // 7, 3)
+                if 0 <= week_idx < 4:
+                    prev_week_totals[week_idx] += point.get("pv_kwh") or 0
 
-            # Build comparison points (reverse order so Week 1 is most recent)
+            # Week 1 = most recent
             for week_num in range(4):
                 data_points.append(ComparisonPoint(
                     label=f"Week {week_num + 1}",
-                    current=round(week_data[week_num], 1),
-                    previous=round(week_data[week_num + 4], 1),
+                    current=round(current_week_totals[week_num], 1),
+                    previous=round(prev_week_totals[week_num], 1),
                 ))
 
         current_total = sum(p.current for p in data_points)

@@ -9,8 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from ..dependencies import (
     get_current_user,
     get_unit_of_work,
+    get_system_b_client_instance,
     verify_service_api_key,
 )
+from ...infrastructure.cache.telemetry_cache import telemetry_cache
+from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
 from ..schemas.site_schemas import (
     AddressSchema,
     GeoLocationSchema,
@@ -354,8 +357,7 @@ async def get_site(
     online_devices = await uow.devices.get_online_devices(site_id)
     online_device_count = len(online_devices)
 
-    # TODO: Get alert count when alert repository is implemented
-    alert_count = 0
+    alert_count = await uow.alerts.count_by_site_id(site_id, "active")
 
     base_response = site_to_response(site)
 
@@ -570,6 +572,7 @@ async def get_site_summary(
     site_id: UUID,
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
     """Get site summary for dashboard."""
     site = await uow.sites.get_by_id(site_id)
@@ -587,15 +590,36 @@ async def get_site_summary(
     device_count = await uow.devices.count_by_site_id(site_id)
     online_devices = await uow.devices.get_online_devices(site_id)
 
-    # TODO: Get actual power and energy from telemetry system
-    # For now, return placeholder values
+    # Get real-time power and daily energy from Redis cache
+    current_power_kw = 0.0
+    daily_energy_kwh = 0.0
+    monthly_energy_kwh = 0.0
+
+    serial_numbers = [d.serial_number for d in online_devices if d.serial_number]
+    if serial_numbers:
+        telemetry_data = await telemetry_cache.get_telemetry_batch(serial_numbers)
+        for data in telemetry_data.values():
+            if data and not data.get("_stale"):
+                power = data.get("power", {})
+                current_power_kw += (power.get("pv_total_w") or 0) / 1000
+                energy_today = data.get("energy_today", {})
+                daily_energy_kwh += energy_today.get("pv_kwh") or 0
+
+    # Get monthly energy from System B
+    try:
+        chart = await system_b_client.get_site_energy_chart(site_id, period="month")
+        for point in chart.get("data", []):
+            monthly_energy_kwh += point.get("pv_kwh") or point.get("solar_kwh") or 0
+    except (SystemBClientError, Exception):
+        pass
+
     return SiteSummaryResponse(
         id=site.id,
         name=site.name,
         status=site.status.value,
         device_count=device_count,
         online_devices=len(online_devices),
-        current_power_kw=0.0,
-        daily_energy_kwh=0.0,
-        monthly_energy_kwh=0.0,
+        current_power_kw=round(current_power_kw, 3),
+        daily_energy_kwh=round(daily_energy_kwh, 3),
+        monthly_energy_kwh=round(monthly_energy_kwh, 3),
     )

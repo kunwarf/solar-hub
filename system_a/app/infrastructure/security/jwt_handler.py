@@ -1,6 +1,7 @@
 """
 JWT token handling implementation.
 """
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -9,6 +10,8 @@ from uuid import UUID
 import jwt
 
 from ...application.interfaces.services import TokenService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -234,15 +237,69 @@ class JWTHandler(TokenService):
 
     def revoke_token(self, token: str) -> None:
         """
-        Revoke a token.
+        Revoke a token by storing its JTI in the Redis blacklist.
 
-        Required by TokenService interface.
-        Note: Full implementation would store revoked JTIs in Redis.
-        For now, this is a no-op as we rely on short token expiry.
+        The blacklist entry TTL matches the token's remaining lifetime so
+        the entry is automatically cleaned up once the token would have
+        expired anyway.
         """
-        # TODO: Implement token revocation with Redis blacklist
-        # For now, we rely on short access token expiry times
-        pass
+        import asyncio
+        try:
+            payload = self.decode_token_unsafe(token)
+            if not payload:
+                return
+            jti = payload.get("jti")
+            if not jti:
+                return
+            exp = payload.get("exp")
+            ttl = max(int(exp - datetime.now(timezone.utc).timestamp()), 1) if exp else (
+                self._access_token_expire_minutes * 60
+            )
+            asyncio.get_event_loop().run_until_complete(self._blacklist_jti(jti, ttl))
+        except Exception as e:
+            logger.warning("Failed to revoke token: %s", e)
+
+    async def revoke_token_async(self, token: str) -> None:
+        """Async version of revoke_token for use inside async route handlers."""
+        try:
+            payload = self.decode_token_unsafe(token)
+            if not payload:
+                return
+            jti = payload.get("jti")
+            if not jti:
+                return
+            exp = payload.get("exp")
+            ttl = max(int(exp - datetime.now(timezone.utc).timestamp()), 1) if exp else (
+                self._access_token_expire_minutes * 60
+            )
+            await self._blacklist_jti(jti, ttl)
+        except Exception as e:
+            logger.warning("Failed to revoke token: %s", e)
+
+    async def is_token_revoked(self, token: str) -> bool:
+        """Return True if the token's JTI is in the Redis blacklist."""
+        try:
+            payload = self.decode_token_unsafe(token)
+            if not payload:
+                return False
+            jti = payload.get("jti")
+            if not jti:
+                return False
+            return await self._is_jti_blacklisted(jti)
+        except Exception:
+            return False
+
+    @staticmethod
+    async def _blacklist_jti(jti: str, ttl_seconds: int) -> None:
+        from ..cache.redis_cache import RedisManager
+        client = await RedisManager.get_client()
+        await client.setex(f"token:blacklist:{jti}", ttl_seconds, "1")
+
+    @staticmethod
+    async def _is_jti_blacklisted(jti: str) -> bool:
+        from ..cache.redis_cache import RedisManager
+        client = await RedisManager.get_client()
+        return bool(await client.exists(f"token:blacklist:{jti}"))
 
     def _generate_jti(self) -> str:
         """Generate unique JWT ID."""

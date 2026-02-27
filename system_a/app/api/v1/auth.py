@@ -5,7 +5,7 @@ import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 
@@ -344,16 +344,21 @@ async def forgot_password(
     response_model=MessageResponse,
 )
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user),
+    jwt_handler: "JWTHandler" = Depends(get_jwt_handler),
 ):
     """
     Log out current user.
 
-    Note: JWT tokens are stateless, so this endpoint is primarily for
-    client-side token cleanup. For enhanced security, implement token
-    blacklisting using Redis.
+    Blacklists the access token JTI in Redis so it cannot be reused
+    for the remainder of its validity window.
     """
-    # TODO: Implement token blacklisting for enhanced security
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):]
+        await jwt_handler.revoke_token_async(token)
+
     return MessageResponse(
         message="Logged out successfully",
         success=True,

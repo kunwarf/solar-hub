@@ -404,10 +404,27 @@ async def list_device_commands(
     limit: int = 10,
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ) -> list[CommandStatusResponse]:
     """List recent commands for a device."""
     await check_device_access(device_id, current_user, uow)
 
-    # TODO: Implement System B endpoint to list commands by device
-    # For now, return empty list
-    return []
+    try:
+        commands = await system_b_client.get_device_commands(device_id, limit=limit)
+    except SystemBClientError as e:
+        logger.warning("Could not fetch commands from System B for device %s: %s", device_id, e)
+        commands = []
+
+    return [
+        CommandStatusResponse(
+            command_id=str(cmd.get("id", "")),
+            status=str(cmd.get("status", "unknown")),
+            progress=cmd.get("progress"),
+            result=cmd.get("result"),
+            error=cmd.get("error_message"),
+            created_at=str(cmd.get("created_at", "")),
+            updated_at=str(cmd.get("completed_at") or cmd.get("sent_at") or ""),
+        )
+        for cmd in commands
+        if cmd
+    ]

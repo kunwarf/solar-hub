@@ -94,12 +94,14 @@ class RegistrationService:
         token_service: TokenService,
         system_b_client: SystemBClient,
         event_publisher: Optional[EventPublisher] = None,
+        require_email_verification: bool = False,
     ):
         self._user_repository = user_repository
         self._password_hasher = password_hasher
         self._token_service = token_service
         self._system_b_client = system_b_client
         self._event_publisher = event_publisher
+        self._require_email_verification = require_email_verification
 
     async def register(
         self,
@@ -158,15 +160,14 @@ class RegistrationService:
         # 3. Hash password and create user
         password_hash = self._password_hasher.hash(request.password)
 
-        # TODO: Make email verification configurable via settings
-        # For now, users are registered as ACTIVE (no email verification required)
+        initial_status = UserStatus.PENDING if self._require_email_verification else UserStatus.ACTIVE
         user = User(
             email=request.email.lower().strip(),
             phone=request.phone,
             password_hash=password_hash,
             first_name=request.first_name.strip(),
             last_name=request.last_name.strip(),
-            status=UserStatus.ACTIVE,  # No email verification required
+            status=initial_status,
             role=UserRole.OWNER,  # First user becomes owner
             preferences=UserPreferences(),
         )

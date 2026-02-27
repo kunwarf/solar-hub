@@ -281,6 +281,10 @@ class AppSettings(BaseSettings):
     feature_billing_simulation: bool = Field(default=True)
     feature_ai_analysis: bool = Field(default=True)
     feature_load_shedding_tracking: bool = Field(default=True)
+    require_email_verification: bool = Field(
+        default=False,
+        description='Require email verification before account activation (set True in production)'
+    )
 
     # Billing Migration Feature Flags
     use_system_b_for_billing: bool = Field(

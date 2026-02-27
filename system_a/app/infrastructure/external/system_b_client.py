@@ -471,6 +471,9 @@ class SystemBClient:
         self,
         site_id: UUID,
         period: str = "day",
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        bucket_interval: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Get comprehensive energy chart data for a site.
@@ -480,7 +483,10 @@ class SystemBClient:
 
         Args:
             site_id: Site UUID
-            period: Time period - "day" (24h), "week" (7d), or "month" (30d)
+            period: Time period - "day" (24h), "week" (7d), "month" (30d), or "custom"
+            start_time: Custom range start (required when period="custom")
+            end_time: Custom range end (required when period="custom")
+            bucket_interval: Custom bucket size e.g. "1 hour", "1 day" (optional for custom)
 
         Returns:
             Dict with site_id, period, start_time, end_time, bucket_interval, and data array
@@ -491,7 +497,13 @@ class SystemBClient:
         try:
             client = await self._get_client()
             url = f"/api/v1/telemetry/energy-chart/{site_id}"
-            params = {"period": period}
+            params: Dict[str, Any] = {"period": period}
+            if start_time is not None:
+                params["start_time"] = start_time.isoformat()
+            if end_time is not None:
+                params["end_time"] = end_time.isoformat()
+            if bucket_interval is not None:
+                params["bucket_interval"] = bucket_interval
 
             logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
             response = await client.get(url, params=params)
@@ -728,6 +740,55 @@ class SystemBClient:
             logger.error("System B command status error: %s", e)
             raise SystemBClientError(
                 f"Failed to get command status: {e.response.text}",
+                status_code=e.response.status_code,
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    async def get_device_commands(
+        self,
+        device_id: UUID,
+        limit: int = 10,
+        status_filter: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent commands for a device from System B.
+
+        Args:
+            device_id: Device UUID in System B
+            limit: Max number of commands to return
+            status_filter: Optional status to filter by
+
+        Returns:
+            List of command dicts from System B
+
+        Raises:
+            SystemBClientError: On API errors
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/commands/device/{device_id}"
+            params: Dict[str, Any] = {"limit": limit}
+            if status_filter:
+                params["status"] = status_filter
+
+            logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
+            response = await client.get(url, params=params)
+            logger.info("System B response: status=%d", response.status_code)
+
+            if response.status_code == 404:
+                return []
+
+            response.raise_for_status()
+            data = response.json()
+            # System B returns {"commands": [...], "total": N}
+            return data.get("commands", data) if isinstance(data, dict) else data
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B device commands error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get device commands: {e.response.text}",
                 status_code=e.response.status_code,
             )
         except httpx.RequestError as e:

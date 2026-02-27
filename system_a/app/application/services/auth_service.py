@@ -71,6 +71,7 @@ class AuthService:
         event_publisher: Optional[EventPublisher] = None,
         email_service: Optional[EmailService] = None,
         base_url: str = "http://localhost:3000",
+        require_email_verification: bool = False,
     ):
         self._user_repository = user_repository
         self._password_hasher = password_hasher
@@ -78,6 +79,7 @@ class AuthService:
         self._event_publisher = event_publisher
         self._email_service = email_service
         self._base_url = base_url
+        self._require_email_verification = require_email_verification
 
     async def register(
         self,
@@ -105,15 +107,14 @@ class AuthService:
         # Hash password
         password_hash = self._password_hasher.hash(request.password)
 
-        # TODO: Make email verification configurable via settings
-        # For now, users are registered as ACTIVE (no email verification required)
+        initial_status = UserStatus.PENDING if self._require_email_verification else UserStatus.ACTIVE
         user = User(
             email=request.email.lower().strip(),
             phone=request.phone,
             password_hash=password_hash,
             first_name=request.first_name.strip(),
             last_name=request.last_name.strip(),
-            status=UserStatus.ACTIVE,  # No email verification required
+            status=initial_status,
             role=UserRole.VIEWER,  # Default role
             preferences=UserPreferences(),
         )

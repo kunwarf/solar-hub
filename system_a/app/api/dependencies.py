@@ -115,6 +115,7 @@ def get_auth_service(
         token_service=jwt_handler,
         email_service=email_service,
         base_url=settings.frontend_url,
+        require_email_verification=settings.require_email_verification,
     )
 
 
@@ -130,6 +131,7 @@ def get_registration_service(
         password_hasher=password_hasher,
         token_service=jwt_handler,
         system_b_client=system_b_client,
+        require_email_verification=settings.require_email_verification,
     )
 
 
