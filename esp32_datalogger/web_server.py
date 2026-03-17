@@ -127,7 +127,38 @@ class WebServer:
             client.settimeout(5)
 
             try:
-                request = client.recv(1024).decode("utf-8")
+                # Read headers first (up to 2 KB)
+                raw = b""
+                while b"\r\n\r\n" not in raw:
+                    chunk = client.recv(512)
+                    if not chunk:
+                        break
+                    raw += chunk
+                    if len(raw) > 2048:
+                        break
+
+                # Read body based on Content-Length
+                header_end = raw.find(b"\r\n\r\n")
+                if header_end >= 0:
+                    headers_raw = raw[:header_end].decode("utf-8", "replace")
+                    body_so_far = raw[header_end + 4:]
+                    content_length = 0
+                    for line in headers_raw.split("\r\n"):
+                        if line.lower().startswith("content-length:"):
+                            try:
+                                content_length = int(line.split(":", 1)[1].strip())
+                            except ValueError:
+                                pass
+                            break
+                    while len(body_so_far) < content_length:
+                        chunk = client.recv(512)
+                        if not chunk:
+                            break
+                        body_so_far += chunk
+                    request = headers_raw + "\r\n\r\n" + body_so_far.decode("utf-8", "replace")
+                else:
+                    request = raw.decode("utf-8", "replace")
+
                 if request:
                     response = self._handle_request(request)
                     client.sendall(response.encode("utf-8"))
