@@ -560,12 +560,23 @@ class TCPCommandAdapter:
 
         # For Pytes/Pylontech text-command batteries
         if "pytes" in pid or "pylontech" in pid:
-            response = await self.send_command("pwr")
-            if response:
-                values["power_response"] = response
-            response = await self.send_command("bat")
-            if response:
-                values["battery_response"] = response
+            pwr_resp = await self.send_command("pwr")
+            bat_resp = await self.send_command("bat")
+
+            if pwr_resp:
+                parsed = _parse_pylontech_pwr(pwr_resp)
+                values.update(parsed)
+
+            if bat_resp and "battery_units" in values:
+                values["battery_units"] = _merge_pylontech_bat(
+                    bat_resp, values["battery_units"]
+                )
+
+            # Keep raw responses for debugging / re-parsing
+            if pwr_resp:
+                values["power_response"] = pwr_resp
+            if bat_resp:
+                values["battery_response"] = bat_resp
 
         # For JK BMS serial bridge (binary RS485 broadcast protocol)
         elif "jkbms_serial" in pid or ("jkbms" in pid and self.connection.bridged):
@@ -577,6 +588,99 @@ class TCPCommandAdapter:
                     values.update(parsed)
 
         return values
+
+
+def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
+    """
+    Parse Pylontech/Pytes 'pwr' command response.
+
+    Expected column order (whitespace-separated, first data row has unit number):
+      unit  volt_mv  curr_ma  tempr_mdeg  tlow  thigh  vlow  vhigh  mostemp  state  soc_pct  ...
+
+    Returns structured dict with bank-level scalars and battery_units list.
+    """
+    units = []
+    for line in pwr_text.splitlines():
+        parts = line.split()
+        if not parts or not parts[0].isdigit():
+            continue
+        try:
+            unit_num  = int(parts[0])
+            volt_mv   = int(parts[1])
+            curr_ma   = int(parts[2])
+            temp_mdeg = int(parts[3])
+            state     = parts[9]  if len(parts) > 9  else ""
+            soc_pct   = int(parts[10]) if len(parts) > 10 else None
+        except (ValueError, IndexError):
+            continue
+
+        unit_data: Dict[str, Any] = {
+            "unit":      unit_num,
+            "voltage_v": volt_mv   / 1000.0,
+            "current_a": curr_ma   / 1000.0,
+            "temp_c":    temp_mdeg / 1000.0,
+        }
+        if soc_pct is not None:
+            unit_data["soc_pct"] = soc_pct
+        units.append(unit_data)
+
+    if not units:
+        return {}
+
+    result: Dict[str, Any] = {
+        "battery_units":       units,
+        "battery_units_count": len(units),
+    }
+
+    # Bank voltage: modules are in parallel — voltages should be equal, take average
+    result["battery_voltage_v"] = sum(u["voltage_v"] for u in units) / len(units)
+    # Bank current: sum across parallel modules
+    result["battery_current_a"] = sum(u["current_a"] for u in units)
+    # Bank power
+    result["battery_power_w"] = (
+        result["battery_voltage_v"] * result["battery_current_a"]
+    )
+    # Bank temp: maximum across modules
+    result["battery_temp_c"] = max(u["temp_c"] for u in units)
+    # Bank SOC: minimum (weakest module limits usable capacity)
+    socs = [u["soc_pct"] for u in units if "soc_pct" in u]
+    if socs:
+        result["battery_soc_pct"] = min(socs)
+
+    return result
+
+
+def _merge_pylontech_bat(bat_text: str, units: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Merge 'bat' command response into existing per-unit dicts.
+
+    Adds soh_pct and cycle_count from lines of the form:
+      Battery   N  Key  =  value  unit
+    """
+    unit_map = {u["unit"]: u for u in units}
+
+    for line in bat_text.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[0].lower() != "battery":
+            continue
+        try:
+            unit_num = int(parts[1])
+        except (ValueError, IndexError):
+            continue
+
+        key = parts[2].lower()
+        try:
+            raw_val = float(parts[4])
+        except (ValueError, IndexError):
+            continue
+
+        unit = unit_map.setdefault(unit_num, {"unit": unit_num})
+        if key == "soh":
+            unit["soh_pct"] = raw_val
+        elif key == "cycles":
+            unit["cycle_count"] = int(raw_val)
+
+    return list(unit_map.values())
 
 
 class AdapterFactory:
