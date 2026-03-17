@@ -82,6 +82,9 @@ class DeviceServer:
         # State
         self._running = False
         self._shutdown_event = asyncio.Event()
+        # In-memory set of data logger serials already paired this session.
+        # Prevents two inverters from racing to claim the same orphan data logger.
+        self._claimed_data_loggers: set = set()
 
     async def start(self) -> None:
         """Start the device server."""
@@ -301,20 +304,33 @@ class DeviceServer:
             )
 
             if not data_logger_serial:
-                # Look for a recently self-registered orphan device of the same type
-                data_logger_serial = await self.device_registry_client.get_recently_connected_serial(
+                # Look for a recently self-registered orphan device of the same type.
+                # Check _claimed_data_loggers BEFORE awaiting to avoid the race where
+                # two inverters connect simultaneously and both see the same unclaimed
+                # data logger before either commits the DB update.
+                candidate = await self.device_registry_client.get_recently_connected_serial(
                     device_type=device_state.device_type,
                     within_minutes=10,
                 )
 
-                if data_logger_serial:
+                if candidate and candidate not in self._claimed_data_loggers:
+                    # Claim it immediately (no await between check and add)
+                    self._claimed_data_loggers.add(candidate)
+                    data_logger_serial = candidate
                     # Link the inverter serial to this data logger for future lookups
                     await self.device_registry_client.update_inverter_serial(
                         data_logger_serial=data_logger_serial,
                         inverter_serial=device_state.serial_number,
                     )
+                elif candidate:
+                    logger.warning(
+                        f"Data logger {candidate} already claimed this session, "
+                        f"inverter {device_state.serial_number} has no paired data logger. "
+                        f"Telemetry will be cached under inverter serial."
+                    )
 
             if data_logger_serial:
+                self._claimed_data_loggers.add(data_logger_serial)
                 logger.info(
                     f"Linked device: data_logger={data_logger_serial}, "
                     f"inverter={device_state.serial_number}"
