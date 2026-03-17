@@ -233,7 +233,6 @@ class SerialBridge:
                 # Dispatch
                 if msg_type == MSG_COMMAND_REQUEST:
                     cmd_str = payload.decode("utf-8", "replace").strip()
-                    print("[SerialBridge] CMD: {}".format(cmd_str))
                     self.stats["commands"] += 1
 
                     response_str = self._handle_command(cmd_str)
@@ -251,20 +250,16 @@ class SerialBridge:
                     self._send_frame(MSG_PONG, b"")
 
                 else:
-                    print("[SerialBridge] Unknown msg_type: {:02X}".format(msg_type))
+                    pass  # Unknown frame type — ignore
 
             except OSError as e:
                 if e.args[0] == 110:  # ETIMEDOUT — keepalive window, normal
-                    print("[SerialBridge] Keepalive timeout, checking connection...")
                     continue
-                else:
-                    print("[SerialBridge] Socket error:", e)
-                    self.stats["errors"] += 1
-                    self._cleanup_socket()
-                    time.sleep(1)
+                self.stats["errors"] += 1
+                self._cleanup_socket()
+                time.sleep(1)
 
-            except Exception as e:
-                print("[SerialBridge] Error:", e)
+            except Exception:
                 self.stats["errors"] += 1
                 self._cleanup_socket()
                 time.sleep(1)
@@ -291,8 +286,7 @@ class SerialBridge:
             )
             return response
 
-        except Exception as e:
-            print("[SerialBridge] Command error:", e)
+        except Exception:
             return None
 
     def _send_frame(self, msg_type, payload):

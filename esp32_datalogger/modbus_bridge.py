@@ -320,18 +320,12 @@ class ModbusBridge:
                     continue
 
                 self.stats["requests"] += 1
-
-                # Log request
                 func_code = pdu[0]
-                print("[Bridge] RX: TID={} UID={} FC={:02X} len={}".format(
-                    transaction_id, unit_id, func_code, len(pdu)
-                ))
 
                 # Forward to RTU and get response
                 response_pdu = self.rtu.forward_pdu(pdu, unit_id)
 
                 if response_pdu:
-                    # Build response
                     resp_length = len(response_pdu) + 1  # +1 for unit_id
                     resp_header = struct.pack(
                         ">HHHB",
@@ -340,17 +334,11 @@ class ModbusBridge:
                         resp_length,
                         unit_id
                     )
-
-                    # Send response
                     self.socket.sendall(resp_header + response_pdu)
                     self.stats["responses"] += 1
-
-                    print("[Bridge] TX: TID={} FC={:02X} len={}".format(
-                        transaction_id, response_pdu[0], len(response_pdu)
-                    ))
                 else:
                     # Send exception response (gateway target device failed)
-                    exc_pdu = bytes([func_code | 0x80, 0x0B])  # Gateway target failed
+                    exc_pdu = bytes([func_code | 0x80, 0x0B])
                     resp_header = struct.pack(
                         ">HHHB",
                         transaction_id,
@@ -360,21 +348,15 @@ class ModbusBridge:
                     )
                     self.socket.sendall(resp_header + exc_pdu)
                     self.stats["errors"] += 1
-                    print("[Bridge] TX: Exception 0x0B (gateway target failed)")
 
             except OSError as e:
-                # In MicroPython, timeout raises OSError with ETIMEDOUT (110)
-                if e.args[0] == 110:  # ETIMEDOUT
-                    print("[Bridge] Keepalive timeout, checking connection...")
+                if e.args[0] == 110:  # ETIMEDOUT — keepalive window, normal
                     continue
-                else:
-                    print("[Bridge] Socket error:", e)
-                    self.stats["errors"] += 1
-                    self._cleanup_socket()
-                    time.sleep(1)
+                self.stats["errors"] += 1
+                self._cleanup_socket()
+                time.sleep(1)
 
-            except Exception as e:
-                print("[Bridge] Error:", e)
+            except Exception:
                 self.stats["errors"] += 1
                 self._cleanup_socket()
                 time.sleep(1)
