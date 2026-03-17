@@ -55,29 +55,30 @@ def upgrade() -> None:
         sa.Column("price_peak_import", sa.Numeric(10, 4), nullable=False),
         sa.Column("price_offpeak_settlement", sa.Numeric(10, 4), nullable=False),
         sa.Column("price_peak_settlement", sa.Numeric(10, 4), nullable=False),
-        sa.Column("fixed_charge", sa.Numeric(10, 2), nullable=False, server_default="0"),
+        sa.Column("fixed_charge", sa.Numeric(10, 2), nullable=False, server_default=sa.text("0")),
 
         # TOU config (same structure as billing_config tou_config)
+        # Use \\: to escape colons — sa.text() treats bare :word as bind parameters
         sa.Column(
             "tou_windows",
             JSONB,
             nullable=False,
             server_default=sa.text(
-                """'{"peak_windows":[{"start_hour":17,"end_hour":22}],"timezone":"Asia/Karachi"}'"""
+                r"""'{"peak_windows":[{"start_hour"\:17,"end_hour"\:22}],"timezone"\:"Asia/Karachi"}'"""
             ),
         ),
 
         # Defaults
-        sa.Column("default_anchor_day", sa.Integer, nullable=False, server_default="15"),
-        sa.Column("currency", sa.String(10), nullable=False, server_default="'PKR'"),
-        sa.Column("net_metering_enabled", sa.Boolean, nullable=False, server_default="true"),
+        sa.Column("default_anchor_day", sa.Integer, nullable=False, server_default=sa.text("15")),
+        sa.Column("currency", sa.String(10), nullable=False, server_default=sa.text("'PKR'")),
+        sa.Column("net_metering_enabled", sa.Boolean, nullable=False, server_default=sa.text("true")),
 
         # Status & dates
         sa.Column(
             "status",
             sa.Enum("active", "inactive", "draft", name="billing_schedule_status", create_type=False),
             nullable=False,
-            server_default="'active'",
+            server_default=sa.text("'active'"),
         ),
         sa.Column("effective_from", sa.Date, nullable=False, server_default=sa.text("CURRENT_DATE")),
         sa.Column("effective_to", sa.Date, nullable=True),
@@ -86,7 +87,7 @@ def upgrade() -> None:
         # Audit
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("version", sa.Integer, nullable=False, server_default="1"),
+        sa.Column("version", sa.Integer, nullable=False, server_default=sa.text("1")),
     )
 
     # ------------------------------------------------------------------
