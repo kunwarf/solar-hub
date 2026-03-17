@@ -542,7 +542,7 @@ class WebServer:
         html += '<select name="type">'
         for val in ["inverter", "battery", "meter", "gateway"]:
             sel = "selected" if device_cfg.get("type") == val else ""
-            html += '<option value="{}" {}>{}</option>'.format(val, sel, val.capitalize())
+            html += '<option value="{}" {}>{}</option>'.format(val, sel, val[0].upper() + val[1:])
         html += '</select>'
 
         html += '<label>Manufacturer</label>'
