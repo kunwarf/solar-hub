@@ -560,8 +560,19 @@ class TCPCommandAdapter:
 
         # For Pytes/Pylontech text-command batteries
         if "pytes" in pid or "pylontech" in pid:
+            # Send a bare newline first to ensure the console is at a clean
+            # prompt before issuing commands (some firmware requires a wake-up).
+            await self.send_command("")
+
             pwr_resp = await self.send_command("pwr")
             bat_resp = await self.send_command("bat")
+
+            # Log raw responses at INFO so we can diagnose format issues
+            logger.info(
+                f"Pylontech poll raw responses — "
+                f"pwr: {repr(pwr_resp[:300] if pwr_resp else pwr_resp)}, "
+                f"bat: {repr(bat_resp[:200] if bat_resp else bat_resp)}"
+            )
 
             if pwr_resp:
                 parsed = _parse_pylontech_pwr(pwr_resp)
