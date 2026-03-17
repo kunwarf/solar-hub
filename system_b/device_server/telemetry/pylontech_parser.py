@@ -37,15 +37,15 @@ class PylontechParser(TelemetryParser):
     ]
 
     # Per-unit metric mappings: unit_dict_key -> (metric_name_template, unit, category)
-    # metric_name_template uses {unit} as placeholder for unit number
+    # metric_name_template uses {unit} as placeholder for unit number (1-indexed)
     UNIT_METRIC_MAPPINGS: List[tuple] = [
         ("voltage_v",   ("battery_unit_{unit}_voltage_v",  "V", "battery_unit")),
         ("current_a",   ("battery_unit_{unit}_current_a",  "A", "battery_unit")),
+        ("power_w",     ("battery_unit_{unit}_power_w",    "W", "battery_unit")),
         ("soc_pct",     ("battery_unit_{unit}_soc_pct",    "%", "battery_unit")),
         ("temp_c",      ("battery_unit_{unit}_temp_c",     "C", "battery_unit")),
         ("soh_pct",     ("battery_unit_{unit}_soh_pct",    "%", "battery_unit")),
         ("cycle_count", ("battery_unit_{unit}_cycles",     "",  "battery_unit")),
-        ("power_w",     ("battery_unit_{unit}_power_w",    "W", "battery_unit")),
     ]
 
     def parse(
@@ -134,8 +134,36 @@ class PylontechParser(TelemetryParser):
                         tags={"category": "battery_unit", "unit": unit_num},
                     ))
 
+        # --- Per-cell voltages (from 'bat N' commands) ---
+        # Supports stacks of up to 10 modules with 15 or 16 cells each.
+        cells: List[Dict[str, Any]] = telemetry_data.get("battery_cells", [])
+        for cell_data in cells:
+            module_num = cell_data.get("module")
+            cell_num   = cell_data.get("cell")
+            value      = cell_data.get("voltage_v")
+            if module_num is None or cell_num is None or value is None:
+                continue
+            try:
+                metrics.append(TelemetryMetric(
+                    time=timestamp,
+                    device_id=device_id,
+                    site_id=site_id,
+                    metric_name=f"battery_unit_{module_num}_cell_{cell_num}_voltage_v",
+                    metric_value=float(value),
+                    quality="good",
+                    unit="V",
+                    source="telemetry",
+                    tags={
+                        "category": "battery_cell",
+                        "unit": module_num,
+                        "cell": cell_num,
+                    },
+                ))
+            except (ValueError, TypeError):
+                pass
+
         logger.debug(
             f"Parsed {len(metrics)} metrics from Pylontech telemetry "
-            f"(device {device_id}, {len(units)} units)"
+            f"(device {device_id}, {len(units)} units, {len(cells)} cells)"
         )
         return metrics

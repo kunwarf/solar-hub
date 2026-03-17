@@ -144,14 +144,16 @@ protocols:
       parse_regex: "Barcode\\s*:\\s*([A-Z0-9]+)"
 
     polling:
-      default_interval: 30
-      timeout: 10.0
+      # 60s gives headroom for 10-module stacks:
+      # wake-up + pwr + 10×(bat N) = 12 commands × ~3s typical = ~36s
+      default_interval: 60
+      timeout: 90.0
       max_consecutive_failures: 5
 
     command:
       line_ending: "\r\n"
       response_timeout: 5.0
-      command_delay: 0.5
+      command_delay: 0.2
 
   - id: pytes
     name: "Pytes Battery"
@@ -174,14 +176,14 @@ protocols:
       parse_regex: "Barcode\\s*:\\s*([A-Z0-9]+)"
 
     polling:
-      default_interval: 30
-      timeout: 10.0
+      default_interval: 60
+      timeout: 90.0
       max_consecutive_failures: 5
 
     command:
       line_ending: "\r\n"
       response_timeout: 5.0
-      command_delay: 0.5
+      command_delay: 0.2
 
   - id: jkbms_serial
     name: "JK-BMS (Serial Bridge)"

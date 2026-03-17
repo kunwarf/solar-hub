@@ -560,34 +560,38 @@ class TCPCommandAdapter:
 
         # For Pytes/Pylontech text-command batteries
         if "pytes" in pid or "pylontech" in pid:
-            # Send a bare newline first to ensure the console is at a clean
-            # prompt before issuing commands (some firmware requires a wake-up).
+            # Wake-up: ensure the console is at a clean prompt before commands
             await self.send_command("")
 
+            # Step 1 — get all module summaries in one shot
             pwr_resp = await self.send_command("pwr")
-            bat_resp = await self.send_command("bat")
-
-            # Log raw responses at INFO so we can diagnose format issues
-            logger.info(
-                f"Pylontech poll raw responses — "
-                f"pwr: {repr(pwr_resp[:300] if pwr_resp else pwr_resp)}, "
-                f"bat: {repr(bat_resp[:200] if bat_resp else bat_resp)}"
-            )
-
             if pwr_resp:
                 parsed = _parse_pylontech_pwr(pwr_resp)
                 values.update(parsed)
 
-            if bat_resp and "battery_units" in values:
-                values["battery_units"] = _merge_pylontech_bat(
-                    bat_resp, values["battery_units"]
-                )
+            # Step 2 — per-cell voltages for each module in the stack
+            # bat N uses space-separated format: "bat 1", "bat 2", ...
+            modules = values.get("battery_units", [])
+            all_cells: List[Dict[str, Any]] = []
+            for unit_data in modules:
+                module_num = unit_data["unit"]
+                bat_resp = await self.send_command(f"bat {module_num}")
+                if bat_resp:
+                    cells = _parse_pylontech_bat_cells(bat_resp, module_num)
+                    all_cells.extend(cells)
+                    # Derive per-module power from voltage × current
+                    unit_data["power_w"] = (
+                        unit_data.get("voltage_v", 0)
+                        * unit_data.get("current_a", 0)
+                    )
 
-            # Keep raw responses for debugging / re-parsing
-            if pwr_resp:
-                values["power_response"] = pwr_resp
-            if bat_resp:
-                values["battery_response"] = bat_resp
+            if all_cells:
+                values["battery_cells"] = all_cells
+
+            logger.debug(
+                f"Pylontech stack: {len(modules)} module(s), "
+                f"{len(all_cells)} cells total"
+            )
 
         # For JK BMS serial bridge (binary RS485 broadcast protocol)
         elif "jkbms_serial" in pid or ("jkbms" in pid and self.connection.bridged):
@@ -641,11 +645,14 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
             except (ValueError, IndexError):
                 pass
 
+        voltage_v = volt_mv   / 1000.0
+        current_a = curr_ma   / 1000.0
         unit_data: Dict[str, Any] = {
             "unit":      unit_num,
-            "voltage_v": volt_mv   / 1000.0,
-            "current_a": curr_ma   / 1000.0,
+            "voltage_v": voltage_v,
+            "current_a": current_a,
             "temp_c":    temp_mdeg / 1000.0,
+            "power_w":   voltage_v * current_a,
         }
         if soc_pct is not None:
             unit_data["soc_pct"] = soc_pct
@@ -677,37 +684,42 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
     return result
 
 
-def _merge_pylontech_bat(bat_text: str, units: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _parse_pylontech_bat_cells(
+    bat_text: str,
+    module_num: int,
+) -> List[Dict[str, Any]]:
     """
-    Merge 'bat' command response into existing per-unit dicts.
+    Parse 'bat N' response into per-cell voltage list.
 
-    Adds soh_pct and cycle_count from lines of the form:
-      Battery   N  Key  =  value  unit
+    The response rows have the form:
+      cell_idx  volt_mv  curr_ma  tempr_mdeg  state  ...
+
+    Each row is 0-indexed (cell 0 … 14 for 15-cell, cell 0 … 15 for 16-cell).
+    Only volt_mv is stored; current and temperature come from 'pwr' at module level.
+
+    Args:
+        bat_text:   Raw response string from 'bat N' command.
+        module_num: 1-indexed module number (matches 'pwr' row number).
+
+    Returns:
+        List of {"module": N, "cell": idx, "voltage_v": float}.
     """
-    unit_map = {u["unit"]: u for u in units}
-
+    cells: List[Dict[str, Any]] = []
     for line in bat_text.splitlines():
         parts = line.split()
-        if len(parts) < 5 or parts[0].lower() != "battery":
+        if not parts or not parts[0].isdigit():
             continue
         try:
-            unit_num = int(parts[1])
+            cell_idx = int(parts[0])
+            volt_mv  = int(parts[1])
         except (ValueError, IndexError):
             continue
-
-        key = parts[2].lower()
-        try:
-            raw_val = float(parts[4])
-        except (ValueError, IndexError):
-            continue
-
-        unit = unit_map.setdefault(unit_num, {"unit": unit_num})
-        if key == "soh":
-            unit["soh_pct"] = raw_val
-        elif key == "cycles":
-            unit["cycle_count"] = int(raw_val)
-
-    return list(unit_map.values())
+        cells.append({
+            "module":    module_num,
+            "cell":      cell_idx,
+            "voltage_v": volt_mv / 1000.0,
+        })
+    return cells
 
 
 class AdapterFactory:
