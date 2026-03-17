@@ -279,11 +279,23 @@ class DeviceServer:
         device_state,
     ) -> None:
         """Handle device added."""
-        # Link Modbus-identified serial with data logger serial from self-registration
-        # This is critical for telemetry caching - we cache under the data logger serial
-        # which is what the user sees on the device and uses to claim it
-        if self.device_registry_client:
-            # First, check if this inverter serial is already linked to a data logger
+        # For serial bridge devices (identified via HELLO frame), the serial number
+        # sent in the HELLO IS the data logger serial — no inverter lookup needed.
+        is_bridged = bool(
+            device_state.extra_data and device_state.extra_data.get("bridged")
+        )
+
+        if is_bridged:
+            # HELLO serial = data logger serial; set directly and skip Modbus linking
+            device_state.data_logger_serial = device_state.serial_number
+            logger.info(
+                f"Serial bridge device {device_state.serial_number}: "
+                f"data_logger_serial set from HELLO"
+            )
+        elif self.device_registry_client:
+            # Link Modbus-identified inverter serial with data logger serial from
+            # self-registration. This is critical for telemetry caching — we cache
+            # under the data logger serial which is what the user sees on the device.
             data_logger_serial = await self.device_registry_client.get_device_by_inverter_serial(
                 device_state.serial_number
             )
@@ -307,7 +319,6 @@ class DeviceServer:
                     f"Linked device: data_logger={data_logger_serial}, "
                     f"inverter={device_state.serial_number}"
                 )
-                # Store the data logger serial for telemetry caching
                 device_state.data_logger_serial = data_logger_serial
             else:
                 logger.warning(

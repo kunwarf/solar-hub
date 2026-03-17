@@ -119,6 +119,14 @@ class DeviceService:
             existing.connection_status = ConnectionStatus.CONNECTED
             existing.last_connected_at = datetime.now(timezone.utc)
             existing.reconnect_count += 1
+            # Always update device_type — ESP config may have been corrected since
+            # the initial registration (e.g., was inverter, now battery)
+            if device_type and device_type != existing.device_type:
+                logger.info(
+                    f"Device {serial_number} device_type changed: "
+                    f"{existing.device_type} -> {device_type}"
+                )
+                existing.device_type = device_type
             if firmware_version:
                 existing.firmware_version = firmware_version
             if manufacturer:
