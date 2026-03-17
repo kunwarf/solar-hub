@@ -142,7 +142,7 @@ class DeviceServer:
             device_registry_client=self.device_registry_client
         )
         self.command_worker = CommandWorker(
-            poll_interval=1.0,
+            poll_interval=5.0,
             batch_size=10,
         )
         self.command_worker.set_executor(self.command_executor)

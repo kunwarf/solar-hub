@@ -101,6 +101,7 @@ class DeviceRegistryClient:
                     FROM device_registry
                     WHERE device_type = CAST(:device_type AS text)
                       AND last_connected_at >= CAST(:cutoff AS timestamptz)
+                      AND (metadata IS NULL OR metadata->>'inverter_serial' IS NULL)
                     ORDER BY last_connected_at DESC
                     LIMIT 1
                     """),
@@ -110,7 +111,7 @@ class DeviceRegistryClient:
 
                 if row:
                     serial = row[0]
-                    logger.info(f"Found data logger serial for {device_type}: {serial}")
+                    logger.debug(f"Found data logger serial for {device_type}: {serial}")
                     return serial
 
                 logger.debug(f"No recently connected device found for type {device_type}")

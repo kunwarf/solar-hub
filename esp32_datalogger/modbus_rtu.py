@@ -118,7 +118,7 @@ class ModbusRTU:
 
         return None
 
-    def transceive(self, pdu, unit_id=None, quiet=False):
+    def transceive(self, pdu, unit_id=None, quiet=True):
         """
         Send Modbus RTU request and receive response.
 
@@ -350,7 +350,7 @@ class ModbusRTU:
 
         return response[1] == 0x10
 
-    def forward_pdu(self, pdu, unit_id=None, quiet=False):
+    def forward_pdu(self, pdu, unit_id=None, quiet=True):
         """
         Forward a PDU to the RTU device and return the response PDU.
 
