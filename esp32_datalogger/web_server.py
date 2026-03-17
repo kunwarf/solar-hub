@@ -58,6 +58,7 @@ td:first-child{font-weight:bold;width:40%}
 <a href="/logs">Logs</a>
 <a href="/files">Files</a>
 <a href="/wifi">WiFi</a>
+<a href="/device">Device</a>
 <a href="/modbus">Modbus</a>
 <a href="/serial">Serial</a>
 <a href="/server">Server</a>
@@ -215,6 +216,11 @@ class WebServer:
             elif path == "/api/files/reboot":
                 import machine
                 machine.reset()
+            elif path == "/device":
+                if method == "POST":
+                    content = self._handle_device_save(body)
+                else:
+                    content = self._page_device()
             elif path == "/wifi":
                 if method == "POST":
                     content = self._handle_wifi_save(body)
@@ -497,28 +503,115 @@ class WebServer:
 
         return '<div class="status status-ok">Server settings saved. Reboot to apply.</div>' + self._page_server()
 
+    def _page_device(self):
+        """Device identity and operating mode configuration page."""
+        config = get_config()
+        device_cfg = config.get("device", {})
+        current_mode = config.get("mode", "modbus_bridge")
+
+        html = '<div class="card"><h2>Operating Mode</h2>'
+        html += '<form method="POST" action="/device">'
+        html += '<input type="hidden" name="section" value="mode">'
+        html += '<label>Mode</label>'
+        html += '<select name="mode">'
+        for val, label in [
+            ("modbus_bridge", "Modbus Bridge (inverter/meter via RS485)"),
+            ("serial_bridge", "Serial Bridge (Pylontech/Pytes battery via RS232)"),
+        ]:
+            sel = "selected" if current_mode == val else ""
+            html += '<option value="{}" {}>{}</option>'.format(val, sel, label)
+        html += '</select>'
+        html += '<p style="color:#888;font-size:0.85em;margin-top:-5px;">'
+        html += 'Reboot required after changing mode.</p>'
+        html += '<button type="submit">Save Mode</button>'
+        html += '</form></div>'
+
+        html += '<div class="card"><h2>Device Identity</h2>'
+        html += '<form method="POST" action="/device">'
+        html += '<input type="hidden" name="section" value="identity">'
+
+        html += '<label>Serial Number</label>'
+        html += '<input name="serial" value="{}" placeholder="SH01XXXXXXXX">'.format(
+            device_cfg.get("serial", ""))
+
+        html += '<label>Friendly Name (optional)</label>'
+        html += '<input name="name" value="{}" placeholder="e.g. Solar Logger 1">'.format(
+            device_cfg.get("name", ""))
+
+        html += '<label>Device Type</label>'
+        html += '<select name="type">'
+        for val in ["inverter", "battery", "meter", "gateway"]:
+            sel = "selected" if device_cfg.get("type") == val else ""
+            html += '<option value="{}" {}>{}</option>'.format(val, sel, val.capitalize())
+        html += '</select>'
+
+        html += '<label>Manufacturer</label>'
+        html += '<input name="manufacturer" value="{}" placeholder="e.g. Pylontech">'.format(
+            device_cfg.get("manufacturer", "SolarHub"))
+
+        html += '<label>Model</label>'
+        html += '<input name="model" value="{}" placeholder="e.g. US5000">'.format(
+            device_cfg.get("model", ""))
+
+        html += '<label>Firmware Version</label>'
+        html += '<input name="firmware_version" value="{}">'.format(
+            device_cfg.get("firmware_version", "1.0.0"))
+
+        html += '<button type="submit">Save Identity</button>'
+        html += '</form></div>'
+
+        return html
+
+    def _handle_device_save(self, body):
+        """Handle device/mode config save."""
+        config = load_config()
+        section = body.get("section", "identity")
+
+        if section == "mode":
+            mode = body.get("mode", "modbus_bridge")
+            if mode in ("modbus_bridge", "serial_bridge", "tcp_server", "mqtt"):
+                config["mode"] = mode
+        else:
+            if "device" not in config:
+                config["device"] = {}
+            serial = body.get("serial", "").strip()
+            if serial:
+                config["device"]["serial"] = serial
+            config["device"]["name"] = body.get("name", "").strip()
+            config["device"]["type"] = body.get("type", "inverter")
+            config["device"]["manufacturer"] = body.get("manufacturer", "SolarHub").strip()
+            config["device"]["model"] = body.get("model", "").strip()
+            config["device"]["firmware_version"] = body.get("firmware_version", "1.0.0").strip()
+
+        save_config(config)
+
+        return '<div class="status status-ok">Saved. Reboot to apply.</div>' + self._page_device()
+
     def _page_serial(self):
-        """Serial port configuration page (for serial_bridge mode)."""
+        """Serial port + serial bridge server configuration page."""
         config = get_config()
         serial_cfg = config.get("serial", {})
         bridge_cfg = config.get("serial_bridge", {})
 
-        html = '<div class="card"><h2>Serial Port (RS232/MAX3232)</h2>'
+        html = '<div class="card"><h2>Serial Port — RS232 / MAX3232</h2>'
+        html += '<p style="color:#888;font-size:0.85em;">UART settings for the Pylontech/Pytes battery console. '
+        html += 'Wire ESP32 TX/RX through a MAX3232 module to the battery RJ11 port.</p>'
         html += '<form method="POST" action="/serial">'
+        html += '<input type="hidden" name="section" value="port">'
 
         html += '<label>UART ID</label>'
         html += '<select name="uart_id">'
-        for i in [1, 2]:
+        for i in [0, 1, 2]:
             sel = "selected" if serial_cfg.get("uart_id") == i else ""
             html += '<option value="{}" {}>{}</option>'.format(i, sel, i)
         html += '</select>'
 
         html += '<label>TX Pin</label>'
-        html += '<input type="number" name="tx_pin" value="{}">'.format(
+        html += '<input type="number" name="tx_pin" value="{}" min="0" max="48">'.format(
             serial_cfg.get("tx_pin", 17))
 
         html += '<label>RX Pin</label>'
-        html += '<input type="number" name="rx_pin" value="{}">'.format(
+        html += '<input type="number" name="rx_pin" value="{}" min="0" max="48">'.format(
             serial_cfg.get("rx_pin", 16))
 
         html += '<label>Baud Rate</label>'
@@ -528,39 +621,68 @@ class WebServer:
             html += '<option value="{}" {}>{}</option>'.format(baud, sel, baud)
         html += '</select>'
 
-        html += '<label>Prompt (e.g. pylon&gt; or pytes&gt;)</label>'
-        html += '<input name="prompt" value="{}">'.format(
-            serial_cfg.get("prompt", "pylon>"))
+        html += '<label>Parity</label>'
+        html += '<select name="parity">'
+        for p, pname in [("N", "None"), ("E", "Even"), ("O", "Odd")]:
+            sel = "selected" if serial_cfg.get("parity", "N") == p else ""
+            html += '<option value="{}" {}>{}</option>'.format(p, sel, pname)
+        html += '</select>'
+
+        html += '<label>Stop Bits</label>'
+        html += '<select name="stop_bits">'
+        for s in [1, 2]:
+            sel = "selected" if serial_cfg.get("stop_bits", 1) == s else ""
+            html += '<option value="{}" {}>{}</option>'.format(s, sel, s)
+        html += '</select>'
+
+        html += '<label>Console Prompt</label>'
+        html += '<select name="prompt">'
+        for p in ["pylon>", "pytes>", ">"]:
+            sel = "selected" if serial_cfg.get("prompt", "pylon>") == p else ""
+            html += '<option value="{}" {}>{}</option>'.format(p, sel, p)
+        html += '</select>'
+        html += '<p style="color:#888;font-size:0.85em;margin-top:-5px;">'
+        html += 'pylon&gt; for Pylontech, pytes&gt; for Pytes</p>'
 
         html += '<label>Response Timeout (ms)</label>'
-        html += '<input type="number" name="response_timeout_ms" value="{}">'.format(
+        html += '<input type="number" name="response_timeout_ms" value="{}" min="1000" max="30000">'.format(
             serial_cfg.get("response_timeout_ms", 5000))
 
-        html += '<button type="submit">Save</button>'
+        html += '<label>Line Ending</label>'
+        html += '<select name="line_ending">'
+        for val, label in [("\\r\\n", "CR+LF (\\r\\n)"), ("\\n", "LF (\\n)"), ("\\r", "CR (\\r)")]:
+            # compare the stored value against the Python escape sequence
+            stored = serial_cfg.get("line_ending", "\r\n")
+            stored_repr = stored.replace("\r\n", "\\r\\n").replace("\n", "\\n").replace("\r", "\\r")
+            sel = "selected" if stored_repr == val else ""
+            html += '<option value="{}" {}>{}</option>'.format(val, sel, label)
+        html += '</select>'
+
+        html += '<button type="submit">Save Port Settings</button>'
         html += '</form></div>'
 
         html += '<div class="card"><h2>Serial Bridge Server</h2>'
+        html += '<p style="color:#888;font-size:0.85em;">System B server that this device connects to when in serial_bridge mode.</p>'
         html += '<form method="POST" action="/serial">'
-
         html += '<input type="hidden" name="section" value="bridge">'
 
         html += '<label>Server Host</label>'
-        html += '<input name="server_host" value="{}">'.format(
+        html += '<input name="server_host" value="{}" placeholder="192.168.x.x or hostname">'.format(
             bridge_cfg.get("server_host", ""))
 
         html += '<label>Server Port</label>'
-        html += '<input type="number" name="server_port" value="{}">'.format(
+        html += '<input type="number" name="server_port" value="{}" min="1" max="65535">'.format(
             bridge_cfg.get("server_port", 8502))
 
         html += '<label>Reconnect Delay (seconds)</label>'
-        html += '<input type="number" name="reconnect_delay" value="{}">'.format(
+        html += '<input type="number" name="reconnect_delay" value="{}" min="1" max="300">'.format(
             bridge_cfg.get("reconnect_delay", 5))
 
         html += '<label>Keepalive Interval (seconds)</label>'
-        html += '<input type="number" name="keepalive_interval" value="{}">'.format(
+        html += '<input type="number" name="keepalive_interval" value="{}" min="10" max="300">'.format(
             bridge_cfg.get("keepalive_interval", 30))
 
-        html += '<button type="submit">Save</button>'
+        html += '<button type="submit">Save Bridge Settings</button>'
         html += '</form></div>'
 
         return html
@@ -568,7 +690,7 @@ class WebServer:
     def _handle_serial_save(self, body):
         """Handle serial config save."""
         config = load_config()
-        section = body.get("section", "serial")
+        section = body.get("section", "port")
 
         if section == "bridge":
             if "serial_bridge" not in config:
@@ -584,9 +706,14 @@ class WebServer:
             config["serial"]["tx_pin"] = int(body.get("tx_pin", 17))
             config["serial"]["rx_pin"] = int(body.get("rx_pin", 16))
             config["serial"]["baudrate"] = int(body.get("baudrate", 115200))
+            config["serial"]["parity"] = body.get("parity", "N")
+            config["serial"]["stop_bits"] = int(body.get("stop_bits", 1))
             config["serial"]["prompt"] = body.get("prompt", "pylon>")
             config["serial"]["response_timeout_ms"] = int(
                 body.get("response_timeout_ms", 5000))
+            # Convert escaped line ending representation back to real characters
+            le = body.get("line_ending", "\\r\\n")
+            config["serial"]["line_ending"] = le.replace("\\r\\n", "\r\n").replace("\\n", "\n").replace("\\r", "\r")
 
         save_config(config)
 
