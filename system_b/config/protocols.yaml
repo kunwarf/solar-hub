@@ -122,15 +122,46 @@ protocols:
   # BATTERIES
   # ============================================
 
+  - id: pylontech
+    name: "Pylontech Battery"
+    description: "Pylontech LFP battery modules (US2000, US3000, UP5000, FORCE series)"
+    device_type: battery
+    protocol_type: command
+    priority: 19
+    manufacturer: "Pylontech"
+    register_map: "pytes_registers.json"
+    adapter_class: "adapters.battery_pytes.PytesBatteryAdapter"
+
+    identification:
+      # Serial console 'info' command; response contains "Pylon" manufacturer
+      command: "info"
+      expected_response: "Pylon"
+      timeout: 5.0
+
+    serial_number:
+      # Barcode field from 'info' response is the serial number
+      command: "info"
+      parse_regex: "Barcode\\s*:\\s*([A-Z0-9]+)"
+
+    polling:
+      default_interval: 30
+      timeout: 10.0
+      max_consecutive_failures: 5
+
+    command:
+      line_ending: "\r\n"
+      response_timeout: 5.0
+      command_delay: 0.5
+
   - id: pytes
     name: "Pytes Battery"
-    description: "Pytes LFP battery modules"
+    description: "Pytes LFP battery modules (compatible with Pylontech protocol)"
     device_type: battery
     protocol_type: command
     priority: 20
     manufacturer: "Pytes"
     register_map: "pytes_registers.json"
-    adapter_class: "adapters.battery_pytes.PytesAdapter"
+    adapter_class: "adapters.battery_pytes.PytesBatteryAdapter"
 
     identification:
       # Command-based identification
@@ -139,18 +170,18 @@ protocols:
       timeout: 5.0
 
     serial_number:
-      command: "sn"
-      parse_regex: "SN:\\s*([A-Z0-9]+)"
+      command: "info"
+      parse_regex: "Barcode\\s*:\\s*([A-Z0-9]+)"
 
     polling:
-      default_interval: 10
-      timeout: 5.0
+      default_interval: 30
+      timeout: 10.0
       max_consecutive_failures: 5
 
     command:
       line_ending: "\r\n"
       response_timeout: 5.0
-      command_delay: 0.1
+      command_delay: 0.5
 
   - id: jkbms_tcp
     name: "JK-BMS (TCP)"

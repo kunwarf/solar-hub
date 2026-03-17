@@ -8,8 +8,15 @@ import asyncio
 import importlib
 import json
 import logging
+import struct
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+# Serial bridge framing constants (must match ESP32 serial_bridge.py)
+_MSG_COMMAND_REQUEST = 0x01
+_MSG_COMMAND_RESPONSE = 0x02
+_MSG_ERROR = 0x03
+_MAX_PAYLOAD = 8192
 
 from ..config import DeviceServerSettings, get_device_server_settings
 from ..connection.tcp_connection import TCPConnection
@@ -385,9 +392,81 @@ class TCPCommandAdapter:
             protocol.command.command_delay if protocol.command else 0.1
         )
 
+        # Lock ensures sequential command execution (ESP32 bridge is single-threaded)
+        self._command_lock = asyncio.Lock()
+
     async def send_command(self, command: str) -> Optional[str]:
         """
         Send command and get response.
+
+        Dispatches to framed protocol (bridged ESP32 serial connection) or
+        raw text protocol (direct serial-to-TCP converters) based on
+        whether the underlying connection is a serial bridge.
+
+        Args:
+            command: Command string.
+
+        Returns:
+            Response string or None.
+        """
+        if self.connection.bridged:
+            return await self._send_command_framed(command)
+        return await self._send_command_raw(command)
+
+    async def _send_command_framed(self, command: str) -> Optional[str]:
+        """
+        Send command using ESP32 serial bridge length-prefixed framing.
+
+        Frame format: [MSG_TYPE: 1B][LENGTH: 4B big-endian][PAYLOAD: LENGTH B]
+
+        Args:
+            command: Command string to forward to the battery.
+
+        Returns:
+            Response string or None on error.
+        """
+        async with self._command_lock:
+            try:
+                payload = command.encode("utf-8")
+                frame = struct.pack(">BI", _MSG_COMMAND_REQUEST, len(payload)) + payload
+                await self.connection.write(frame, timeout=self.timeout)
+
+                # Read 5-byte response frame header
+                resp_header = await self.connection.read(5, timeout=self.timeout)
+                msg_type = resp_header[0]
+                resp_len = struct.unpack(">I", resp_header[1:5])[0]
+
+                if resp_len > _MAX_PAYLOAD:
+                    logger.warning(f"Framed response too large: {resp_len} bytes")
+                    return None
+
+                resp_payload = b""
+                if resp_len > 0:
+                    resp_payload = await self.connection.read(
+                        resp_len, timeout=self.timeout
+                    )
+
+                if msg_type == _MSG_COMMAND_RESPONSE:
+                    return resp_payload.decode("utf-8", errors="replace")
+                elif msg_type == _MSG_ERROR:
+                    error_msg = resp_payload.decode("utf-8", errors="replace")
+                    logger.warning(f"Serial bridge returned error: {error_msg}")
+                    return None
+                else:
+                    logger.warning(
+                        f"Unexpected response frame type: {msg_type:#04x}"
+                    )
+                    return None
+
+            except Exception as e:
+                logger.debug(f"Framed command error: {e}")
+                return None
+
+    async def _send_command_raw(self, command: str) -> Optional[str]:
+        """
+        Send command using raw text protocol (direct serial-to-TCP converter).
+
+        Reads response lines until a prompt character ('>') is detected.
 
         Args:
             command: Command string.
@@ -399,10 +478,8 @@ class TCPCommandAdapter:
             cmd_bytes = (command + self.line_ending).encode("utf-8")
             await self.connection.write(cmd_bytes, timeout=self.timeout)
 
-            # Read response lines
+            # Read response lines until prompt
             response_lines = []
-            import asyncio
-
             try:
                 while True:
                     line = await asyncio.wait_for(
@@ -423,7 +500,7 @@ class TCPCommandAdapter:
             return "\n".join(response_lines) if response_lines else None
 
         except Exception as e:
-            logger.debug(f"Command error: {e}")
+            logger.debug(f"Raw command error: {e}")
             return None
 
     async def poll(self) -> Dict[str, Any]:

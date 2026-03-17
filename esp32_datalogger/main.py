@@ -40,6 +40,7 @@ web = None
 
 # Control flags
 _bridge_running = False
+_serial_bridge_running = False
 _web_running = False
 
 
@@ -70,14 +71,21 @@ def main():
         print("[Main] Connect to WiFi: {} (password: {})".format(ap_ssid, AP_PASSWORD))
         print("[Main] Then open http://192.168.4.1/")
 
-    # Initialize Modbus RTU
-    rtu = ModbusRTU(config["rtu"])
+    if mode == "serial_bridge":
+        # Serial bridge mode — deferred imports save heap in Modbus mode
+        from serial_port import SerialPort
+        from serial_bridge import SerialBridge
 
-    # Initialize bridge
-    bridge = ModbusBridge(rtu, config)
+        serial = SerialPort(config["serial"])
+        bridge = SerialBridge(serial, config)
 
-    # Initialize web server
-    web = WebServer(wifi, bridge, rtu)
+        web = WebServer(wifi, serial_bridge=bridge)
+    else:
+        # Modbus bridge mode (default)
+        rtu = ModbusRTU(config["rtu"])
+        bridge = ModbusBridge(rtu, config)
+        web = WebServer(wifi, bridge, rtu)
+
     web.start()
 
     # Start web server in background
@@ -86,6 +94,8 @@ def main():
     # Main loop
     if mode == "modbus_bridge":
         run_bridge_mode(config)
+    elif mode == "serial_bridge":
+        run_serial_bridge_mode(config)
     else:
         print("[Main] Unknown mode:", mode)
         # Keep running web server
@@ -104,6 +114,36 @@ def web_server_loop():
         except Exception as e:
             print("[Web] Error:", e)
             time.sleep(1)
+
+
+def run_serial_bridge_mode(config):
+    """Run in serial command bridge mode (for batteries)."""
+    global _serial_bridge_running
+
+    serial_bridge_cfg = config.get("serial_bridge", {})
+    reconnect_delay = serial_bridge_cfg.get("reconnect_delay", 5)
+
+    print("[Main] Serial bridge mode - connecting to {}:{}".format(
+        serial_bridge_cfg.get("server_host", ""),
+        serial_bridge_cfg.get("server_port", 8502)
+    ))
+
+    _serial_bridge_running = True
+
+    while _serial_bridge_running:
+        if not wifi.is_connected():
+            print("[Main] WiFi disconnected, reconnecting...")
+            if not wifi.connect_sta(timeout_s=15):
+                print("[Main] WiFi reconnection failed, retrying in {}s".format(
+                    reconnect_delay))
+                time.sleep(reconnect_delay)
+                continue
+
+        try:
+            bridge.run()
+        except Exception as e:
+            print("[Main] Serial bridge error:", e)
+            time.sleep(reconnect_delay)
 
 
 def run_bridge_mode(config):
@@ -139,9 +179,10 @@ def run_bridge_mode(config):
 
 def stop():
     """Stop all services."""
-    global _bridge_running, _web_running
+    global _bridge_running, _serial_bridge_running, _web_running
 
     _bridge_running = False
+    _serial_bridge_running = False
     _web_running = False
 
     if bridge:

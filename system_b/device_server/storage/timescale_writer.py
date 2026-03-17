@@ -21,7 +21,7 @@ except ImportError:
     asyncpg = None
 
 from ..config import DeviceServerSettings, get_device_server_settings
-from ..telemetry import DeyeHybridParser, PowdriveParser, TelemetryMetric, TelemetryParser
+from ..telemetry import DeyeHybridParser, PowdriveParser, PylontechParser, TelemetryMetric, TelemetryParser
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,8 @@ class TimescaleWriter:
         self.parsers = {
             'deye_hybrid': DeyeHybridParser(),
             'powdrive': PowdriveParser(),
+            'pylontech': PylontechParser(),
+            'pytes': PylontechParser(),
         }
         # Default parser for backwards compatibility
         self.default_parser = self.parsers['powdrive']
@@ -245,6 +247,8 @@ class TimescaleWriter:
         protocol_id = record.get("protocol_id", "").lower()
         if "deye" in protocol_id:
             return self.parsers['deye_hybrid']
+        elif "pylontech" in protocol_id or "pytes" in protocol_id:
+            return self.parsers['pylontech']
         elif "powdrive" in protocol_id:
             return self.parsers['powdrive']
 
@@ -256,6 +260,11 @@ class TimescaleWriter:
         if any(section in telemetry_data for section in deye_sections):
             logger.debug(f"Detected Deye format for device {record.get('device_id')}")
             return self.parsers['deye_hybrid']
+
+        # Pylontech/Pytes format has battery_units list
+        if "battery_units" in telemetry_data:
+            logger.debug(f"Detected Pylontech format for device {record.get('device_id')}")
+            return self.parsers['pylontech']
 
         # Powdrive format has flat structure with specific fields
         powdrive_fields = {'pv1_power_w', 'battery_power_w', 'grid_power_w', 'load_power_w'}

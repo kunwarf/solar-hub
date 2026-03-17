@@ -7,5 +7,6 @@ for storage in TimescaleDB.
 from .parser import TelemetryParser, TelemetryMetric
 from .deye_parser import DeyeHybridParser
 from .powdrive_parser import PowdriveParser
+from .pylontech_parser import PylontechParser
 
-__all__ = ['TelemetryParser', 'TelemetryMetric', 'DeyeHybridParser', 'PowdriveParser']
+__all__ = ['TelemetryParser', 'TelemetryMetric', 'DeyeHybridParser', 'PowdriveParser', 'PylontechParser']

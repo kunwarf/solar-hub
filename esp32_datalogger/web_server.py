@@ -59,6 +59,7 @@ td:first-child{font-weight:bold;width:40%}
 <a href="/files">Files</a>
 <a href="/wifi">WiFi</a>
 <a href="/modbus">Modbus</a>
+<a href="/serial">Serial</a>
 <a href="/server">Server</a>
 </div>
 """
@@ -72,7 +73,8 @@ HTML_FOOTER = """
 class WebServer:
     """Simple HTTP server for configuration."""
 
-    def __init__(self, wifi_manager, bridge=None, rtu=None, port=80):
+    def __init__(self, wifi_manager, bridge=None, rtu=None, port=80,
+                 serial_bridge=None):
         """
         Initialize web server.
 
@@ -81,10 +83,12 @@ class WebServer:
             bridge: ModbusBridge instance (optional).
             rtu: ModbusRTU instance (optional).
             port: HTTP port (default 80).
+            serial_bridge: SerialBridge instance (optional, for serial_bridge mode).
         """
         self.wifi = wifi_manager
         self.bridge = bridge
         self.rtu = rtu
+        self.serial_bridge = serial_bridge
         self.port = port
         self.socket = None
         self._running = False
@@ -221,6 +225,11 @@ class WebServer:
                     content = self._handle_modbus_save(body)
                 else:
                     content = self._page_modbus()
+            elif path == "/serial":
+                if method == "POST":
+                    content = self._handle_serial_save(body)
+                else:
+                    content = self._page_serial()
             elif path == "/server":
                 if method == "POST":
                     content = self._handle_server_save(body)
@@ -273,8 +282,9 @@ class WebServer:
         config = get_config()
         device_id = get_device_id()
 
-        # Bridge stats
-        bridge_stats = self.bridge.get_stats() if self.bridge else {}
+        # Bridge stats (Modbus or Serial bridge)
+        active_bridge = self.bridge or self.serial_bridge
+        bridge_stats = active_bridge.get_stats() if active_bridge else {}
 
         html = '<div class="card"><h2>Device Info</h2><table>'
         html += "<tr><td>Device ID</td><td>{}</td></tr>".format(device_id)
@@ -295,14 +305,25 @@ class WebServer:
             html += "<tr><td>AP IP</td><td>{}</td></tr>".format(wifi_status["ap_ip"])
         html += "</table></div>"
 
-        # Bridge Status
-        if self.bridge:
-            html += '<div class="card"><h2>Bridge Status</h2><table>'
+        # Bridge Status (Modbus or Serial)
+        active_bridge = self.bridge or self.serial_bridge
+        if active_bridge:
+            bridge_label = "Serial Bridge Status" if self.serial_bridge and not self.bridge \
+                else "Bridge Status"
+            html += '<div class="card"><h2>{}</h2><table>'.format(bridge_label)
             html += "<tr><td>Connected</td><td>{}</td></tr>".format(
-                "Yes" if self.bridge.is_connected() else "No"
+                "Yes" if active_bridge.is_connected() else "No"
             )
-            html += "<tr><td>Requests</td><td>{}</td></tr>".format(bridge_stats.get("requests", 0))
-            html += "<tr><td>Responses</td><td>{}</td></tr>".format(bridge_stats.get("responses", 0))
+            if self.serial_bridge and not self.bridge:
+                html += "<tr><td>Commands</td><td>{}</td></tr>".format(
+                    bridge_stats.get("commands", 0))
+                html += "<tr><td>Responses</td><td>{}</td></tr>".format(
+                    bridge_stats.get("responses", 0))
+            else:
+                html += "<tr><td>Requests</td><td>{}</td></tr>".format(
+                    bridge_stats.get("requests", 0))
+                html += "<tr><td>Responses</td><td>{}</td></tr>".format(
+                    bridge_stats.get("responses", 0))
             html += "<tr><td>Errors</td><td>{}</td></tr>".format(bridge_stats.get("errors", 0))
             html += "</table></div>"
 
@@ -475,6 +496,101 @@ class WebServer:
         save_config(config)
 
         return '<div class="status status-ok">Server settings saved. Reboot to apply.</div>' + self._page_server()
+
+    def _page_serial(self):
+        """Serial port configuration page (for serial_bridge mode)."""
+        config = get_config()
+        serial_cfg = config.get("serial", {})
+        bridge_cfg = config.get("serial_bridge", {})
+
+        html = '<div class="card"><h2>Serial Port (RS232/MAX3232)</h2>'
+        html += '<form method="POST" action="/serial">'
+
+        html += '<label>UART ID</label>'
+        html += '<select name="uart_id">'
+        for i in [1, 2]:
+            sel = "selected" if serial_cfg.get("uart_id") == i else ""
+            html += '<option value="{}" {}>{}</option>'.format(i, sel, i)
+        html += '</select>'
+
+        html += '<label>TX Pin</label>'
+        html += '<input type="number" name="tx_pin" value="{}">'.format(
+            serial_cfg.get("tx_pin", 17))
+
+        html += '<label>RX Pin</label>'
+        html += '<input type="number" name="rx_pin" value="{}">'.format(
+            serial_cfg.get("rx_pin", 16))
+
+        html += '<label>Baud Rate</label>'
+        html += '<select name="baudrate">'
+        for baud in [9600, 19200, 38400, 57600, 115200]:
+            sel = "selected" if serial_cfg.get("baudrate") == baud else ""
+            html += '<option value="{}" {}>{}</option>'.format(baud, sel, baud)
+        html += '</select>'
+
+        html += '<label>Prompt (e.g. pylon&gt; or pytes&gt;)</label>'
+        html += '<input name="prompt" value="{}">'.format(
+            serial_cfg.get("prompt", "pylon>"))
+
+        html += '<label>Response Timeout (ms)</label>'
+        html += '<input type="number" name="response_timeout_ms" value="{}">'.format(
+            serial_cfg.get("response_timeout_ms", 5000))
+
+        html += '<button type="submit">Save</button>'
+        html += '</form></div>'
+
+        html += '<div class="card"><h2>Serial Bridge Server</h2>'
+        html += '<form method="POST" action="/serial">'
+
+        html += '<input type="hidden" name="section" value="bridge">'
+
+        html += '<label>Server Host</label>'
+        html += '<input name="server_host" value="{}">'.format(
+            bridge_cfg.get("server_host", ""))
+
+        html += '<label>Server Port</label>'
+        html += '<input type="number" name="server_port" value="{}">'.format(
+            bridge_cfg.get("server_port", 8502))
+
+        html += '<label>Reconnect Delay (seconds)</label>'
+        html += '<input type="number" name="reconnect_delay" value="{}">'.format(
+            bridge_cfg.get("reconnect_delay", 5))
+
+        html += '<label>Keepalive Interval (seconds)</label>'
+        html += '<input type="number" name="keepalive_interval" value="{}">'.format(
+            bridge_cfg.get("keepalive_interval", 30))
+
+        html += '<button type="submit">Save</button>'
+        html += '</form></div>'
+
+        return html
+
+    def _handle_serial_save(self, body):
+        """Handle serial config save."""
+        config = load_config()
+        section = body.get("section", "serial")
+
+        if section == "bridge":
+            if "serial_bridge" not in config:
+                config["serial_bridge"] = {}
+            config["serial_bridge"]["server_host"] = body.get("server_host", "").strip()
+            config["serial_bridge"]["server_port"] = int(body.get("server_port", 8502))
+            config["serial_bridge"]["reconnect_delay"] = int(body.get("reconnect_delay", 5))
+            config["serial_bridge"]["keepalive_interval"] = int(body.get("keepalive_interval", 30))
+        else:
+            if "serial" not in config:
+                config["serial"] = {}
+            config["serial"]["uart_id"] = int(body.get("uart_id", 1))
+            config["serial"]["tx_pin"] = int(body.get("tx_pin", 17))
+            config["serial"]["rx_pin"] = int(body.get("rx_pin", 16))
+            config["serial"]["baudrate"] = int(body.get("baudrate", 115200))
+            config["serial"]["prompt"] = body.get("prompt", "pylon>")
+            config["serial"]["response_timeout_ms"] = int(
+                body.get("response_timeout_ms", 5000))
+
+        save_config(config)
+
+        return '<div class="status status-ok">Serial settings saved. Reboot to apply.</div>' + self._page_serial()
 
     def _handle_reboot(self):
         """Handle reboot request."""
@@ -682,13 +798,15 @@ refreshLogs();
     def _get_status_json(self):
         """Get status as JSON."""
         wifi_status = self.wifi.get_status()
-        bridge_stats = self.bridge.get_stats() if self.bridge else {}
+        active_bridge = self.bridge or self.serial_bridge
+        bridge_stats = active_bridge.get_stats() if active_bridge else {}
 
         return {
             "device_id": get_device_id(),
             "wifi": wifi_status,
             "bridge": {
-                "connected": self.bridge.is_connected() if self.bridge else False,
+                "connected": active_bridge.is_connected() if active_bridge else False,
+                "type": "serial" if self.serial_bridge and not self.bridge else "modbus",
                 "stats": bridge_stats,
             }
         }

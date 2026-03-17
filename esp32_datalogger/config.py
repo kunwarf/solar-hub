@@ -15,7 +15,7 @@ AP_PASSWORD = "12345678"
 
 # Default configuration
 DEFAULT_CONFIG = {
-    "mode": "modbus_bridge",  # modbus_bridge | tcp_server | mqtt
+    "mode": "modbus_bridge",  # modbus_bridge | serial_bridge | tcp_server | mqtt
 
     # Modbus RTU settings (connection to inverter)
     "rtu": {
@@ -58,6 +58,30 @@ DEFAULT_CONFIG = {
     "api": {
         "base_url": "http://182.180.150.107:8001",
         "register_endpoint": "/api/v1/devices/self-register",
+    },
+
+    # Serial port settings (connection to RS232 devices via MAX3232)
+    # Used in serial_bridge mode for Pylontech/Pytes batteries.
+    # Note: UART1 is used to avoid conflict with CH340 on UART0.
+    "serial": {
+        "uart_id": 1,
+        "tx_pin": 17,
+        "rx_pin": 16,
+        "baudrate": 115200,
+        "parity": "N",          # N/E/O
+        "stop_bits": 1,
+        "data_bits": 8,
+        "response_timeout_ms": 5000,
+        "prompt": "pylon>",     # pylon> for Pylontech, pytes> for Pytes
+        "line_ending": "\r\n",
+    },
+
+    # Serial Bridge mode (connect TO server, forward commands to serial port)
+    "serial_bridge": {
+        "server_host": "",
+        "server_port": 8502,
+        "reconnect_delay": 5,
+        "keepalive_interval": 30,
     },
 
     # Device info

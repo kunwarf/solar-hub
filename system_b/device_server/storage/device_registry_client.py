@@ -209,6 +209,64 @@ class DeviceRegistryClient:
             logger.error(f"Error querying by inverter serial: {e}")
             return None
 
+    async def get_registration_by_serial(
+        self,
+        serial_number: str,
+    ) -> Optional[dict]:
+        """
+        Get full registration info for a serial bridge HELLO identification.
+
+        Returns device_type, manufacturer, model, firmware_version, and the
+        optional protocol_id stored in metadata (set during self-registration).
+
+        Args:
+            serial_number: The data logger serial number from the HELLO frame.
+
+        Returns:
+            Dict with registration fields, or None if not found.
+        """
+        if not self._session_factory:
+            logger.warning("Device registry client not connected")
+            return None
+
+        try:
+            async with self._session_factory() as session:
+                result = await session.execute(
+                    text("""
+                    SELECT device_type, manufacturer, model, firmware_version, metadata
+                    FROM device_registry
+                    WHERE serial_number = CAST(:serial_number AS text)
+                    LIMIT 1
+                    """),
+                    {"serial_number": serial_number},
+                )
+                row = result.fetchone()
+
+                if not row:
+                    logger.debug(
+                        f"No registration found for serial {serial_number}"
+                    )
+                    return None
+
+                device_type, manufacturer, model, firmware_version, metadata = row
+
+                # Extract protocol_id from metadata if the ESP32 stored it
+                protocol_id = None
+                if isinstance(metadata, dict):
+                    protocol_id = metadata.get("protocol_id")
+
+                return {
+                    "device_type": device_type,
+                    "manufacturer": manufacturer,
+                    "model": model,
+                    "firmware_version": firmware_version,
+                    "protocol_id": protocol_id,
+                }
+
+        except Exception as e:
+            logger.error(f"Error querying registration for {serial_number}: {e}")
+            return None
+
     async def get_device_by_serial(
         self,
         serial_number: str,

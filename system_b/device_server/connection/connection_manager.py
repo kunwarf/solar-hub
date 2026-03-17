@@ -6,6 +6,7 @@ identification to polling, managing device state transitions.
 """
 import asyncio
 import logging
+import struct
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 from uuid import UUID
@@ -16,6 +17,10 @@ from .tcp_connection import ConnectionState, TCPConnection
 if TYPE_CHECKING:
     from ..identification.prober import DeviceProber
     from ..devices.device_manager import DeviceManager
+    from ..storage.device_registry_client import DeviceRegistryClient
+
+# Serial bridge framing constants
+_MSG_HELLO = 0x06
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +65,7 @@ class ConnectionManager:
         prober: "DeviceProber",
         device_manager: "DeviceManager",
         settings: Optional[DeviceServerSettings] = None,
+        device_registry_client: Optional["DeviceRegistryClient"] = None,
     ):
         """
         Initialize the connection manager.
@@ -68,10 +74,13 @@ class ConnectionManager:
             prober: Device prober for identification.
             device_manager: Device manager for handling identified devices.
             settings: Server settings.
+            device_registry_client: Optional registry client for HELLO-based
+                identification (serial bridge connections).
         """
         self.prober = prober
         self.device_manager = device_manager
         self.settings = settings or get_device_server_settings()
+        self._device_registry_client = device_registry_client
 
         # Track connections by various keys
         self._connections: Dict[UUID, TCPConnection] = {}
@@ -129,9 +138,35 @@ class ConnectionManager:
             await asyncio.sleep(0.5)
 
             # Phase 1: Identification
+            # First, peek for HELLO frame (0x06) sent immediately by serial bridge ESP32.
+            # Non-bridged connections (Modbus bridge) never send data until polled, so
+            # read(1) with a 0.5s timeout is safe — it will time out for Modbus bridges.
             logger.info(f"Phase 1: Identifying device on {connection.remote_addr}")
             connection.state = ConnectionState.IDENTIFYING
-            identified = await self._identify_device(connection)
+
+            try:
+                first_byte = await asyncio.wait_for(
+                    connection.reader.read(1),
+                    timeout=0.5,
+                )
+            except asyncio.TimeoutError:
+                first_byte = b""
+
+            if first_byte == bytes([_MSG_HELLO]):
+                logger.info(
+                    f"HELLO detected from {connection.remote_addr} — "
+                    f"using serial bridge identification path"
+                )
+                identified = await self._identify_from_hello(connection)
+                if identified:
+                    connection.bridged = True
+            else:
+                if first_byte and first_byte[0] != _MSG_HELLO:
+                    logger.warning(
+                        f"Unexpected initial byte from {connection.remote_addr}: "
+                        f"{first_byte.hex()} — falling back to probe identification"
+                    )
+                identified = await self._identify_device(connection)
 
             if not identified:
                 logger.warning(
@@ -253,6 +288,120 @@ class ConnectionManager:
                 )
 
         return None
+
+    async def _identify_from_hello(
+        self,
+        connection: TCPConnection,
+    ) -> Optional[IdentifiedDevice]:
+        """
+        Identify a serial bridge device from its HELLO frame.
+
+        The first byte (0x06) has already been consumed; read the remaining
+        4-byte length header + serial number payload.
+
+        Args:
+            connection: The connection that sent HELLO.
+
+        Returns:
+            IdentifiedDevice if successful, None otherwise.
+        """
+        try:
+            # Read 4-byte length field (already consumed the 0x06 type byte)
+            length_bytes = await connection.read(4, timeout=5.0)
+            payload_len = struct.unpack(">I", length_bytes)[0]
+
+            if payload_len == 0 or payload_len > 256:
+                logger.warning(
+                    f"Invalid HELLO payload length {payload_len} from "
+                    f"{connection.remote_addr}"
+                )
+                return None
+
+            # Read serial number
+            serial_bytes = await connection.read(payload_len, timeout=5.0)
+            serial_number = serial_bytes.decode("utf-8", errors="replace").strip()
+
+            if not serial_number:
+                logger.warning(
+                    f"Empty serial number in HELLO from {connection.remote_addr}"
+                )
+                return None
+
+            logger.info(
+                f"HELLO serial={serial_number} from {connection.remote_addr}"
+            )
+
+            # Query device registry for registration metadata
+            device_type = "battery"
+            manufacturer = None
+            model = None
+            firmware_version = None
+            protocol_id_hint = None
+
+            if self._device_registry_client:
+                reg = await self._device_registry_client.get_registration_by_serial(
+                    serial_number
+                )
+                if reg:
+                    device_type = reg.get("device_type", "battery")
+                    manufacturer = reg.get("manufacturer")
+                    model = reg.get("model")
+                    firmware_version = reg.get("firmware_version")
+                    protocol_id_hint = reg.get("protocol_id")
+
+            # Find the protocol to use
+            from ..protocols.definitions import DeviceType
+            protocol = None
+
+            # 1. Try explicit protocol hint from registry metadata
+            if protocol_id_hint:
+                protocol = self.prober.registry.get(protocol_id_hint)
+
+            # 2. Find highest-priority command protocol matching device_type
+            if not protocol:
+                try:
+                    dt = DeviceType(device_type)
+                except ValueError:
+                    dt = None
+
+                for p in self.prober.registry.iter_command_by_priority():
+                    if dt is None or p.device_type == dt:
+                        protocol = p
+                        break
+
+            # 3. Last resort: any command protocol
+            if not protocol:
+                cmd_protocols = list(self.prober.registry.get_command_protocols())
+                if cmd_protocols:
+                    protocol = cmd_protocols[0]
+
+            if not protocol:
+                logger.error(
+                    f"No command protocol found for serial bridge device "
+                    f"{serial_number} (device_type={device_type})"
+                )
+                return None
+
+            logger.info(
+                f"HELLO identification: serial={serial_number}, "
+                f"protocol={protocol.protocol_id}, device_type={device_type}"
+            )
+
+            return IdentifiedDevice(
+                protocol_id=protocol.protocol_id,
+                serial_number=serial_number,
+                device_type=device_type,
+                model=model,
+                manufacturer=manufacturer,
+                firmware_version=firmware_version,
+                extra_data={"bridged": True},
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"HELLO identification error for {connection.remote_addr}: {e}"
+            )
+            return None
 
     async def _register_device(
         self,

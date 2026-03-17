@@ -68,6 +68,9 @@ class TCPConnection:
         self._protocol_id: Optional[str] = None
         self._serial_number: Optional[str] = None
 
+        # Set to True for serial bridge connections (ESP32 sends HELLO on connect)
+        self._bridged: bool = False
+
         # Extract addresses
         try:
             peername = writer.get_extra_info("peername")
@@ -163,6 +166,16 @@ class TCPConnection:
     def serial_number(self, value: str) -> None:
         """Set device serial number."""
         self._serial_number = value
+
+    @property
+    def bridged(self) -> bool:
+        """True if this is a serial bridge connection (ESP32 HELLO protocol)."""
+        return self._bridged
+
+    @bridged.setter
+    def bridged(self, value: bool) -> None:
+        """Mark connection as a serial bridge."""
+        self._bridged = value
 
     async def read(
         self,
@@ -399,6 +412,7 @@ class TCPConnection:
             "device_id": str(self._device_id) if self._device_id else None,
             "protocol_id": self._protocol_id,
             "serial_number": self._serial_number,
+            "bridged": self._bridged,
             "connected_at": self._connected_at.isoformat(),
             "uptime_seconds": (now - self._connected_at).total_seconds(),
             "last_activity": self._last_activity.isoformat(),

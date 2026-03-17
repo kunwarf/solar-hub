@@ -817,6 +817,72 @@ async def get_device_realtime_telemetry(
 
 
 @router.get(
+    "/{device_id}/battery/bank",
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_device_battery_bank(
+    device_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    cache: TelemetryCacheReader = Depends(get_telemetry_cache),
+):
+    """
+    Get detailed battery bank telemetry (Pylontech/Pytes).
+
+    Returns per-unit and per-cell data written by System B from the
+    Pylontech serial command protocol. Falls back to bank-level data
+    from the generic battery section when no cell data is available.
+    """
+    device = await uow.devices.get_by_id(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    await check_site_access(device.site_id, current_user, uow)
+
+    telemetry = await cache.get_telemetry(device.serial_number)
+
+    if not telemetry:
+        return {
+            "device_id": str(device_id),
+            "serial_number": device.serial_number,
+            "available": False,
+            "battery_bank": None,
+        }
+
+    battery_bank = telemetry.get("battery_bank")
+    battery = telemetry.get("battery", {})
+
+    return {
+        "device_id": str(device_id),
+        "serial_number": device.serial_number,
+        "available": battery_bank is not None,
+        "timestamp": telemetry.get("timestamp"),
+        # Bank-level summary (always present for battery devices)
+        "bank": {
+            "soc_pct": battery.get("soc_pct"),
+            "voltage_v": battery.get("voltage_v"),
+            "current_a": battery.get("current_a"),
+            "charging": battery.get("charging"),
+            "power_w": telemetry.get("raw", {}).get("battery_power_w"),
+            "temp_c": telemetry.get("temperatures", {}).get("battery_c"),
+            "soh_pct": battery_bank.get("soh_pct") if battery_bank else None,
+            "cycle_count": battery_bank.get("cycle_count") if battery_bank else None,
+            "units_count": battery_bank.get("units_count") if battery_bank else None,
+            "has_alarm": battery_bank.get("has_alarm") if battery_bank else None,
+            "alarms": battery_bank.get("alarms") if battery_bank else [],
+        },
+        # Per-unit detail (Pylontech only)
+        "units": battery_bank.get("units", []) if battery_bank else [],
+        # Per-cell detail (Pylontech only)
+        "cells": battery_bank.get("cells", []) if battery_bank else [],
+    }
+
+
+@router.get(
     "/serial/{serial_number}/telemetry/realtime",
     responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
 )

@@ -367,6 +367,22 @@ class TelemetryCacheWriter:
             status_data["working_mode_name"] = telemetry["working_mode_name"]
         cache_data["status"] = status_data
 
+        # Battery bank detail (Pylontech/Pytes per-unit and per-cell data)
+        battery_units = telemetry.get("battery_units")
+        battery_cells = telemetry.get("battery_cells")
+        if battery_units or battery_cells:
+            bank_data: dict = {}
+            if battery_units:
+                bank_data["units"] = battery_units
+            if battery_cells:
+                bank_data["cells"] = battery_cells
+            # Carry over bank-level extras
+            for key in ("battery_soh_pct", "battery_cycle_count", "battery_units_count",
+                        "battery_has_alarm", "battery_has_fault", "battery_alarms"):
+                if key in telemetry:
+                    bank_data[key.replace("battery_", "")] = telemetry[key]
+            cache_data["battery_bank"] = bank_data
+
         # Also include raw telemetry values for flexibility
         # (System A can use either structured or raw data)
         cache_data["raw"] = {

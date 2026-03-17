@@ -13,6 +13,7 @@ from .base_simulator import BaseSimulator
 from .inverter_simulator import PowdriveSimulator
 from .meter_simulator import IAMMeterSimulator
 from .battery_simulator import PytesBatterySimulator
+from .pylontech_simulator import PylontechBridgeSimulator
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,54 @@ class SimulatorManager:
         )
 
         logger.info(f"Added battery simulator '{name}' ({serial_number}) on port {port}")
+        return simulator
+
+    def add_pylontech_bridge(
+        self,
+        name: str,
+        data_logger_serial: str,
+        barcode: str = "PYLT00001234",
+        num_units: int = 2,
+        initial_soc: float = 75.0,
+    ) -> PylontechBridgeSimulator:
+        """
+        Register a Pylontech serial bridge simulator (TCP client).
+
+        Unlike inverter/meter/battery simulators, this is a TCP CLIENT —
+        it connects outbound to the device server rather than listening.
+        Call ``await sim.connect(host, port)`` and ``await sim.run()``
+        manually after the device server is ready.
+
+        Args:
+            name: Unique name for the simulator.
+            data_logger_serial: Serial sent in the HELLO frame.
+            barcode: Pylontech battery barcode from ``info`` command.
+            num_units: Number of battery modules to simulate.
+            initial_soc: Starting state of charge (%).
+
+        Returns:
+            The created PylontechBridgeSimulator (not yet connected).
+        """
+        simulator = PylontechBridgeSimulator(
+            data_logger_serial=data_logger_serial,
+            barcode=barcode,
+            num_units=num_units,
+            initial_soc=initial_soc,
+        )
+
+        # Port 0 is a placeholder — Pylontech bridge connects outbound,
+        # so there is no listening port to allocate.
+        self._simulators[name] = SimulatorInfo(
+            simulator=simulator,  # type: ignore[arg-type]
+            port=0,
+            host=self.host,
+            auto_start=False,  # must be connected manually
+        )
+
+        logger.info(
+            f"Added Pylontech bridge simulator '{name}' "
+            f"(serial={data_logger_serial}, barcode={barcode})"
+        )
         return simulator
 
     def add_simulator(

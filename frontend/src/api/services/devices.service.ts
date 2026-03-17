@@ -194,6 +194,19 @@ class DevicesService {
     }
   }
 
+  /**
+   * Get battery bank detail (Pylontech/Pytes) — per-unit and per-cell data
+   */
+  async getBatteryBank(deviceId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.devices.batteryBank(deviceId));
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch battery bank data:', error);
+      return null;
+    }
+  }
+
   // ============================================================================
   // Device Claiming Methods (via System A auth endpoints)
   // ============================================================================

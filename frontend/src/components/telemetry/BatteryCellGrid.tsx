@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Thermometer, Zap, Battery, Activity } from "lucide-react";
+import { Thermometer, Zap, Battery, Activity, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -18,6 +20,9 @@ import {
   AreaChart,
   Area,
 } from "recharts";
+import { devicesService } from "@/api/services/devices.service";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CellData {
   id: number;
@@ -28,29 +33,56 @@ interface CellData {
   status: "normal" | "warning" | "critical" | "balancing";
 }
 
-// Generate mock cell data for a battery pack
-const generateCellData = (packId: number, cellCount: number = 16): CellData[] => {
-  return Array.from({ length: cellCount }, (_, i) => {
-    const baseVoltage = 3.2 + Math.random() * 0.5;
-    const baseTemp = 25 + Math.random() * 20;
-    const baseSoc = 70 + Math.random() * 25;
-    const health = 90 + Math.random() * 10;
-    
-    // Add some variation for visual interest
-    const isWarning = Math.random() > 0.9;
-    const isCritical = Math.random() > 0.97;
-    const isBalancing = Math.random() > 0.85 && !isWarning && !isCritical;
-    
-    return {
-      id: packId * 100 + i + 1,
-      voltage: Number((isWarning ? baseVoltage - 0.3 : baseVoltage).toFixed(3)),
-      temperature: Number((isCritical ? baseTemp + 15 : baseTemp).toFixed(1)),
-      soc: Number(baseSoc.toFixed(1)),
-      health: Number(health.toFixed(1)),
-      status: isCritical ? "critical" : isWarning ? "warning" : isBalancing ? "balancing" : "normal",
-    };
-  });
-};
+interface UnitData {
+  unit: number;
+  voltage_v?: number;
+  current_a?: number;
+  soc_pct?: number;
+  temp_c?: number;
+  soh_pct?: number;
+  cycle_count?: number;
+  power_w?: number;
+  basic_status?: string;
+  has_alarm?: boolean;
+  has_fault?: boolean;
+}
+
+interface RawCellData {
+  unit: number;
+  cell: number;
+  voltage_v?: number;
+  current_a?: number;
+  temperature?: number;
+  soc?: number;
+  basic_st?: string;
+  volt_st?: string;
+  curr_st?: string;
+  temp_st?: string;
+}
+
+interface BankData {
+  soc_pct?: number;
+  voltage_v?: number;
+  current_a?: number;
+  charging?: boolean;
+  power_w?: number;
+  temp_c?: number;
+  soh_pct?: number;
+  cycle_count?: number;
+  units_count?: number;
+  has_alarm?: boolean;
+  alarms?: string[];
+}
+
+interface BatteryBankResponse {
+  device_id: string;
+  serial_number: string;
+  available: boolean;
+  timestamp?: string;
+  bank: BankData;
+  units: UnitData[];
+  cells: RawCellData[];
+}
 
 interface DeviceTelemetry {
   serial_number: string;
@@ -71,68 +103,61 @@ interface BatteryCellGridProps {
   telemetry?: DeviceTelemetry | null;
 }
 
-const batteryPacks = [
-  { id: 1, name: "Battery Pack A", cells: generateCellData(1, 16) },
-  { id: 2, name: "Battery Pack B", cells: generateCellData(2, 16) },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Historical battery data
-const generateHistoricalData = () => {
-  return Array.from({ length: 24 }, (_, i) => {
-    const hour = i;
-    const sunIntensity = Math.max(0, Math.sin((hour - 6) * Math.PI / 12));
-    const baseSOC = 50;
-    const charging = sunIntensity > 0.3;
-    
-    return {
-      time: `${hour.toString().padStart(2, "0")}:00`,
-      soc: Math.min(95, Math.max(15, baseSOC + (charging ? sunIntensity * 40 : -hour * 2) + Math.random() * 5)),
-      voltage: 51.2 + Math.random() * 2,
-      current: charging ? 20 + Math.random() * 10 : -(10 + Math.random() * 5),
-      temperature: 25 + sunIntensity * 10 + Math.random() * 3,
-      power: charging ? 2 + Math.random() : -(1 + Math.random()),
-    };
-  });
-};
+/**
+ * Map a raw cell from the backend to the CellData shape the UI expects.
+ * Status is derived from voltage/temperature thresholds and status strings.
+ */
+function mapRawCell(raw: RawCellData, unitIndex: number): CellData {
+  const voltage = raw.voltage_v ?? 0;
+  const temp = raw.temperature ?? 25;
+  const soc = raw.soc ?? 0;
 
-const historicalData = generateHistoricalData();
+  const statusStr = (raw.basic_st ?? raw.volt_st ?? "Normal").toLowerCase();
+  let status: CellData["status"] = "normal";
+  if (statusStr.includes("fault") || statusStr.includes("error") || voltage < 2.9 || temp > 50) {
+    status = "critical";
+  } else if (statusStr.includes("warn") || voltage < 3.1 || temp > 42) {
+    status = "warning";
+  } else if (statusStr.includes("balance") || statusStr.includes("bal")) {
+    status = "balancing";
+  }
+
+  return {
+    id: raw.unit * 100 + raw.cell,
+    voltage,
+    temperature: temp,
+    soc,
+    health: 100,
+    status,
+  };
+}
 
 const getStatusColor = (status: CellData["status"]) => {
   switch (status) {
-    case "critical":
-      return "text-destructive";
-    case "warning":
-      return "text-warning";
-    case "balancing":
-      return "text-blue-400";
-    default:
-      return "text-battery";
+    case "critical":  return "text-destructive";
+    case "warning":   return "text-warning";
+    case "balancing": return "text-blue-400";
+    default:          return "text-battery";
   }
 };
 
 const getStatusBorderColor = (status: CellData["status"]) => {
   switch (status) {
-    case "critical":
-      return "#ef4444";
-    case "warning":
-      return "#f59e0b";
-    case "balancing":
-      return "#60a5fa";
-    default:
-      return "#22c55e";
+    case "critical":  return "#ef4444";
+    case "warning":   return "#f59e0b";
+    case "balancing": return "#60a5fa";
+    default:          return "#22c55e";
   }
 };
 
 const getFillColor = (status: CellData["status"]) => {
   switch (status) {
-    case "critical":
-      return "#ef4444";
-    case "warning":
-      return "#f59e0b";
-    case "balancing":
-      return "#60a5fa";
-    default:
-      return "#22c55e";
+    case "critical":  return "#ef4444";
+    case "warning":   return "#f59e0b";
+    case "balancing": return "#60a5fa";
+    default:          return "#22c55e";
   }
 };
 
@@ -148,11 +173,13 @@ const getTempColor = (temp: number) => {
   return "text-muted-foreground";
 };
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
 const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
   const fillPercent = cell.soc;
   const borderColor = getStatusBorderColor(cell.status);
   const fillColor = getFillColor(cell.status);
-  
+
   return (
     <TooltipProvider>
       <Tooltip delayDuration={100}>
@@ -166,72 +193,22 @@ const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
               cell.status === "balancing" && "animate-pulse"
             )}
           >
-            <svg
-              viewBox="0 0 24 40"
-              className="w-full h-10"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* Battery terminal (top cap) */}
-              <rect
-                x="8"
-                y="0"
-                width="8"
-                height="3"
-                rx="1"
-                fill={borderColor}
-                opacity="0.8"
-              />
-              
-              {/* Battery body outline */}
-              <rect
-                x="2"
-                y="4"
-                width="20"
-                height="34"
-                rx="3"
-                stroke={borderColor}
-                strokeWidth="1.5"
-                fill="transparent"
-              />
-              
-              {/* Battery fill level */}
+            <svg viewBox="0 0 24 40" className="w-full h-10" fill="none">
+              <rect x="8" y="0" width="8" height="3" rx="1" fill={borderColor} opacity="0.8" />
+              <rect x="2" y="4" width="20" height="34" rx="3" stroke={borderColor} strokeWidth="1.5" fill="transparent" />
               <motion.rect
-                x="4"
-                width="16"
-                rx="2"
-                fill={fillColor}
-                opacity="0.7"
+                x="4" width="16" rx="2" fill={fillColor} opacity="0.7"
                 initial={{ y: 36, height: 0 }}
-                animate={{ 
-                  y: 6 + (30 * (1 - fillPercent / 100)), 
-                  height: 30 * (fillPercent / 100) 
-                }}
+                animate={{ y: 6 + (30 * (1 - fillPercent / 100)), height: 30 * (fillPercent / 100) }}
                 transition={{ delay: index * 0.015 + 0.1, duration: 0.4, ease: "easeOut" }}
               />
-              
-              {/* Cell number */}
-              <text
-                x="12"
-                y="24"
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill="currentColor"
-                className="text-[8px] font-mono font-bold fill-foreground"
-                style={{ fontSize: '8px' }}
-              >
+              <text x="12" y="24" textAnchor="middle" dominantBaseline="middle"
+                fill="currentColor" className="fill-foreground" style={{ fontSize: '8px' }}>
                 {index + 1}
               </text>
-              
-              {/* Status indicator dot */}
               {cell.status !== "normal" && (
-                <circle
-                  cx="18"
-                  cy="8"
-                  r="2.5"
-                  fill={borderColor}
-                  className={cell.status === "critical" ? "animate-ping" : ""}
-                />
+                <circle cx="18" cy="8" r="2.5" fill={borderColor}
+                  className={cell.status === "critical" ? "animate-ping" : ""} />
               )}
             </svg>
           </motion.div>
@@ -244,27 +221,17 @@ const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
                 <Zap className={cn("w-3 h-3", getVoltageColor(cell.voltage))} />
                 <span className="text-muted-foreground">Voltage:</span>
               </div>
-              <span className={cn("font-mono", getVoltageColor(cell.voltage))}>
-                {cell.voltage}V
-              </span>
-              
+              <span className={cn("font-mono", getVoltageColor(cell.voltage))}>{cell.voltage}V</span>
               <div className="flex items-center gap-1">
                 <Thermometer className={cn("w-3 h-3", getTempColor(cell.temperature))} />
                 <span className="text-muted-foreground">Temp:</span>
               </div>
-              <span className={cn("font-mono", getTempColor(cell.temperature))}>
-                {cell.temperature}°C
-              </span>
-              
+              <span className={cn("font-mono", getTempColor(cell.temperature))}>{cell.temperature}°C</span>
               <div className="flex items-center gap-1">
                 <Battery className="w-3 h-3 text-battery" />
                 <span className="text-muted-foreground">SOC:</span>
               </div>
               <span className="font-mono text-battery">{cell.soc}%</span>
-              
-              <span className="text-muted-foreground">Health:</span>
-              <span className="font-mono text-foreground">{cell.health}%</span>
-              
               <span className="text-muted-foreground">Status:</span>
               <span className={cn(
                 "capitalize font-medium",
@@ -272,9 +239,7 @@ const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
                 cell.status === "warning" && "text-warning",
                 cell.status === "balancing" && "text-blue-400",
                 cell.status === "normal" && "text-success"
-              )}>
-                {cell.status}
-              </span>
+              )}>{cell.status}</span>
             </div>
           </div>
         </TooltipContent>
@@ -284,13 +249,14 @@ const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
 };
 
 const PackStats = ({ cells }: { cells: CellData[] }) => {
-  const avgVoltage = cells.reduce((sum, c) => sum + c.voltage, 0) / cells.length;
-  const avgTemp = cells.reduce((sum, c) => sum + c.temperature, 0) / cells.length;
-  const avgSoc = cells.reduce((sum, c) => sum + c.soc, 0) / cells.length;
-  const minVoltage = Math.min(...cells.map(c => c.voltage));
-  const maxVoltage = Math.max(...cells.map(c => c.voltage));
-  const deltaVoltage = maxVoltage - minVoltage;
-  
+  if (!cells.length) return null;
+  const avgVoltage = cells.reduce((s, c) => s + c.voltage, 0) / cells.length;
+  const avgTemp = cells.reduce((s, c) => s + c.temperature, 0) / cells.length;
+  const avgSoc = cells.reduce((s, c) => s + c.soc, 0) / cells.length;
+  const minV = Math.min(...cells.map(c => c.voltage));
+  const maxV = Math.max(...cells.map(c => c.voltage));
+  const deltaV = maxV - minV;
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 mt-2 sm:mt-3">
       <div className="bg-secondary/30 rounded-md px-1.5 sm:px-2 py-1 sm:py-1.5">
@@ -299,19 +265,13 @@ const PackStats = ({ cells }: { cells: CellData[] }) => {
       </div>
       <div className="bg-secondary/30 rounded-md px-1.5 sm:px-2 py-1 sm:py-1.5">
         <p className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">Delta</p>
-        <p className={cn(
-          "text-xs sm:text-sm font-mono font-bold",
-          deltaVoltage > 0.1 ? "text-warning" : "text-success"
-        )}>
-          {(deltaVoltage * 1000).toFixed(0)}mV
+        <p className={cn("text-xs sm:text-sm font-mono font-bold", deltaV > 0.1 ? "text-warning" : "text-success")}>
+          {(deltaV * 1000).toFixed(0)}mV
         </p>
       </div>
       <div className="bg-secondary/30 rounded-md px-1.5 sm:px-2 py-1 sm:py-1.5">
         <p className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">Temp</p>
-        <p className={cn(
-          "text-xs sm:text-sm font-mono font-bold",
-          avgTemp > 40 ? "text-warning" : "text-foreground"
-        )}>
+        <p className={cn("text-xs sm:text-sm font-mono font-bold", avgTemp > 40 ? "text-warning" : "text-foreground")}>
           {avgTemp.toFixed(1)}°C
         </p>
       </div>
@@ -323,26 +283,87 @@ const PackStats = ({ cells }: { cells: CellData[] }) => {
   );
 };
 
-const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
-  // Use real telemetry data when available
-  const batteryPowerKw = telemetry?.battery_power_w !== undefined ? telemetry.battery_power_w / 1000 : 2.1;
-  const soc = telemetry?.battery_soc_pct !== undefined ? telemetry.battery_soc_pct : 78;
-  const isCharging = telemetry?.is_charging ?? batteryPowerKw > 0;
+// ─── Main component ───────────────────────────────────────────────────────────
 
-  // Battery pack summary stats using real data
-  const packSummary = {
-    totalVoltage: 52.4, // Would need extended telemetry for voltage
-    totalCurrent: Math.abs(batteryPowerKw) * 1000 / 52.4, // Estimate from power
-    totalPower: Math.abs(batteryPowerKw),
-    soc: Math.round(soc),
-    health: 94, // Would need extended telemetry
-    cycles: 342, // Would need extended telemetry
-    temperature: 28, // Would need extended telemetry
-    status: isCharging ? "charging" as const : "discharging" as const,
-  };
+const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
+  // ── SOC history for chart (accumulate last 24 points) ──────────────────────
+  const [socHistory, setSocHistory] = useState<
+    { time: string; soc: number; power: number; temperature: number }[]
+  >([]);
+
+  // ── Fetch battery bank data ────────────────────────────────────────────────
+  const { data: bankResponse } = useQuery<BatteryBankResponse | null>({
+    queryKey: ["battery-bank", device?.id],
+    queryFn: () => (device?.id ? devicesService.getBatteryBank(device.id) : null),
+    enabled: !!device?.id,
+    refetchInterval: 30_000,
+  });
+
+  // ── Accumulate history when telemetry updates ──────────────────────────────
+  useEffect(() => {
+    if (!telemetry) return;
+    const now = new Date();
+    const label = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    setSocHistory(prev => {
+      const next = [
+        ...prev,
+        {
+          time: label,
+          soc: telemetry.battery_soc_pct ?? 0,
+          power: (telemetry.battery_power_w ?? 0) / 1000,
+          temperature: bankResponse?.bank?.temp_c ?? 0,
+        },
+      ].slice(-24);
+      return next;
+    });
+  }, [telemetry, bankResponse]);
+
+  // ── Derive display values ──────────────────────────────────────────────────
+  const bank = bankResponse?.bank ?? {};
+  const units = bankResponse?.units ?? [];
+  const rawCells = bankResponse?.cells ?? [];
+
+  const soc = bank.soc_pct ?? telemetry?.battery_soc_pct ?? 0;
+  const voltage = bank.voltage_v ?? 0;
+  const current = bank.current_a ?? 0;
+  const powerKw = ((bank.power_w ?? telemetry?.battery_power_w ?? 0) / 1000);
+  const isCharging = bank.charging ?? telemetry?.is_charging ?? powerKw > 0;
+  const temp = bank.temp_c ?? 0;
+  const soh = bank.soh_pct ?? 0;
+  const cycles = bank.cycle_count ?? 0;
+  const hasAlarm = bank.has_alarm ?? false;
+  const alarms = bank.alarms ?? [];
+
+  // Group cells by unit for the cell grid
+  const cellsByUnit = units.map(u => {
+    const cells = rawCells
+      .filter(c => c.unit === u.unit)
+      .map((c, i) => mapRawCell(c, i));
+    return { unit: u, cells };
+  });
+
+  // Fallback: if no units at all, show a minimal view
+  const hasBankDetail = bankResponse?.available && units.length > 0;
 
   return (
     <div className="space-y-6">
+      {/* Alarm banner */}
+      {hasAlarm && alarms.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-3 border border-destructive/40 bg-destructive/5"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="w-4 h-4 text-destructive" />
+            <span className="font-semibold text-destructive text-sm">Battery Alarms</span>
+          </div>
+          <ul className="text-xs text-destructive/80 space-y-0.5 ml-6">
+            {alarms.map((a, i) => <li key={i}>{a}</li>)}
+          </ul>
+        </motion.div>
+      )}
+
       {/* Battery Pack Summary */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -350,283 +371,172 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
         className="glass-card p-3 sm:p-5"
       >
         <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Battery Pack Status</h3>
-        
         <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-4">
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-battery" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">Volt</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{packSummary.totalVoltage}</p>
-          </div>
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-success" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">Amp</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-success">+{packSummary.totalCurrent}</p>
-          </div>
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-solar" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">Power</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-solar">{packSummary.totalPower}kW</p>
-          </div>
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Battery className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-battery" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">SOC</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-battery">{packSummary.soc}%</p>
-          </div>
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-primary" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">Health</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{packSummary.health}%</p>
-          </div>
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-muted-foreground" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">Cycles</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{packSummary.cycles}</p>
-          </div>
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Thermometer className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-warning" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">Temp</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-foreground">{packSummary.temperature}°</p>
-          </div>
-          <div className="bg-secondary/30 rounded-lg p-2 sm:p-3">
-            <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
-              <Battery className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-success" />
-              <span className="text-[9px] sm:text-xs text-muted-foreground">Status</span>
-            </div>
-            <p className="text-sm sm:text-lg font-mono font-bold text-success capitalize">{packSummary.status}</p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Cell Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="glass-card p-3 sm:p-5"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold text-foreground">Cell Monitor</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground">Individual cell status</p>
-          </div>
-          {/* Legend - scrollable on mobile */}
-          <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs overflow-x-auto pb-1">
-            <div className="flex items-center gap-1 shrink-0">
-              <svg viewBox="0 0 24 40" className="w-2.5 h-4 sm:w-3 sm:h-5" fill="none">
-                <rect x="8" y="0" width="8" height="3" rx="1" fill="#22c55e" opacity="0.8" />
-                <rect x="2" y="4" width="20" height="34" rx="3" stroke="#22c55e" strokeWidth="1.5" fill="transparent" />
-                <rect x="4" y="16" width="16" height="20" rx="2" fill="#22c55e" opacity="0.7" />
-              </svg>
-              <span className="text-muted-foreground">OK</span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <svg viewBox="0 0 24 40" className="w-2.5 h-4 sm:w-3 sm:h-5" fill="none">
-                <rect x="8" y="0" width="8" height="3" rx="1" fill="#60a5fa" opacity="0.8" />
-                <rect x="2" y="4" width="20" height="34" rx="3" stroke="#60a5fa" strokeWidth="1.5" fill="transparent" />
-                <rect x="4" y="16" width="16" height="20" rx="2" fill="#60a5fa" opacity="0.7" />
-              </svg>
-              <span className="text-muted-foreground">Bal</span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <svg viewBox="0 0 24 40" className="w-2.5 h-4 sm:w-3 sm:h-5" fill="none">
-                <rect x="8" y="0" width="8" height="3" rx="1" fill="#f59e0b" opacity="0.8" />
-                <rect x="2" y="4" width="20" height="34" rx="3" stroke="#f59e0b" strokeWidth="1.5" fill="transparent" />
-                <rect x="4" y="26" width="16" height="10" rx="2" fill="#f59e0b" opacity="0.7" />
-              </svg>
-              <span className="text-muted-foreground">Warn</span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <svg viewBox="0 0 24 40" className="w-2.5 h-4 sm:w-3 sm:h-5" fill="none">
-                <rect x="8" y="0" width="8" height="3" rx="1" fill="#ef4444" opacity="0.8" />
-                <rect x="2" y="4" width="20" height="34" rx="3" stroke="#ef4444" strokeWidth="1.5" fill="transparent" />
-                <rect x="4" y="31" width="16" height="5" rx="2" fill="#ef4444" opacity="0.7" />
-              </svg>
-              <span className="text-muted-foreground">Crit</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="space-y-3 sm:space-y-4">
-          {batteryPacks.map((pack) => (
-            <div key={pack.id} className="border border-border/50 rounded-lg p-2 sm:p-3 bg-secondary/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Battery className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-battery" />
-                <h4 className="font-medium text-xs sm:text-sm text-foreground">{pack.name}</h4>
-                <span className="text-[10px] sm:text-xs text-muted-foreground">({pack.cells.length} cells)</span>
+          {[
+            { label: "Volt",   icon: <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-battery" />,       value: voltage ? `${voltage.toFixed(1)}V` : "—",         color: "" },
+            { label: "Amp",    icon: <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-success" />,   value: current ? `${isCharging ? "+" : ""}${current.toFixed(1)}A` : "—", color: "text-success" },
+            { label: "Power",  icon: <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-solar" />,          value: `${Math.abs(powerKw).toFixed(2)}kW`,              color: "text-solar" },
+            { label: "SOC",    icon: <Battery className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-battery" />,   value: `${Math.round(soc)}%`,                             color: "text-battery" },
+            { label: "Health", icon: <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-primary" />,  value: soh ? `${soh.toFixed(1)}%` : "—",                 color: "" },
+            { label: "Cycles", icon: <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-muted-foreground" />, value: cycles ? `${cycles}` : "—",               color: "" },
+            { label: "Temp",   icon: <Thermometer className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-warning" />, value: temp ? `${temp.toFixed(1)}°` : "—",            color: "" },
+            { label: "Status", icon: <Battery className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-success" />,   value: isCharging ? "Charging" : "Discharging",         color: "text-success capitalize" },
+          ].map(({ label, icon, value, color }) => (
+            <div key={label} className="bg-secondary/30 rounded-lg p-2 sm:p-3">
+              <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
+                {icon}
+                <span className="text-[9px] sm:text-xs text-muted-foreground">{label}</span>
               </div>
-              
-              {/* Cell Grid - responsive columns */}
-              <div className="grid grid-cols-8 sm:grid-cols-16 gap-0.5 sm:gap-1">
-                {pack.cells.map((cell, index) => (
-                  <CellVisual key={cell.id} cell={cell} index={index} />
-                ))}
-              </div>
-              
-              {/* Pack Statistics */}
-              <PackStats cells={pack.cells} />
+              <p className={cn("text-sm sm:text-lg font-mono font-bold text-foreground", color)}>{value}</p>
             </div>
           ))}
         </div>
       </motion.div>
 
-      {/* Historical Charts */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="glass-card p-3 sm:p-5"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold text-foreground">SOC & Power</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground">24-hour history</p>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-battery" />
-              <span className="text-muted-foreground">SOC</span>
+      {/* Cell Grid — only shown when Pylontech bank data is available */}
+      {hasBankDetail && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="glass-card p-3 sm:p-5"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold text-foreground">Cell Monitor</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground">Individual cell status</p>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-solar" />
-              <span className="text-muted-foreground">Power</span>
+            <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs overflow-x-auto pb-1">
+              {[
+                { color: "#22c55e", label: "OK" },
+                { color: "#60a5fa", label: "Bal" },
+                { color: "#f59e0b", label: "Warn" },
+                { color: "#ef4444", label: "Crit" },
+              ].map(({ color, label }) => (
+                <div key={label} className="flex items-center gap-1 shrink-0">
+                  <svg viewBox="0 0 24 40" className="w-2.5 h-4 sm:w-3 sm:h-5" fill="none">
+                    <rect x="8" y="0" width="8" height="3" rx="1" fill={color} opacity="0.8" />
+                    <rect x="2" y="4" width="20" height="34" rx="3" stroke={color} strokeWidth="1.5" fill="transparent" />
+                    <rect x="4" y="16" width="16" height="20" rx="2" fill={color} opacity="0.7" />
+                  </svg>
+                  <span className="text-muted-foreground">{label}</span>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-        
-        <div className="h-[150px] sm:h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={historicalData}>
-              <defs>
-                <linearGradient id="socGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--battery))" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(var(--battery))" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-              <XAxis 
-                dataKey="time" 
-                stroke="hsl(var(--muted-foreground))" 
-                fontSize={9}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis 
-                yAxisId="left"
-                stroke="hsl(var(--muted-foreground))" 
-                fontSize={9}
-                tickLine={false}
-                axisLine={false}
-                domain={[0, 100]}
-                tickFormatter={(v) => `${v}%`}
-                width={30}
-              />
-              <YAxis 
-                yAxisId="right"
-                orientation="right"
-                stroke="hsl(var(--muted-foreground))" 
-                fontSize={9}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${v}kW`}
-                width={35}
-              />
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                }}
-              />
-              <Area
-                yAxisId="left"
-                type="monotone"
-                dataKey="soc"
-                stroke="hsl(var(--battery))"
-                fill="url(#socGradient)"
-                strokeWidth={2}
-                name="SOC"
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="power"
-                stroke="hsl(var(--solar))"
-                strokeWidth={2}
-                dot={false}
-                name="Power"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </motion.div>
 
-      {/* Temperature History */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="glass-card p-3 sm:p-5"
-      >
-        <div className="mb-3 sm:mb-4">
-          <h3 className="text-base sm:text-lg font-semibold text-foreground">Temperature</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground">24-hour thermal</p>
-        </div>
-        
-        <div className="h-[120px] sm:h-[150px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={historicalData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-              <XAxis 
-                dataKey="time" 
-                stroke="hsl(var(--muted-foreground))" 
-                fontSize={9}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis 
-                stroke="hsl(var(--muted-foreground))" 
-                fontSize={9}
-                tickLine={false}
-                axisLine={false}
-                domain={[20, 45]}
-                tickFormatter={(v) => `${v}°`}
-                width={25}
-              />
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="temperature"
-                stroke="hsl(var(--warning))"
-                strokeWidth={2}
-                dot={false}
-                name="Temperature"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </motion.div>
+          <div className="space-y-3 sm:space-y-4">
+            {cellsByUnit.map(({ unit: u, cells }) => (
+              <div key={u.unit} className="border border-border/50 rounded-lg p-2 sm:p-3 bg-secondary/10">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <Battery className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-battery" />
+                  <h4 className="font-medium text-xs sm:text-sm text-foreground">Unit {u.unit}</h4>
+                  {cells.length > 0 && (
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">({cells.length} cells)</span>
+                  )}
+                  {u.soc_pct != null && (
+                    <span className="text-[10px] sm:text-xs text-battery ml-auto">SOC {u.soc_pct}%</span>
+                  )}
+                  {u.soh_pct != null && (
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">SOH {u.soh_pct.toFixed(1)}%</span>
+                  )}
+                  {u.cycle_count != null && (
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">{u.cycle_count} cycles</span>
+                  )}
+                  {u.has_alarm && (
+                    <AlertTriangle className="w-3 h-3 text-destructive" />
+                  )}
+                </div>
+
+                {cells.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-8 sm:grid-cols-16 gap-0.5 sm:gap-1">
+                      {cells.map((cell, idx) => (
+                        <CellVisual key={cell.id} cell={cell} index={idx} />
+                      ))}
+                    </div>
+                    <PackStats cells={cells} />
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No cell data available for this unit</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* SOC & Power history */}
+      {socHistory.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="glass-card p-3 sm:p-5"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold text-foreground">SOC & Power</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground">Live history (last {socHistory.length} readings)</p>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-battery" />
+                <span className="text-muted-foreground">SOC</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-solar" />
+                <span className="text-muted-foreground">Power</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-[150px] sm:h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={socHistory}>
+                <defs>
+                  <linearGradient id="socGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--battery))" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(var(--battery))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} interval="preserveStartEnd" />
+                <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={v => `${v}%`} width={30} />
+                <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} axisLine={false} tickFormatter={v => `${v}kW`} width={35} />
+                <RechartsTooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "11px" }} />
+                <Area yAxisId="left" type="monotone" dataKey="soc" stroke="hsl(var(--battery))" fill="url(#socGradient)" strokeWidth={2} name="SOC" />
+                <Line yAxisId="right" type="monotone" dataKey="power" stroke="hsl(var(--solar))" strokeWidth={2} dot={false} name="Power" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Temperature history */}
+      {socHistory.length > 0 && temp > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="glass-card p-3 sm:p-5"
+        >
+          <div className="mb-3 sm:mb-4">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground">Temperature</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">Live thermal history</p>
+          </div>
+          <div className="h-[120px] sm:h-[150px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={socHistory}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} interval="preserveStartEnd" />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} axisLine={false} tickFormatter={v => `${v}°`} width={25} />
+                <RechartsTooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "11px" }} />
+                <Line type="monotone" dataKey="temperature" stroke="hsl(var(--warning))" strokeWidth={2} dot={false} name="Temperature" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };
