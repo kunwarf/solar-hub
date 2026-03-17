@@ -605,8 +605,9 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
     """
     Parse Pylontech/Pytes 'pwr' command response.
 
-    Expected column order (whitespace-separated, first data row has unit number):
-      unit  volt_mv  curr_ma  tempr_mdeg  tlow  thigh  vlow  vhigh  mostemp  state  soc_pct  ...
+    Handles two firmware variants:
+      Old:  ... vhigh  MosTempr  State(text)  SOC(int)  BI  Ah  ...
+      New:  ... vhigh  Base.St   Volt.St  Curr.St  Temp.St  Coulomb(XX%)  Time  ...
 
     Returns structured dict with bank-level scalars and battery_units list.
     """
@@ -615,15 +616,30 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
         parts = line.split()
         if not parts or not parts[0].isdigit():
             continue
+        # Only the four numeric fields are mandatory
         try:
             unit_num  = int(parts[0])
             volt_mv   = int(parts[1])
             curr_ma   = int(parts[2])
             temp_mdeg = int(parts[3])
-            state     = parts[9]  if len(parts) > 9  else ""
-            soc_pct   = int(parts[10]) if len(parts) > 10 else None
         except (ValueError, IndexError):
             continue
+
+        # SOC: new firmware encodes as "81%" somewhere in cols 8+
+        # Old firmware has a plain integer at col 10.
+        soc_pct = None
+        for i in range(8, min(len(parts), 20)):
+            if parts[i].endswith('%'):
+                try:
+                    soc_pct = int(parts[i].rstrip('%'))
+                    break
+                except ValueError:
+                    pass
+        if soc_pct is None and len(parts) > 10:
+            try:
+                soc_pct = int(parts[10])  # old format: plain SOC integer
+            except (ValueError, IndexError):
+                pass
 
         unit_data: Dict[str, Any] = {
             "unit":      unit_num,
