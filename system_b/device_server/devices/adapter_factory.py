@@ -395,6 +395,51 @@ class TCPCommandAdapter:
         # Lock ensures sequential command execution (ESP32 bridge is single-threaded)
         self._command_lock = asyncio.Lock()
 
+    async def send_command_bytes(self, payload: bytes) -> Optional[bytes]:
+        """
+        Send a raw-bytes command via the serial bridge and return raw bytes.
+
+        Used for binary protocols like JK BMS where the COMMAND_RESPONSE
+        payload must NOT be decoded as UTF-8.
+
+        Args:
+            payload: Raw bytes to send as COMMAND_REQUEST payload.
+
+        Returns:
+            Raw response bytes or None on error.
+        """
+        async with self._command_lock:
+            try:
+                frame = struct.pack(">BI", _MSG_COMMAND_REQUEST, len(payload)) + payload
+                await self.connection.write(frame, timeout=self.timeout)
+
+                resp_header = await self.connection.read(5, timeout=self.timeout)
+                msg_type = resp_header[0]
+                resp_len = struct.unpack(">I", resp_header[1:5])[0]
+
+                if resp_len > _MAX_PAYLOAD:
+                    logger.warning(f"Binary framed response too large: {resp_len} bytes")
+                    return None
+
+                resp_payload = b""
+                if resp_len > 0:
+                    resp_payload = await self.connection.read(resp_len, timeout=self.timeout)
+
+                if msg_type == _MSG_COMMAND_RESPONSE:
+                    return resp_payload
+                elif msg_type == _MSG_ERROR:
+                    logger.warning(
+                        f"Serial bridge returned error: {resp_payload.decode('utf-8', errors='replace')}"
+                    )
+                    return None
+                else:
+                    logger.warning(f"Unexpected binary response frame type: {msg_type:#04x}")
+                    return None
+
+            except Exception as e:
+                logger.debug(f"Binary framed command error: {e}")
+                return None
+
     async def send_command(self, command: str) -> Optional[str]:
         """
         Send command and get response.
@@ -511,18 +556,25 @@ class TCPCommandAdapter:
             Dictionary of parsed telemetry values.
         """
         values: Dict[str, Any] = {}
+        pid = self.protocol.protocol_id.lower()
 
-        # For Pytes, common commands
-        if "pytes" in self.protocol.protocol_id.lower():
-            # Power command
+        # For Pytes/Pylontech text-command batteries
+        if "pytes" in pid or "pylontech" in pid:
             response = await self.send_command("pwr")
             if response:
                 values["power_response"] = response
-
-            # Battery info
             response = await self.send_command("bat")
             if response:
                 values["battery_response"] = response
+
+        # For JK BMS serial bridge (binary RS485 broadcast protocol)
+        elif "jkbms_serial" in pid or ("jkbms" in pid and self.connection.bridged):
+            raw = await self.send_command_bytes(b"")
+            if raw:
+                from ..telemetry.jkbms_parser import parse_jkbms_status_frame
+                parsed = parse_jkbms_status_frame(raw)
+                if parsed:
+                    values.update(parsed)
 
         return values
 

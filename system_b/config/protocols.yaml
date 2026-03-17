@@ -183,6 +183,30 @@ protocols:
       response_timeout: 5.0
       command_delay: 0.5
 
+  - id: jkbms_serial
+    name: "JK-BMS (Serial Bridge)"
+    description: "JK Battery Management System via ESP32 serial bridge (RS485 passive broadcast)"
+    device_type: battery
+    protocol_type: command
+    priority: 22
+    manufacturer: "JK"
+
+    identification:
+      # Serial bridge path: identified from HELLO frame, no probing needed
+      command: ""
+      expected_response: ""
+      timeout: 5.0
+
+    polling:
+      default_interval: 10
+      timeout: 5.0
+      max_consecutive_failures: 5
+
+    command:
+      line_ending: ""
+      response_timeout: 5.0
+      command_delay: 0.0
+
   - id: jkbms_tcp
     name: "JK-BMS (TCP)"
     description: "JK Battery Management System over TCP"

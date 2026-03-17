@@ -14,6 +14,7 @@ from .inverter_simulator import PowdriveSimulator
 from .meter_simulator import IAMMeterSimulator
 from .battery_simulator import PytesBatterySimulator
 from .pylontech_simulator import PylontechBridgeSimulator
+from .jkbms_simulator import JKBMSBridgeSimulator
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,53 @@ class SimulatorManager:
         logger.info(
             f"Added Pylontech bridge simulator '{name}' "
             f"(serial={data_logger_serial}, barcode={barcode})"
+        )
+        return simulator
+
+    def add_jkbms_bridge(
+        self,
+        name: str,
+        data_logger_serial: str,
+        num_cells: int = 16,
+        initial_soc: float = 75.0,
+        total_ah: float = 50.0,
+    ) -> JKBMSBridgeSimulator:
+        """
+        Register a JK BMS serial bridge simulator (TCP client).
+
+        Unlike inverter/meter/battery simulators, this is a TCP CLIENT —
+        it connects outbound to the device server rather than listening.
+        Call ``await sim.connect(host, port)`` and ``await sim.run()``
+        manually after the device server is ready.
+
+        Args:
+            name: Unique name for the simulator.
+            data_logger_serial: Serial sent in the HELLO frame.
+            num_cells: Number of battery cells (1-16).
+            initial_soc: Starting state of charge (%).
+            total_ah: Total battery capacity (Ah).
+
+        Returns:
+            The created JKBMSBridgeSimulator (not yet connected).
+        """
+        simulator = JKBMSBridgeSimulator(
+            data_logger_serial=data_logger_serial,
+            num_cells=num_cells,
+            initial_soc=initial_soc,
+            total_ah=total_ah,
+        )
+
+        # Port 0 is a placeholder — JK BMS bridge connects outbound.
+        self._simulators[name] = SimulatorInfo(
+            simulator=simulator,  # type: ignore[arg-type]
+            port=0,
+            host=self.host,
+            auto_start=False,  # must be connected manually
+        )
+
+        logger.info(
+            f"Added JK BMS bridge simulator '{name}' "
+            f"(serial={data_logger_serial}, cells={num_cells})"
         )
         return simulator
 
