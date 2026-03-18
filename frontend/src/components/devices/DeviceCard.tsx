@@ -21,6 +21,7 @@ interface DeviceTelemetry {
   battery_power_w?: number;
   battery_soc_pct?: number;
   is_charging?: boolean;
+  raw?: Record<string, any>;
 }
 
 interface DeviceCardProps {
@@ -140,12 +141,14 @@ const getDeviceMetrics = (type: "inverter" | "battery" | "meter", telemetry?: De
     const powerKw = telemetry?.battery_power_w !== undefined ? (Math.abs(telemetry.battery_power_w) / 1000).toFixed(1) : "--";
     const isCharging = telemetry?.is_charging ?? (telemetry?.battery_power_w !== undefined && telemetry.battery_power_w > 0);
     const socNum = telemetry?.battery_soc_pct ?? 50;
+    const voltageV = telemetry?.raw?.battery_voltage_v;
+    const tempC = telemetry?.raw?.battery_temp_c;
 
     return [
       { label: "SOC", value: soc, unit: "%", iconType: "battery-dynamic", color: socNum >= 60 ? "text-success" : socNum >= 30 ? "text-warning" : "text-destructive", soc: socNum },
       { label: isCharging ? "Charging" : "Discharging", value: powerKw, unit: "kW", icon: isCharging ? ArrowDown : ArrowUp, color: isCharging ? "text-success" : "text-warning" },
-      { label: "Voltage", value: "--", unit: "V", icon: Gauge, color: "text-muted-foreground" },
-      { label: "Temp", value: "--", unit: "°C", icon: Gauge, color: "text-muted-foreground" },
+      { label: "Voltage", value: voltageV != null ? Number(voltageV).toFixed(1) : "--", unit: "V", icon: Gauge, color: "text-muted-foreground" },
+      { label: "Temp", value: tempC != null ? Number(tempC).toFixed(1) : "--", unit: "°C", icon: Gauge, color: "text-muted-foreground" },
     ];
   }
   if (type === "meter") {
