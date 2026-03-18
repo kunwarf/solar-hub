@@ -13,6 +13,7 @@ import {
   Brain,
   AlertTriangle,
   ZapOff,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { useTheme } from "@/hooks/use-theme";
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Devices", url: "/devices", icon: Cpu },
+  { title: "Telemetry", url: "/telemetry", icon: Activity },
   { title: "Outages", url: "/outages", icon: ZapOff },
   { title: "Alert Center", url: "/alerts", icon: AlertTriangle },
   { title: "Smart Scheduler", url: "/scheduler", icon: Brain },
