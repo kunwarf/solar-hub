@@ -39,6 +39,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Unlink,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -125,6 +126,18 @@ export default function DeviceDetails() {
     },
     onError: () => {
       toast.error("Failed to remove device");
+    },
+  });
+
+  // Unclaim mutation
+  const unclaimMutation = useMutation({
+    mutationFn: () => devicesService.unclaimDevice(deviceId!),
+    onSuccess: () => {
+      toast.success("Device unclaimed — it is now available to claim again");
+      navigate("/devices");
+    },
+    onError: () => {
+      toast.error("Failed to unclaim device");
     },
   });
 
@@ -267,6 +280,31 @@ export default function DeviceDetails() {
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Unlink className="h-4 w-4 mr-2" />
+                  Unclaim
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Unclaim Device?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove {device.name} from this site and release it back to the available device pool. The device will remain registered and can be claimed again. Use this to move the device to a different site.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => unclaimMutation.mutate()}
+                    disabled={unclaimMutation.isPending}
+                  >
+                    Unclaim Device
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">

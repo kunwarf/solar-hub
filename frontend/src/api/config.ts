@@ -88,6 +88,7 @@ export const API_ENDPOINTS = {
     snapshot: (id: string) => `/devices/${id}/snapshot`,
     status: (id: string) => `/devices/${id}/status`,
     batteryBank: (id: string) => `/devices/${id}/battery/bank`,
+    unclaim: (id: string) => `/devices/${id}/unclaim`,
   },
 
   // Dashboards (legacy - organization/site focused)

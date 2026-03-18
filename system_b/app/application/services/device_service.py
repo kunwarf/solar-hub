@@ -254,6 +254,14 @@ class DeviceService:
             return None
 
         device.release()
+
+        # Clear inverter_serial from metadata so the device can be re-paired
+        # on next connection via the orphan pairing flow.
+        if device.metadata and "inverter_serial" in device.metadata:
+            device.metadata = {
+                k: v for k, v in device.metadata.items() if k != "inverter_serial"
+            } or None
+
         updated = await self._device_repo.update(device)
 
         logger.info(f"Device {device_id} released")

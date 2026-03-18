@@ -305,6 +305,17 @@ class DevicesService {
   }
 
   /**
+   * Unclaim a device via System A — removes it from the site and releases it in System B.
+   * The device becomes an orphan and can be claimed again.
+   */
+  async unclaimDevice(deviceId: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; message: string }>(
+      API_ENDPOINTS.devices.unclaim(deviceId)
+    );
+    return response.data;
+  }
+
+  /**
    * Release a claimed device (make it orphan again)
    */
   async releaseDevice(deviceId: string): Promise<ClaimDeviceResponse> {

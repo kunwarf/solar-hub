@@ -633,6 +633,55 @@ async def delete_device(
 
 
 @router.post(
+    "/{device_id}/unclaim",
+    response_model=MessageResponse,
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def unclaim_device(
+    device_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
+):
+    """
+    Unclaim a device — removes it from this site and releases it in System B.
+
+    The device remains registered in System B as an orphan and will be
+    available to claim again. Use this when a device needs to be moved
+    to a different site or re-paired after a hardware replacement.
+    """
+    device = await uow.devices.get_by_id(device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Check access
+    await check_site_access(device.site_id, current_user, uow, require_manage=True)
+
+    # Release in System B (clears site_id/org_id/owner + inverter_serial metadata)
+    try:
+        await system_b_client.release_device(device_id)
+    except SystemBClientError as e:
+        # Log but don't block — System A cleanup should still proceed
+        import logging
+        logging.getLogger("system_a").warning(
+            f"System B release failed for {device_id}: {e} — proceeding with System A removal"
+        )
+
+    # Remove from System A
+    await uow.devices.delete(device_id)
+    await uow.commit()
+
+    return MessageResponse(
+        message="Device unclaimed successfully",
+        success=True,
+    )
+
+
+@router.post(
     "/{device_id}/command",
     response_model=DeviceCommandResponse,
     responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
