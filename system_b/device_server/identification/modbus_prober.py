@@ -309,17 +309,23 @@ class ModbusProber:
 
         # Check if value matches expected
         value = registers[0]
-        if value not in ident_config.expected_values:
+        if ident_config.match_any:
+            # Any valid (non-exception) response counts as a match
+            logger.info(
+                f"Identified {protocol.protocol_id} (match_any): "
+                f"register {ident_config.register} = {value}"
+            )
+        elif value not in ident_config.expected_values:
             logger.debug(
                 f"{protocol.protocol_id}: value {value} not in "
                 f"expected {ident_config.expected_values}"
             )
             return None
-
-        logger.info(
-            f"Identified {protocol.protocol_id}: "
-            f"register {ident_config.register} = {value}"
-        )
+        else:
+            logger.info(
+                f"Identified {protocol.protocol_id}: "
+                f"register {ident_config.register} = {value}"
+            )
 
         # Read serial number
         serial_config = protocol.serial_number

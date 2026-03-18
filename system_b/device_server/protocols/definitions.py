@@ -39,6 +39,7 @@ class IdentificationConfig:
     register: Optional[int] = None
     size: int = 1
     expected_values: List[int] = field(default_factory=list)
+    match_any: bool = False  # True = any valid (non-exception) response counts as a match
 
     # For command-based identification (e.g., Pytes, JK-BMS)
     command: Optional[str] = None

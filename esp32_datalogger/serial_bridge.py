@@ -1,5 +1,5 @@
 """
-Serial Command Bridge for ESP32 Data Logger.
+Serial Command Bridge for ESP32 Data Logger 11.
 
 Connects TO System B and bridges text commands to/from a serial port
 (e.g., Pylontech battery via RS232/MAX3232).
@@ -232,19 +232,32 @@ class SerialBridge:
 
                 # Dispatch
                 if msg_type == MSG_COMMAND_REQUEST:
-                    cmd_str = payload.decode("utf-8", "replace").strip()
                     self.stats["commands"] += 1
 
-                    response_str = self._handle_command(cmd_str)
-
-                    if response_str is not None:
-                        self._send_frame(MSG_COMMAND_RESPONSE,
-                                         response_str.encode("utf-8"))
-                        self.stats["responses"] += 1
+                    if self.config.get("serial", {}).get("passive", False):
+                        # Passive binary mode (e.g. JK BMS RS485 broadcast).
+                        # Ignore command content; wait for the next broadcast
+                        # frame and return raw bytes.
+                        raw = self._handle_command_passive()
+                        if raw is not None:
+                            self._send_frame(MSG_COMMAND_RESPONSE, raw)
+                            self.stats["responses"] += 1
+                        else:
+                            self._send_frame(MSG_ERROR,
+                                             b"No frame received from device")
+                            self.stats["errors"] += 1
                     else:
-                        self._send_frame(MSG_ERROR,
-                                         b"No response from device")
-                        self.stats["errors"] += 1
+                        # Active text-command mode (Pylontech / Pytes).
+                        cmd_str = payload.decode("utf-8", "replace").strip()
+                        response_str = self._handle_command(cmd_str)
+                        if response_str is not None:
+                            self._send_frame(MSG_COMMAND_RESPONSE,
+                                             response_str.encode("utf-8"))
+                            self.stats["responses"] += 1
+                        else:
+                            self._send_frame(MSG_ERROR,
+                                             b"No response from device")
+                            self.stats["errors"] += 1
 
                 elif msg_type == MSG_PING:
                     self._send_frame(MSG_PONG, b"")
@@ -286,6 +299,34 @@ class SerialBridge:
             )
             return response
 
+        except Exception:
+            return None
+
+    def _handle_command_passive(self):
+        """
+        Read a binary broadcast frame from the serial port (passive RS485 mode).
+
+        Used for JK BMS in master/broadcast mode (DIP switches 0000) where the
+        BMS emits ``55 AA EB 90`` status frames automatically every ~5 s on the
+        RS485 bus.  The ESP32 never transmits — it simply waits for the next
+        complete frame and returns the raw bytes to System B.
+
+        Returns:
+            Raw frame bytes (from header onwards) or None on timeout.
+        """
+        try:
+            cfg = self.config.get("serial", {})
+            frame_header = cfg.get("frame_header", [0x55, 0xAA, 0xEB, 0x90])
+            if isinstance(frame_header, list):
+                frame_header = bytes(frame_header)
+            max_len = cfg.get("max_frame_len", 512)
+            timeout_ms = cfg.get("response_timeout_ms", 5000)
+
+            return self.serial.read_frame(
+                header=frame_header,
+                max_len=max_len,
+                timeout_ms=timeout_ms,
+            )
         except Exception:
             return None
 

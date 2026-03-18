@@ -211,6 +211,7 @@ class ProtocolLoader:
             register=data.get("register"),
             size=data.get("size", 1),
             expected_values=data.get("expected_values", []),
+            match_any=data.get("match_any", False),
             command=data.get("command"),
             expected_response=data.get("expected_response"),
             timeout=data.get("timeout", 5.0),

@@ -9,5 +9,6 @@ from .deye_parser import DeyeHybridParser
 from .powdrive_parser import PowdriveParser
 from .pylontech_parser import PylontechParser
 from .jkbms_parser import JKBMSParser
+from .jkbms_modbus_parser import JKBMSModbusParser
 
-__all__ = ['TelemetryParser', 'TelemetryMetric', 'DeyeHybridParser', 'PowdriveParser', 'PylontechParser', 'JKBMSParser']
+__all__ = ['TelemetryParser', 'TelemetryMetric', 'DeyeHybridParser', 'PowdriveParser', 'PylontechParser', 'JKBMSParser', 'JKBMSModbusParser']

@@ -63,10 +63,17 @@ DEFAULT_CONFIG = {
     # Serial port settings (connection to RS232 devices via MAX3232)
     # Used in serial_bridge mode for Pylontech/Pytes batteries.
     # Note: UART1 is used to avoid conflict with CH340 on UART0.
+    #
+    # For JK BMS in RS485 broadcast mode (DIP switches 0000):
+    #   passive: true          — ESP32 only listens, never transmits
+    #   baudrate: 115200       — JK BMS broadcast baudrate
+    #   de_pin: -1             — no DE pin needed (RX-only, MAX485 RE tied LOW)
+    #   frame_header: [0x55, 0xAA, 0xEB, 0x90]  — JK BMS frame header
     "serial": {
         "uart_id": 1,
         "tx_pin": 17,
         "rx_pin": 16,
+        "de_pin": -1,           # RS485 DE/RE direction pin (-1 = not used)
         "baudrate": 115200,
         "parity": "N",          # N/E/O
         "stop_bits": 1,
@@ -74,6 +81,9 @@ DEFAULT_CONFIG = {
         "response_timeout_ms": 5000,
         "prompt": "pylon>",     # pylon> for Pylontech, pytes> for Pytes
         "line_ending": "\r\n",
+        "passive": False,       # True = RS485 passive listen (JK BMS broadcast mode)
+        "frame_header": [0x55, 0xAA, 0xEB, 0x90],  # Binary frame header to detect
+        "max_frame_len": 512,   # Maximum frame bytes to capture
     },
 
     # Serial Bridge mode (connect TO server, forward commands to serial port)
