@@ -146,7 +146,11 @@ class DeviceRegistryClient:
                 result = await session.execute(
                     text("""
                     UPDATE device_registry
-                    SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('inverter_serial', CAST(:inverter_serial AS text)),
+                    SET metadata = CASE
+                            WHEN metadata IS NULL OR jsonb_typeof(metadata) != 'object'
+                            THEN jsonb_build_object('inverter_serial', CAST(:inverter_serial AS text))
+                            ELSE metadata || jsonb_build_object('inverter_serial', CAST(:inverter_serial AS text))
+                        END,
                         updated_at = CAST(:now AS timestamptz)
                     WHERE serial_number = CAST(:data_logger_serial AS text)
                     """),
