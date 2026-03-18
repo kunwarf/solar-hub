@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 _MSG_COMMAND_REQUEST = 0x01
 _MSG_COMMAND_RESPONSE = 0x02
 _MSG_ERROR = 0x03
+_MSG_PING = 0x04
+_MSG_PONG = 0x05
 _MAX_PAYLOAD = 8192
 
 from ..config import DeviceServerSettings, get_device_server_settings
@@ -476,10 +478,20 @@ class TCPCommandAdapter:
                 frame = struct.pack(">BI", _MSG_COMMAND_REQUEST, len(payload)) + payload
                 await self.connection.write(frame, timeout=self.timeout)
 
-                # Read 5-byte response frame header
-                resp_header = await self.connection.read(5, timeout=self.timeout)
-                msg_type = resp_header[0]
-                resp_len = struct.unpack(">I", resp_header[1:5])[0]
+                # Read 5-byte response frame header, handling PING transparently
+                while True:
+                    resp_header = await self.connection.read(5, timeout=self.timeout)
+                    msg_type = resp_header[0]
+                    resp_len = struct.unpack(">I", resp_header[1:5])[0]
+
+                    if msg_type == _MSG_PING:
+                        # ESP32 keepalive — send PONG and wait for the real response
+                        pong = struct.pack(">BI", _MSG_PONG, 0)
+                        await self.connection.write(pong, timeout=self.timeout)
+                        logger.debug("Serial bridge PING received, PONG sent")
+                        continue
+
+                    break
 
                 if resp_len > _MAX_PAYLOAD:
                     logger.warning(f"Framed response too large: {resp_len} bytes")
