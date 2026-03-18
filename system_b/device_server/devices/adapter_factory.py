@@ -397,6 +397,74 @@ class TCPCommandAdapter:
         # Lock ensures sequential command execution (ESP32 bridge is single-threaded)
         self._command_lock = asyncio.Lock()
 
+        # Background task that responds to PING keepalives during idle periods
+        self._keepalive_task: Optional[asyncio.Task] = None
+
+    async def _keepalive_loop(self) -> None:
+        """
+        Respond to PING frames from the ESP32 during idle periods between polls.
+
+        The ESP32 sends PING every ~30s. _send_command_framed() handles PINGs
+        that arrive DURING a command (while the lock is held). This task handles
+        PINGs during the idle gap between polls when no one is reading the socket.
+
+        Without this, a PING landing in the idle window goes unanswered and the
+        ESP32 disconnects after its PING timeout (~5s), reconnecting every ~35s.
+        """
+        while True:
+            try:
+                await asyncio.sleep(1.0)
+
+                # Skip if a command is in progress — it handles PINGs itself
+                if self._command_lock.locked():
+                    continue
+
+                # Non-blocking lock attempt: skip this cycle if lock is busy
+                acquired = False
+                try:
+                    await asyncio.wait_for(
+                        self._command_lock.acquire(), timeout=0.05
+                    )
+                    acquired = True
+                except asyncio.TimeoutError:
+                    continue
+
+                try:
+                    # Short timeout: just peeking for pending PING frames
+                    header = await asyncio.wait_for(
+                        self.connection.read(5), timeout=1.0
+                    )
+                    msg_type = header[0]
+                    resp_len = struct.unpack(">I", header[1:5])[0]
+
+                    # Read and discard any payload
+                    if resp_len > 0:
+                        await asyncio.wait_for(
+                            self.connection.read(resp_len), timeout=2.0
+                        )
+
+                    if msg_type == _MSG_PING:
+                        pong = struct.pack(">BI", _MSG_PONG, 0)
+                        await self.connection.write(pong, timeout=2.0)
+                        logger.debug("Keepalive: PING received during idle, PONG sent")
+                    else:
+                        logger.warning(
+                            f"Keepalive: unexpected frame {msg_type:#04x} during idle"
+                        )
+
+                except asyncio.TimeoutError:
+                    pass  # No data pending — normal, nothing to do
+                finally:
+                    if acquired:
+                        self._command_lock.release()
+
+            except asyncio.CancelledError:
+                raise
+            except (ConnectionError, OSError):
+                break  # Connection closed, stop loop
+            except Exception as e:
+                logger.debug(f"Keepalive loop error: {e}")
+
     async def send_command_bytes(self, payload: bytes) -> Optional[bytes]:
         """
         Send a raw-bytes command via the serial bridge and return raw bytes.
@@ -564,9 +632,19 @@ class TCPCommandAdapter:
         """
         Poll device using command-based protocol.
 
+
         Returns:
             Dictionary of parsed telemetry values.
         """
+        # Ensure idle PING responder is running for serial bridge connections
+        if self.connection.bridged and (
+            self._keepalive_task is None or self._keepalive_task.done()
+        ):
+            self._keepalive_task = asyncio.create_task(
+                self._keepalive_loop(),
+                name=f"keepalive-{id(self)}",
+            )
+
         values: Dict[str, Any] = {}
         pid = self.protocol.protocol_id.lower()
 
