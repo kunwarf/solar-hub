@@ -394,6 +394,16 @@ class DeviceServer:
         """Handle collected telemetry."""
         device_state = self.device_manager.get_device(device_id) if self.device_manager else None
 
+        # Apply battery sign convention normalization before any writes.
+        # Some manufacturers (e.g. Powdrive) report negative = charging; we normalise
+        # to positive = charging here so both Redis and TimescaleDB see consistent values.
+        if device_state and device_state.protocol_id and self.registry:
+            protocol = self.registry.get(device_state.protocol_id)
+            if protocol and protocol.telemetry.should_invert_battery_power():
+                for field in ('battery_power_w', 'battery_current_a'):
+                    if field in telemetry and telemetry[field] is not None:
+                        telemetry[field] = -telemetry[field]
+
         # Determine which device_id to use for telemetry storage
         # If this is an inverter linked to a data logger, use the data logger's device_id
         # (because the data logger has a stable device_id and site_id in device_registry)

@@ -114,11 +114,6 @@ class PowdriveParser(TelemetryParser):
         ('inverter_type', ('inverter_type', 'enum', 'config')),
     ]
 
-    # Metrics that need sign inversion (Powdrive uses negative = charging)
-    INVERT_SIGN_METRICS = {
-        'battery_power_w',  # Powdrive: negative = charging, we want positive = charging
-        'battery_current_a',  # Powdrive: negative = charging current
-    }
 
     def parse(
         self,
@@ -189,15 +184,6 @@ class PowdriveParser(TelemetryParser):
             else:
                 try:
                     numeric_value = float(value)
-
-                    # Invert sign for Powdrive battery metrics
-                    # Powdrive uses negative values for charging, we use positive = charging
-                    if json_field in self.INVERT_SIGN_METRICS:
-                        numeric_value = -numeric_value
-                        logger.debug(
-                            f"Inverted {json_field}: {value} -> {numeric_value} "
-                            f"(Powdrive convention: negative = charging)"
-                        )
 
                     metric = TelemetryMetric(
                         time=timestamp,
