@@ -122,9 +122,9 @@ export function mapApiSettingsToConfig(
 
     // Safety limits
     safety: {
-      max_batt_voltage_v: settings.battery_floating_voltage_v || 52,
-      max_charge_a: settings.battery_max_charge_current_a || 100,
-      max_discharge_a: settings.battery_max_discharge_current_a || 100,
+      max_batt_voltage_v: settings.battery_floating_voltage_v ?? 52,
+      max_charge_a: settings.battery_max_charge_current_a ?? 100,
+      max_discharge_a: settings.battery_max_discharge_current_a ?? 100,
     },
 
     // Solar array (placeholder - not in device settings)
@@ -137,7 +137,7 @@ export function mapApiSettingsToConfig(
       driver: 'powdrive',
       serialNumber: '2406130030',
       protocolVersion: 260,
-      maxAcOutputPower: settings.max_export_power_w || 13000,
+      maxAcOutputPower: settings.max_export_power_w ?? 13000,
       mpptConnections: 3,
       parallelMode: false,
       modbusNumber: 1,
@@ -145,26 +145,26 @@ export function mapApiSettingsToConfig(
 
     // Grid settings
     gridSettings: {
-      voltageHigh: settings.grid_voltage_upper_limit_v || 26.5,
-      voltageLow: settings.grid_voltage_lower_limit_v || 0,
-      frequency: settings.grid_frequency_hz || 50,
-      frequencyHigh: settings.grid_frequency_upper_limit_hz || 0.52,
-      frequencyLow: settings.grid_frequency_lower_limit_hz || 0.48,
+      voltageHigh: settings.grid_voltage_upper_limit_v ?? 26.5,
+      voltageLow: settings.grid_voltage_lower_limit_v ?? 0,
+      frequency: settings.grid_frequency_hz ?? 50,
+      frequencyHigh: settings.grid_frequency_upper_limit_hz ?? 0.52,
+      frequencyLow: settings.grid_frequency_lower_limit_hz ?? 0.48,
       peakShavingEnabled: settings.limit_control_function === 1,
     },
 
     // Battery configuration
     batteryConfig: {
       type: settings.lithium_battery_type === 65535 ? 'Lithium Battery' : 'Lead Acid',
-      capacity: settings.battery_capacity_ah || 450,
+      capacity: settings.battery_capacity_ah ?? 450,
       operation: 'State of Charge',
-      maxDischargeCurrent: settings.battery_max_discharge_current_a || 100,
-      maxChargeCurrent: settings.battery_max_charge_current_a || 75,
-      maxGridChargeCurrent: settings.grid_charge_battery_current_a || 20,
-      maxGeneratorChargeCurrent: settings.generator_charge_battery_current_a || 0,
-      maxGridChargerPower: settings.grid_peak_shaving_power_w || 8000,
-      maxChargerPower: settings.max_charge_power_w || 8000,
-      maxDischargerPower: settings.max_export_power_w || 13000,
+      maxDischargeCurrent: settings.battery_max_discharge_current_a ?? 100,
+      maxChargeCurrent: settings.battery_max_charge_current_a ?? 75,
+      maxGridChargeCurrent: settings.grid_charge_battery_current_a ?? 20,
+      maxGeneratorChargeCurrent: settings.generator_charge_battery_current_a ?? 0,
+      maxGridChargerPower: settings.grid_peak_shaving_power_w ?? 8000,
+      maxChargerPower: settings.max_charge_power_w ?? 8000,
+      maxDischargerPower: settings.max_export_power_w ?? 13000,
     },
 
     // Work mode
@@ -173,12 +173,12 @@ export function mapApiSettingsToConfig(
       gridCharge: settings.ac_charge_battery === 1,
       generatorCharge: settings.generator_charge_enabled === 1,
       forceGeneratorOn: false,
-      outputShutdownCapacity: settings.battery_shutdown_capacity_pct || 10,
-      stopBatteryDischargeCapacity: settings.battery_low_capacity_pct || 30,
-      startBatteryDischargeCapacity: settings.battery_restart_capacity_pct || 40,
-      startGridChargeCapacity: settings.grid_charging_start_capacity_pct || 30,
+      outputShutdownCapacity: settings.battery_shutdown_capacity_pct ?? 10,
+      stopBatteryDischargeCapacity: settings.battery_low_capacity_pct ?? 30,
+      startBatteryDischargeCapacity: settings.battery_restart_capacity_pct ?? 40,
+      startGridChargeCapacity: settings.grid_charging_start_capacity_pct ?? 30,
       offGridMode: settings.grid_type_setting === 0,
-      offGridStartupBatteryCapacity: settings.battery_restart_capacity_pct || 40,
+      offGridStartupBatteryCapacity: settings.battery_restart_capacity_pct ?? 40,
     },
   };
 }
