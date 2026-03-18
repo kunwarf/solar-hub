@@ -1,7 +1,18 @@
 import { motion } from "framer-motion";
-import { Cpu, Gauge, Settings, Activity, Sun, Home, Grid3X3, ArrowDown, ArrowUp } from "lucide-react";
+import { Cpu, Gauge, Settings, Activity, Sun, Home, Grid3X3, ArrowDown, ArrowUp, Unlink, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface DeviceTelemetry {
   pv_power_w?: number;
@@ -27,6 +38,8 @@ interface DeviceCardProps {
   telemetry?: DeviceTelemetry;  // Real-time telemetry from power-flow API
   onConfigure?: () => void;
   onViewTelemetry?: () => void;
+  onUnclaim?: () => void;
+  onRemove?: () => void;
   delay?: number;
 }
 
@@ -160,6 +173,8 @@ export function DeviceCard({
   telemetry,
   onConfigure,
   onViewTelemetry,
+  onUnclaim,
+  onRemove,
   delay = 0,
 }: DeviceCardProps) {
   const colors = typeColors[type];
@@ -255,6 +270,52 @@ export function DeviceCard({
           <span className="hidden xs:inline">Configure</span>
           <span className="xs:hidden">Setup</span>
         </Button>
+
+        {onUnclaim && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 sm:h-9 px-2 sm:px-3">
+                <Unlink className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Unclaim {name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes the device from this site and releases it back to the available pool. It can be claimed again on any site.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onUnclaim}>Unclaim</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+
+        {onRemove && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" className="h-8 sm:h-9 px-2 sm:px-3">
+                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove {name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes the device from your system. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onRemove} className="bg-destructive text-destructive-foreground">
+                  Remove
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </motion.div>
   );

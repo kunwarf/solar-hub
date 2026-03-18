@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -22,10 +23,12 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDevicesForUI } from "@/hooks/useDevices";
 import { dashboardService, type DevicePowerData } from "@/api";
+import devicesService from "@/api/services/devices.service";
 import type { DeviceType, DeviceStatus } from "@/api/types";
 
 const DevicesPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { hasPermission, isInstaller } = useUserRole();
   const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,6 +95,24 @@ const DevicesPage = () => {
   const handleViewTelemetry = (deviceId: string) => {
     navigate(`/telemetry?device=${deviceId}`);
   };
+
+  const unclaimMutation = useMutation({
+    mutationFn: (deviceId: string) => devicesService.unclaimDevice(deviceId),
+    onSuccess: () => {
+      toast.success("Device unclaimed successfully");
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
+    },
+    onError: () => toast.error("Failed to unclaim device"),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (deviceId: string) => devicesService.deleteDevice(deviceId),
+    onSuccess: () => {
+      toast.success("Device removed successfully");
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
+    },
+    onError: () => toast.error("Failed to remove device"),
+  });
 
   return (
     <AppLayout>
@@ -201,6 +222,8 @@ const DevicesPage = () => {
                 delay={index * 0.1}
                 onConfigure={() => handleConfigure(device.id)}
                 onViewTelemetry={() => handleViewTelemetry(device.id)}
+                onUnclaim={() => unclaimMutation.mutate(device.id)}
+                onRemove={() => removeMutation.mutate(device.id)}
               />
             );
 
