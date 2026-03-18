@@ -251,15 +251,16 @@ class TelemetryCacheWriter:
                 if src in telemetry:
                     battery_data[target_key] = telemetry[src]
                     break
-        # Determine if charging (positive battery power = charging)
-        if "battery_power_w" in telemetry:
-            battery_data["charging"] = telemetry["battery_power_w"] > 0
-        elif "battery_power" in telemetry:
-            battery_data["charging"] = telemetry["battery_power"] > 0
-        elif "battery_current_a" in telemetry:
+        # Determine if charging — prefer signed current (reliable direction indicator)
+        # over battery power which may be U32 (unsigned) on some inverters (e.g. Senergy)
+        if "battery_current_a" in telemetry:
             battery_data["charging"] = telemetry["battery_current_a"] > 0
         elif "battery_current" in telemetry:
             battery_data["charging"] = telemetry["battery_current"] > 0
+        elif "battery_power_w" in telemetry:
+            battery_data["charging"] = telemetry["battery_power_w"] > 0
+        elif "battery_power" in telemetry:
+            battery_data["charging"] = telemetry["battery_power"] > 0
         if battery_data:
             cache_data["battery"] = battery_data
 

@@ -312,7 +312,20 @@
     "kind": "holding",
     "size": 2,
     "unit": "kWh",
-    "scale": 0.001
+    "scale": 0.001,
+    "comment": "0x1027, unit Wh × 0.001 = kWh"
+  },
+  {
+    "id": "today_pv_kwh",
+    "name": "Today PV Energy (kWh)",
+    "addr": 4135,
+    "type": "U32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "kWh",
+    "scale": 0.001,
+    "comment": "Alias for today_energy — used by Redis cache mapping"
   },
   {
     "id": "today_peak_power",
@@ -337,9 +350,100 @@
     "scale": 0.1
   },
   {
+    "id": "grid_power_w",
+    "name": "Grid Power (Phase R)",
+    "addr": 4864,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1,
+    "comment": "Alias for phase_r_watt_of_grid — used by Redis cache mapping"
+  },
+  {
+    "id": "phase_s_watt_of_grid",
+    "name": "Phase S watt of grid",
+    "addr": 4866,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1
+  },
+  {
+    "id": "phase_t_watt_of_grid",
+    "name": "Phase T watt of grid",
+    "addr": 4868,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1
+  },
+  {
+    "id": "accumulated_energy_positive",
+    "name": "Accumulated energy of positive (import)",
+    "addr": 4870,
+    "type": "U32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "kWh",
+    "scale": 0.01,
+    "comment": "10Wh resolution → scale 0.01 gives kWh"
+  },
+  {
+    "id": "accumulated_energy_negative",
+    "name": "Accumulated energy of negative (export)",
+    "addr": 4872,
+    "type": "U32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "kWh",
+    "scale": 0.01
+  },
+  {
     "id": "phase_r_watt_of_load",
     "name": "Phase R watt of load",
     "addr": 4874,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1
+  },
+  {
+    "id": "load_power_w",
+    "name": "Load Power (Phase R)",
+    "addr": 4874,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1,
+    "comment": "Alias for phase_r_watt_of_load — used by Redis cache mapping"
+  },
+  {
+    "id": "phase_s_watt_of_load",
+    "name": "Phase S watt of load",
+    "addr": 4876,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1
+  },
+  {
+    "id": "phase_t_watt_of_load",
+    "name": "Phase T watt of load",
+    "addr": 4878,
     "type": "S32",
     "rw": "RO",
     "kind": "holding",
@@ -361,6 +465,18 @@
   },
 
   {
+    "id": "grid_frequency_hz",
+    "name": "Grid Frequency",
+    "addr": 4920,
+    "type": "U16",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 1,
+    "unit": "Hz",
+    "scale": 0.01,
+    "comment": "0x1338"
+  },
+  {
     "id": "today_import_energy",
     "name": "Today import Energy",
     "addr": 4914,
@@ -370,6 +486,18 @@
     "size": 2,
     "unit": "kWh",
     "scale": 0.01
+  },
+  {
+    "id": "today_import_kwh",
+    "name": "Today import Energy (kWh)",
+    "addr": 4914,
+    "type": "U32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "kWh",
+    "scale": 0.01,
+    "comment": "Alias for today_import_energy — used by Redis cache mapping"
   },
   {
     "id": "today_export_energy",
@@ -383,6 +511,18 @@
     "scale": 0.01
   },
   {
+    "id": "today_export_kwh",
+    "name": "Today export Energy (kWh)",
+    "addr": 4916,
+    "type": "U32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "kWh",
+    "scale": 0.01,
+    "comment": "Alias for today_export_energy — used by Redis cache mapping"
+  },
+  {
     "id": "today_load_energy",
     "name": "Today load Energy",
     "addr": 4918,
@@ -392,6 +532,18 @@
     "size": 2,
     "unit": "kWh",
     "scale": 0.01
+  },
+  {
+    "id": "today_load_kwh",
+    "name": "Today load Energy (kWh)",
+    "addr": 4918,
+    "type": "U32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "kWh",
+    "scale": 0.01,
+    "comment": "Alias for today_load_energy — used by Redis cache mapping"
   },
   {
     "id": "phase_r_voltage_of_eps",
@@ -479,6 +631,17 @@
     "kind": "holding",
     "size": 1,
     "unit": "°C"
+  },
+  {
+    "id": "battery_temp_c",
+    "name": "Battery temperature (°C)",
+    "addr": 8193,
+    "type": "S16",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 1,
+    "unit": "°C",
+    "comment": "Alias for battery_temperature — used by Redis cache mapping"
   },
   {
     "id": "battery_voltage_v",

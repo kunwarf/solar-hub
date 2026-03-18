@@ -56,14 +56,16 @@ protocols:
     adapter_class: "adapters.senergy.SenergyAdapter"
 
     identification:
-      # Senergy register map starts at 0x1A00 (6656)
-      register: 6656
+      # Grid Phase Number at 0x1A48 — returns 1 (single-phase) or 3 (three-phase)
+      # 0x1A00 is ASCII device model, not a numeric register — can't use it for identification
+      register: 6728
       size: 1
-      expected_values: [100, 101, 102, 103]
+      expected_values: [1, 3]
       timeout: 5.0
 
     serial_number:
-      register: 6666  # 0x1A00 + 10
+      # Device Serial Number at 0x1A10 = 6672, 8 registers, ASCII
+      register: 6672
       size: 8
       encoding: ascii
 
