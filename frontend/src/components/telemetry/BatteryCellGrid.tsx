@@ -109,10 +109,11 @@ interface BatteryCellGridProps {
  * Map a raw cell from the backend to the CellData shape the UI expects.
  * Status is derived from voltage/temperature thresholds and status strings.
  */
-function mapRawCell(raw: RawCellData, unitIndex: number): CellData {
+function mapRawCell(raw: RawCellData, unitIndex: number, unitData?: UnitData): CellData {
   const voltage = raw.voltage_v ?? 0;
-  const temp = raw.temperature ?? 25;
-  const soc = raw.soc ?? 0;
+  // Pylontech only provides temperature and SOC at unit level, not per-cell
+  const temp = raw.temperature ?? unitData?.temp_c ?? 0;
+  const soc = raw.soc ?? unitData?.soc_pct ?? 0;
 
   const statusStr = (raw.basic_st ?? raw.volt_st ?? "Normal").toLowerCase();
   let status: CellData["status"] = "normal";
@@ -189,7 +190,7 @@ const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: index * 0.015, duration: 0.2 }}
             className={cn(
-              "relative cursor-pointer transition-all hover:scale-110 hover:z-10",
+              "relative cursor-pointer transition-all hover:scale-110 hover:z-10 flex flex-col items-center",
               cell.status === "balancing" && "animate-pulse"
             )}
           >
@@ -211,6 +212,9 @@ const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
                   className={cell.status === "critical" ? "animate-ping" : ""} />
               )}
             </svg>
+            <span className={cn("text-[6px] sm:text-[7px] font-mono leading-none mt-0.5", getVoltageColor(cell.voltage))}>
+              {cell.voltage > 0 ? `${cell.voltage.toFixed(2)}V` : "--"}
+            </span>
           </motion.div>
         </TooltipTrigger>
         <TooltipContent side="top" className="bg-card border-border p-3">
@@ -224,12 +228,14 @@ const CellVisual = ({ cell, index }: { cell: CellData; index: number }) => {
               <span className={cn("font-mono", getVoltageColor(cell.voltage))}>{cell.voltage}V</span>
               <div className="flex items-center gap-1">
                 <Thermometer className={cn("w-3 h-3", getTempColor(cell.temperature))} />
-                <span className="text-muted-foreground">Temp:</span>
+                <span className="text-muted-foreground">Unit Temp:</span>
               </div>
-              <span className={cn("font-mono", getTempColor(cell.temperature))}>{cell.temperature}°C</span>
+              <span className={cn("font-mono", getTempColor(cell.temperature))}>
+                {cell.temperature > 0 ? `${cell.temperature}°C` : "—"}
+              </span>
               <div className="flex items-center gap-1">
                 <Battery className="w-3 h-3 text-battery" />
-                <span className="text-muted-foreground">SOC:</span>
+                <span className="text-muted-foreground">Unit SOC:</span>
               </div>
               <span className="font-mono text-battery">{cell.soc}%</span>
               <span className="text-muted-foreground">Status:</span>
@@ -338,7 +344,7 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
   const cellsByUnit = units.map(u => {
     const cells = rawCells
       .filter(c => c.unit === u.unit)
-      .map((c, i) => mapRawCell(c, i));
+      .map((c, i) => mapRawCell(c, i, u));
     return { unit: u, cells };
   });
 
