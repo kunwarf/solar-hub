@@ -143,25 +143,44 @@ class WebServer:
                     headers_raw = raw[:header_end].decode("utf-8", "replace")
                     body_so_far = raw[header_end + 4:]
                     content_length = 0
+                    content_type = ""
                     for line in headers_raw.split("\r\n"):
-                        if line.lower().startswith("content-length:"):
+                        ll = line.lower()
+                        if ll.startswith("content-length:"):
                             try:
                                 content_length = int(line.split(":", 1)[1].strip())
                             except ValueError:
                                 pass
-                            break
-                    while len(body_so_far) < content_length:
-                        chunk = client.recv(512)
-                        if not chunk:
-                            break
-                        body_so_far += chunk
-                    request = headers_raw + "\r\n\r\n" + body_so_far.decode("utf-8", "replace")
+                        elif ll.startswith("content-type:"):
+                            content_type = line.split(":", 1)[1].strip()
+
+                    # Extract method + path from first header line
+                    first_line = headers_raw.split("\r\n")[0]
+                    parts = first_line.split(" ")
+                    req_method = parts[0] if parts else "GET"
+                    req_path = parts[1] if len(parts) > 1 else "/"
+
+                    # Stream file uploads directly to flash — no full-body buffering
+                    if req_method == "POST" and req_path.startswith("/api/files/upload"):
+                        response = self._stream_file_upload(
+                            client, body_so_far, content_length, req_path
+                        )
+                        client.sendall(response.encode("utf-8"))
+                    else:
+                        while len(body_so_far) < content_length:
+                            chunk = client.recv(512)
+                            if not chunk:
+                                break
+                            body_so_far += chunk
+                        request = headers_raw + "\r\n\r\n" + body_so_far.decode("utf-8", "replace")
+                        if request:
+                            response = self._handle_request(request)
+                            client.sendall(response.encode("utf-8"))
                 else:
                     request = raw.decode("utf-8", "replace")
-
-                if request:
-                    response = self._handle_request(request)
-                    client.sendall(response.encode("utf-8"))
+                    if request:
+                        response = self._handle_request(request)
+                        client.sendall(response.encode("utf-8"))
             except Exception as e:
                 print("[Web] Request error:", e)
             finally:
@@ -1037,10 +1056,10 @@ async function uploadFile() {
     status.innerHTML = 'Uploading...';
 
     try {
-        const response = await fetch('/api/files/upload', {
+        const response = await fetch('/api/files/upload?filename=' + encodeURIComponent(filename), {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({filename: filename, content: content})
+            headers: {'Content-Type': 'text/plain'},
+            body: content
         });
 
         const result = await response.json();
@@ -1087,8 +1106,52 @@ async function deleteFile(filename) {
         disk = FileManager.get_disk_usage()
         return {"files": files, "disk": disk}
 
+    def _stream_file_upload(self, client, body_so_far, content_length, path_full):
+        """
+        Stream file upload directly to flash without buffering the full body in RAM.
+
+        Expects: POST /api/files/upload?filename=<name>
+        Body: raw file bytes (text/plain or application/octet-stream)
+        """
+        import gc
+
+        # Extract filename from query string
+        filename = ""
+        if "?" in path_full:
+            qs = path_full.split("?", 1)[1]
+            for param in qs.split("&"):
+                if param.startswith("filename="):
+                    filename = param[9:].replace("%2F", "/").replace("%20", " ")
+                    break
+
+        if not filename:
+            # Drain remaining body then return error
+            received = len(body_so_far)
+            while received < content_length:
+                chunk = client.recv(512)
+                if not chunk:
+                    break
+                received += len(chunk)
+            return self._json_response({"success": False, "error": "Missing filename"})
+
+        try:
+            received = len(body_so_far)
+            with open(filename, "wb") as f:
+                if body_so_far:
+                    f.write(body_so_far)
+                while received < content_length:
+                    chunk = client.recv(512)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    received += len(chunk)
+                    gc.collect()
+            return self._json_response({"success": True, "filename": filename, "size": received})
+        except Exception as e:
+            return self._json_response({"success": False, "error": str(e)})
+
     def _handle_file_upload(self, body_raw, content_type):
-        """Handle file upload."""
+        """Handle file upload (legacy JSON path — kept for compatibility)."""
         try:
             # Parse JSON body
             data = json.loads(body_raw) if body_raw else {}
