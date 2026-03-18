@@ -138,7 +138,7 @@ const SliderRow = ({ label, value, min, max, step = 1, unit = "%", description, 
 // ============== TOU Window Components ==============
 
 interface TOUWindowData {
-  mode: string;
+  gridCharge: boolean;  // prog_charge_mode: 0=disabled, 1=enabled
   startTime: string;
   endTime: string;
   power: number;
@@ -152,12 +152,6 @@ const TOUWindowRow = ({ windowNum, data, onUpdate, onDelete }: {
   onUpdate: (data: TOUWindowData) => void;
   onDelete: () => void;
 }) => {
-  const modeColors = {
-    auto: "bg-primary/20 text-primary border-primary/30",
-    charge: "bg-success/20 text-success border-success/30",
-    discharge: "bg-warning/20 text-warning border-warning/30",
-  };
-
   return (
     <motion.div
       layout
@@ -172,7 +166,9 @@ const TOUWindowRow = ({ windowNum, data, onUpdate, onDelete }: {
         <div className="flex items-center gap-3">
           <div className={cn(
             "px-2.5 py-1 rounded-full text-xs font-medium border",
-            modeColors[data.mode as keyof typeof modeColors] || modeColors.auto
+            data.gridCharge
+              ? "bg-success/20 text-success border-success/30"
+              : "bg-primary/20 text-primary border-primary/30"
           )}>
             Window {windowNum}
           </div>
@@ -192,18 +188,16 @@ const TOUWindowRow = ({ windowNum, data, onUpdate, onDelete }: {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div>
-          <Label className="text-xs text-muted-foreground mb-1.5 block">Mode</Label>
-          <Select value={data.mode} onValueChange={(v) => onUpdate({ ...data, mode: v })} disabled={!data.enabled}>
-            <SelectTrigger className="h-9 bg-secondary/50 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Auto</SelectItem>
-              <SelectItem value="charge">Charge</SelectItem>
-              <SelectItem value="discharge">Discharge</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex flex-col justify-end">
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Grid Charge</Label>
+          <div className="flex items-center gap-2 h-9 px-3 rounded-md bg-secondary/50">
+            <Switch
+              checked={data.gridCharge}
+              onCheckedChange={(v) => onUpdate({ ...data, gridCharge: v })}
+              disabled={!data.enabled}
+            />
+            <span className="text-xs text-muted-foreground">{data.gridCharge ? "On" : "Off"}</span>
+          </div>
         </div>
         <div>
           <Label className="text-xs text-muted-foreground mb-1.5 block">Start</Label>
@@ -253,12 +247,6 @@ const TOUWindowRow = ({ windowNum, data, onUpdate, onDelete }: {
 };
 
 const TOUTimeline = ({ windows }: { windows: TOUWindowData[] }) => {
-  const modeColors = {
-    auto: "bg-primary",
-    charge: "bg-success",
-    discharge: "bg-warning",
-  };
-
   const timeToPercent = (time: string) => {
     const [h, m] = time.split(":").map(Number);
     return ((h * 60 + m) / (24 * 60)) * 100;
@@ -283,7 +271,7 @@ const TOUTimeline = ({ windows }: { windows: TOUWindowData[] }) => {
               key={i}
               className={cn(
                 "absolute h-full flex items-center justify-center text-xs font-medium text-white",
-                modeColors[w.mode as keyof typeof modeColors] || modeColors.auto
+                w.gridCharge ? "bg-success" : "bg-primary"
               )}
               style={{ left: `${start}%`, width: `${width}%` }}
             >
@@ -295,15 +283,11 @@ const TOUTimeline = ({ windows }: { windows: TOUWindowData[] }) => {
       <div className="flex gap-4 text-xs">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-primary" />
-          <span>Auto</span>
+          <span>Grid Charge Off</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-success" />
-          <span>Charge</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-warning" />
-          <span>Discharge</span>
+          <span>Grid Charge On</span>
         </div>
       </div>
     </div>
@@ -492,12 +476,12 @@ export function InverterConfigPage({ deviceId, deviceName, settings }: InverterC
     }
     console.log('[InverterConfigPage] Using default TOU windows');
     return [
-      { mode: "auto", startTime: "00:00", endTime: "07:00", power: 100, targetSoc: 50, enabled: true },
-      { mode: "auto", startTime: "07:00", endTime: "09:00", power: 1000, targetSoc: 50, enabled: true },
-      { mode: "charge", startTime: "09:00", endTime: "15:00", power: 3000, targetSoc: 98, enabled: true },
-      { mode: "auto", startTime: "15:00", endTime: "17:00", power: 1120, targetSoc: 98, enabled: true },
-      { mode: "discharge", startTime: "17:00", endTime: "23:00", power: 2400, targetSoc: 50, enabled: true },
-      { mode: "auto", startTime: "23:00", endTime: "00:00", power: 1000, targetSoc: 50, enabled: true },
+      { gridCharge: false, startTime: "00:00", endTime: "07:00", power: 100, targetSoc: 50, enabled: true },
+      { gridCharge: false, startTime: "07:00", endTime: "09:00", power: 1000, targetSoc: 50, enabled: true },
+      { gridCharge: true,  startTime: "09:00", endTime: "15:00", power: 3000, targetSoc: 98, enabled: true },
+      { gridCharge: false, startTime: "15:00", endTime: "17:00", power: 1120, targetSoc: 98, enabled: true },
+      { gridCharge: false, startTime: "17:00", endTime: "23:00", power: 2400, targetSoc: 50, enabled: true },
+      { gridCharge: false, startTime: "23:00", endTime: "00:00", power: 1000, targetSoc: 50, enabled: true },
     ];
   });
 
@@ -556,7 +540,7 @@ export function InverterConfigPage({ deviceId, deviceName, settings }: InverterC
     if (touWindows.length >= 6) return;
     setTouWindows(prev => [
       ...prev,
-      { mode: "auto", startTime: "00:00", endTime: "06:00", power: 1000, targetSoc: 50, enabled: true },
+      { gridCharge: false, startTime: "00:00", endTime: "06:00", power: 1000, targetSoc: 50, enabled: true },
     ]);
   };
 

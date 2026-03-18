@@ -77,7 +77,7 @@ export interface InverterConfig {
 }
 
 export interface TOUWindowData {
-  mode: string;
+  gridCharge: boolean;  // prog_charge_mode: 0=disabled, 1=enabled
   startTime: string;
   endTime: string;
   power: number;
@@ -196,12 +196,8 @@ export function mapApiSettingsToTOUWindows(settings: Record<string, any>): TOUWi
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
 
-  // Map charge mode to mode string
-  const getModeFromChargeMode = (chargeMode: number): string => {
-    if (chargeMode === 0) return 'auto';
-    if (chargeMode === 1) return 'charge';
-    return 'discharge';
-  };
+  // prog_charge_mode: 0 = grid charge disabled, 1 = grid charge enabled
+  const getGridCharge = (chargeMode: number): boolean => chargeMode === 1;
 
   // Extract TOU windows (prog1-6)
   for (let i = 1; i <= 6; i++) {
@@ -216,7 +212,7 @@ export function mapApiSettingsToTOUWindows(settings: Record<string, any>): TOUWi
       const endMinutes = i < 6 ? settings[`prog${i + 1}_time`] : (i === 6 ? settings.prog1_time : 0);
 
       windows.push({
-        mode: getModeFromChargeMode(settings[modeKey] || 0),
+        gridCharge: getGridCharge(settings[modeKey] || 0),
         startTime: hhmmToTime(startMinutes),
         endTime: hhmmToTime(endMinutes),
         power: settings[powerKey] || 1000,
@@ -273,8 +269,7 @@ export function mapConfigToApiSettings(
       settings[`prog${progNum}_time`] = timeToHhmm(window.startTime);
       settings[`prog${progNum}_power_w`] = window.power;
       settings[`prog${progNum}_capacity_pct`] = window.targetSoc;
-      settings[`prog${progNum}_charge_mode`] =
-        window.mode === 'charge' ? 1 : (window.mode === 'discharge' ? 2 : 0);
+      settings[`prog${progNum}_charge_mode`] = window.gridCharge ? 1 : 0;
     }
   });
 
