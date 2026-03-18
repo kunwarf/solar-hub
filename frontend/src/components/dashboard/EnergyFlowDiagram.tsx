@@ -11,6 +11,7 @@ interface EnergyFlowDiagramProps {
   consumption: number;
   gridPower: number;
   isGridExporting: boolean;
+  isCharging?: boolean;
   showConnectionStatus?: boolean;
 }
 
@@ -115,15 +116,17 @@ const BatteryNode = ({
   power,
   position,
   delay = 0,
+  isCharging: isChargingProp,
 }: {
   level: number;
   power: number;
   position: { x: number; y: number };
   delay?: number;
+  isCharging?: boolean;
 }) => {
   const { x, y } = position;
-  const isCharging = power > 0;
-  const isDischarging = power < 0;
+  const isCharging = isChargingProp !== undefined ? isChargingProp : power > 0;
+  const isDischarging = isChargingProp !== undefined ? !isChargingProp && power > 0 : power < 0;
   const fillHeight = Math.max(0, Math.min(100, level));
   const size = 72; // Larger node size
   
@@ -312,6 +315,7 @@ const EnergyFlowDiagramComponent = ({
   consumption,
   gridPower,
   isGridExporting,
+  isCharging,
   showConnectionStatus = true,
   className,
 }: EnergyFlowDiagramProps & { className?: string }) => {
@@ -396,7 +400,7 @@ const EnergyFlowDiagramComponent = ({
             path={paths.centerToBattery}
             color={colors.battery}
             power={Math.abs(batteryPower)}
-            reverse={batteryPower < 0}
+            reverse={isCharging !== undefined ? !isCharging : batteryPower < 0}
           />
           <FlowConnection
             pathId="path-home"
@@ -470,6 +474,7 @@ const EnergyFlowDiagramComponent = ({
             power={batteryPower}
             position={positions.battery}
             delay={0.05}
+            isCharging={isCharging}
           />
           
           <EnergyNode

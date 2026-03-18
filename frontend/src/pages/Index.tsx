@@ -207,6 +207,7 @@ const Index = () => {
     consumption: telemetry.consumption,
     gridPower: telemetry.gridPower,
     isGridExporting: telemetry.isGridExporting,
+    isCharging: telemetry.isCharging,
   } : {
     solarPower: stats.solarPower,
     batteryPower: stats.batteryPower,
@@ -214,6 +215,7 @@ const Index = () => {
     consumption: stats.consumption,
     gridPower: stats.gridPower,
     isGridExporting: stats.isGridExporting,
+    isCharging: stats.batteryPower > 0,
   };
 
   const backupTimeHours = calculateBackupTime(liveStats.batteryLevel, liveStats.consumption);
@@ -387,6 +389,7 @@ const Index = () => {
               consumption={liveStats.consumption}
               gridPower={liveStats.gridPower}
               isGridExporting={liveStats.isGridExporting}
+              isCharging={liveStats.isCharging}
               className="h-full"
             />
           </div>
