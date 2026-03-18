@@ -138,7 +138,7 @@ class DeviceService:
             if model:
                 existing.model = model
 
-            updated = await self._device_repo.update(existing)
+            updated = await self._device_repo.update_connection_on_reconnect(existing)
             logger.info(f"Device {serial_number} reconnected (id: {existing.device_id})")
             return updated
 

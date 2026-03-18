@@ -202,6 +202,32 @@ class DeviceRegistryRepository:
         await self._session.execute(stmt)
         return device
 
+    async def update_connection_on_reconnect(self, device: DeviceRegistry) -> DeviceRegistry:
+        """
+        Update only connection-related fields on device reconnect.
+
+        Unlike update(), this method does NOT touch metadata so that the
+        inverter_serial link stored there is never overwritten by reconnects.
+        """
+        stmt = (
+            update(DeviceRegistryModel)
+            .where(DeviceRegistryModel.device_id == device.device_id)
+            .values(
+                device_type=device.device_type.value if isinstance(device.device_type, DeviceType) else device.device_type,
+                firmware_version=device.firmware_version,
+                manufacturer=device.manufacturer,
+                protocol=device.protocol,
+                capabilities=device.capabilities,
+                model=device.model,
+                connection_status=device.connection_status.value if isinstance(device.connection_status, ConnectionStatus) else device.connection_status,
+                last_connected_at=device.last_connected_at,
+                reconnect_count=device.reconnect_count,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        await self._session.execute(stmt)
+        return device
+
     async def delete(self, device_id: UUID) -> bool:
         """
         Delete a device registry entry.
