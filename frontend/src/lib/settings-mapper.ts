@@ -93,10 +93,10 @@ export function mapApiSettingsToConfig(
   deviceId?: string,
   deviceName?: string
 ): InverterConfig {
-  // Convert time from minutes to HH:MM format
-  const minutesToTime = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+  // Convert HHMM integer (e.g. 1700 = 17:00) to HH:MM string
+  const hhmmToTime = (hhmm: number): string => {
+    const hours = Math.floor(hhmm / 100);
+    const mins = hhmm % 100;
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
 
@@ -189,10 +189,10 @@ export function mapApiSettingsToConfig(
 export function mapApiSettingsToTOUWindows(settings: Record<string, any>): TOUWindowData[] {
   const windows: TOUWindowData[] = [];
 
-  // Convert time from minutes to HH:MM format
-  const minutesToTime = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+  // Convert HHMM integer (e.g. 1700 = 17:00) to HH:MM string
+  const hhmmToTime = (hhmm: number): string => {
+    const hours = Math.floor(hhmm / 100);
+    const mins = hhmm % 100;
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
 
@@ -217,8 +217,8 @@ export function mapApiSettingsToTOUWindows(settings: Record<string, any>): TOUWi
 
       windows.push({
         mode: getModeFromChargeMode(settings[modeKey] || 0),
-        startTime: minutesToTime(startMinutes),
-        endTime: minutesToTime(endMinutes),
+        startTime: hhmmToTime(startMinutes),
+        endTime: hhmmToTime(endMinutes),
         power: settings[powerKey] || 1000,
         targetSoc: settings[socKey] || 50,
         enabled: true,
@@ -236,10 +236,10 @@ export function mapConfigToApiSettings(
   config: InverterConfig,
   touWindows: TOUWindowData[]
 ): Record<string, any> {
-  // Convert HH:MM to minutes
-  const timeToMinutes = (time: string): number => {
+  // Convert HH:MM string to HHMM integer (e.g. "17:00" → 1700)
+  const timeToHhmm = (time: string): number => {
     const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
+    return hours * 100 + minutes;
   };
 
   const settings: Record<string, any> = {
@@ -270,7 +270,7 @@ export function mapConfigToApiSettings(
   touWindows.forEach((window, i) => {
     const progNum = i + 1;
     if (progNum <= 6) {
-      settings[`prog${progNum}_time`] = timeToMinutes(window.startTime);
+      settings[`prog${progNum}_time`] = timeToHhmm(window.startTime);
       settings[`prog${progNum}_power_w`] = window.power;
       settings[`prog${progNum}_capacity_pct`] = window.targetSoc;
       settings[`prog${progNum}_charge_mode`] =
