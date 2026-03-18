@@ -191,6 +191,7 @@ class ModbusBridge:
     def _cleanup_socket(self):
         """Clean up socket resources."""
         self._connected = False
+        self._registered = False  # Re-register on next connect to refresh last_connected_at
         if self.socket:
             try:
                 self.socket.close()

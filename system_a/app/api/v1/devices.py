@@ -610,6 +610,7 @@ async def delete_device(
     device_id: UUID,
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
 ):
     """Delete/deregister a device."""
     device = await uow.devices.get_by_id(device_id)
@@ -622,6 +623,15 @@ async def delete_device(
 
     # Check access
     await check_site_access(device.site_id, current_user, uow, require_manage=True)
+
+    # Release in System B so the device becomes orphan and can be re-claimed
+    try:
+        await system_b_client.release_device(device_id)
+    except SystemBClientError as e:
+        import logging
+        logging.getLogger("system_a").warning(
+            f"System B release failed for {device_id}: {e} — proceeding with deletion"
+        )
 
     await uow.devices.delete(device_id)
     await uow.commit()
