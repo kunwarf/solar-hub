@@ -56,7 +56,7 @@ function powerSnapshotToTelemetry(snapshot: PowerSnapshot): TelemetryData {
     timestamp: snapshot.timestamp,
     solarPower: snapshot.solar_power_kw,
     batteryPower: Math.abs(snapshot.battery_power_kw),
-    batteryLevel: snapshot.battery_soc,
+    batteryLevel: Math.round(snapshot.battery_soc),
     isCharging: snapshot.battery_power_kw > 0, // Positive means charging (server normalises sign)
     consumption: snapshot.consumption_kw,
     gridPower: Math.abs(snapshot.grid_power_kw),
@@ -71,7 +71,7 @@ function powerFlowToTelemetry(data: PowerFlowData): TelemetryData {
     timestamp: data.timestamp || new Date().toISOString(),
     solarPower: data.pv_power_w / 1000,  // Convert W to kW
     batteryPower: Math.abs(data.battery_power_w) / 1000,
-    batteryLevel: data.battery_soc_pct,
+    batteryLevel: Math.round(data.battery_soc_pct),
     isCharging: data.is_charging,
     consumption: data.load_power_w / 1000,
     gridPower: Math.abs(data.grid_power_w) / 1000,
