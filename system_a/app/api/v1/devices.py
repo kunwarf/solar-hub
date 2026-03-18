@@ -937,7 +937,19 @@ async def get_device_battery_bank(
         # Per-unit detail (Pylontech only)
         "units": battery_bank.get("units", []) if battery_bank else [],
         # Per-cell detail (Pylontech only)
-        "cells": battery_bank.get("cells", []) if battery_bank else [],
+        # Normalise key name: System B stores cells with "module" key,
+        # frontend expects "unit" key for grouping cells by unit.
+        "cells": [
+            {
+                "unit": c.get("module", c.get("unit", 0)),
+                "cell": c.get("cell", 0),
+                "voltage_v": c.get("voltage_v"),
+                "temperature": c.get("temperature"),
+                "soc": c.get("soc"),
+                "basic_st": c.get("basic_st"),
+            }
+            for c in (battery_bank.get("cells", []) if battery_bank else [])
+        ],
     }
 
 
