@@ -57,7 +57,7 @@ function powerSnapshotToTelemetry(snapshot: PowerSnapshot): TelemetryData {
     solarPower: snapshot.solar_power_kw,
     batteryPower: Math.abs(snapshot.battery_power_kw),
     batteryLevel: snapshot.battery_soc,
-    isCharging: snapshot.battery_power_kw < 0, // Negative means charging
+    isCharging: snapshot.battery_power_kw > 0, // Positive means charging (server normalises sign)
     consumption: snapshot.consumption_kw,
     gridPower: Math.abs(snapshot.grid_power_kw),
     isGridExporting: snapshot.is_exporting,
