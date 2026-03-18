@@ -256,7 +256,7 @@ async def update_device_settings(
                 "settings": request.settings,
                 "apply_immediately": request.apply_immediately,
                 "updated_by": str(current_user.id),
-                "updated_by_email": current_user.email,
+                "updated_by_email": str(current_user.email),
             },
             device_serial=device.serial_number,  # Pass serial for direct lookup in System B
             priority=8,  # High priority for settings updates
