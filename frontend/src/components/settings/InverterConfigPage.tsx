@@ -138,7 +138,8 @@ const SliderRow = ({ label, value, min, max, step = 1, unit = "%", description, 
 // ============== TOU Window Components ==============
 
 interface TOUWindowData {
-  gridCharge: boolean;  // prog_charge_mode: 0=disabled, 1=enabled
+  gridCharge: boolean;      // prog_charge_mode bit0: grid charging enabled
+  generatorCharge: boolean; // prog_charge_mode bit1: generator charging enabled
   startTime: string;
   endTime: string;
   power: number;
@@ -166,8 +167,12 @@ const TOUWindowRow = ({ windowNum, data, onUpdate, onDelete }: {
         <div className="flex items-center gap-3">
           <div className={cn(
             "px-2.5 py-1 rounded-full text-xs font-medium border",
-            data.gridCharge
+            data.gridCharge && data.generatorCharge
+              ? "bg-warning/20 text-warning border-warning/30"
+              : data.gridCharge
               ? "bg-success/20 text-success border-success/30"
+              : data.generatorCharge
+              ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
               : "bg-primary/20 text-primary border-primary/30"
           )}>
             Window {windowNum}
@@ -187,7 +192,7 @@ const TOUWindowRow = ({ windowNum, data, onUpdate, onDelete }: {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <div className="flex flex-col justify-end">
           <Label className="text-xs text-muted-foreground mb-1.5 block">Grid Charge</Label>
           <div className="flex items-center gap-2 h-9 px-3 rounded-md bg-secondary/50">
@@ -197,6 +202,17 @@ const TOUWindowRow = ({ windowNum, data, onUpdate, onDelete }: {
               disabled={!data.enabled}
             />
             <span className="text-xs text-muted-foreground">{data.gridCharge ? "On" : "Off"}</span>
+          </div>
+        </div>
+        <div className="flex flex-col justify-end">
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Gen Charge</Label>
+          <div className="flex items-center gap-2 h-9 px-3 rounded-md bg-secondary/50">
+            <Switch
+              checked={data.generatorCharge}
+              onCheckedChange={(v) => onUpdate({ ...data, generatorCharge: v })}
+              disabled={!data.enabled}
+            />
+            <span className="text-xs text-muted-foreground">{data.generatorCharge ? "On" : "Off"}</span>
           </div>
         </div>
         <div>
@@ -271,7 +287,9 @@ const TOUTimeline = ({ windows }: { windows: TOUWindowData[] }) => {
               key={i}
               className={cn(
                 "absolute h-full flex items-center justify-center text-xs font-medium text-white",
-                w.gridCharge ? "bg-success" : "bg-primary"
+                w.gridCharge && w.generatorCharge ? "bg-warning" :
+                w.gridCharge ? "bg-success" :
+                w.generatorCharge ? "bg-orange-500" : "bg-primary"
               )}
               style={{ left: `${start}%`, width: `${width}%` }}
             >
@@ -280,14 +298,22 @@ const TOUTimeline = ({ windows }: { windows: TOUWindowData[] }) => {
           );
         })}
       </div>
-      <div className="flex gap-4 text-xs">
+      <div className="flex flex-wrap gap-4 text-xs">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-primary" />
-          <span>Grid Charge Off</span>
+          <span>No Charging</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-success" />
-          <span>Grid Charge On</span>
+          <span>Grid Charge</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-orange-500" />
+          <span>Generator Charge</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-warning" />
+          <span>Grid + Generator</span>
         </div>
       </div>
     </div>
@@ -477,12 +503,12 @@ export function InverterConfigPage({ deviceId, deviceName, settings, onSettingsC
     }
     console.log('[InverterConfigPage] Using default TOU windows');
     return [
-      { gridCharge: false, startTime: "00:00", endTime: "07:00", power: 100, targetSoc: 50, enabled: true },
-      { gridCharge: false, startTime: "07:00", endTime: "09:00", power: 1000, targetSoc: 50, enabled: true },
-      { gridCharge: true,  startTime: "09:00", endTime: "15:00", power: 3000, targetSoc: 98, enabled: true },
-      { gridCharge: false, startTime: "15:00", endTime: "17:00", power: 1120, targetSoc: 98, enabled: true },
-      { gridCharge: false, startTime: "17:00", endTime: "23:00", power: 2400, targetSoc: 50, enabled: true },
-      { gridCharge: false, startTime: "23:00", endTime: "00:00", power: 1000, targetSoc: 50, enabled: true },
+      { gridCharge: false, generatorCharge: false, startTime: "00:00", endTime: "07:00", power: 100, targetSoc: 50, enabled: true },
+      { gridCharge: false, generatorCharge: false, startTime: "07:00", endTime: "09:00", power: 1000, targetSoc: 50, enabled: true },
+      { gridCharge: true,  generatorCharge: false, startTime: "09:00", endTime: "15:00", power: 3000, targetSoc: 98, enabled: true },
+      { gridCharge: false, generatorCharge: false, startTime: "15:00", endTime: "17:00", power: 1120, targetSoc: 98, enabled: true },
+      { gridCharge: false, generatorCharge: false, startTime: "17:00", endTime: "23:00", power: 2400, targetSoc: 50, enabled: true },
+      { gridCharge: false, generatorCharge: false, startTime: "23:00", endTime: "00:00", power: 1000, targetSoc: 50, enabled: true },
     ];
   });
 
@@ -548,7 +574,7 @@ export function InverterConfigPage({ deviceId, deviceName, settings, onSettingsC
     if (touWindows.length >= 6) return;
     setTouWindows(prev => [
       ...prev,
-      { gridCharge: false, startTime: "00:00", endTime: "06:00", power: 1000, targetSoc: 50, enabled: true },
+      { gridCharge: false, generatorCharge: false, startTime: "00:00", endTime: "06:00", power: 1000, targetSoc: 50, enabled: true },
     ]);
   };
 

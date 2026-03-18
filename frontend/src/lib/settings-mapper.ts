@@ -77,7 +77,8 @@ export interface InverterConfig {
 }
 
 export interface TOUWindowData {
-  gridCharge: boolean;  // prog_charge_mode: 0=disabled, 1=enabled
+  gridCharge: boolean;      // prog_charge_mode bit0: grid charging enabled
+  generatorCharge: boolean; // prog_charge_mode bit1: generator charging enabled
   startTime: string;
   endTime: string;
   power: number;
@@ -196,8 +197,9 @@ export function mapApiSettingsToTOUWindows(settings: Record<string, any>): TOUWi
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
 
-  // prog_charge_mode: 0 = grid charge disabled, 1 = grid charge enabled
-  const getGridCharge = (chargeMode: number): boolean => chargeMode === 1;
+  // prog_charge_mode is a 2-bit field: bit0=grid charge, bit1=generator charge
+  const getGridCharge = (chargeMode: number): boolean => (chargeMode & 1) === 1;
+  const getGeneratorCharge = (chargeMode: number): boolean => (chargeMode & 2) === 2;
 
   // Extract TOU windows (prog1-6)
   for (let i = 1; i <= 6; i++) {
@@ -212,11 +214,12 @@ export function mapApiSettingsToTOUWindows(settings: Record<string, any>): TOUWi
       const endMinutes = i < 6 ? settings[`prog${i + 1}_time`] : (i === 6 ? settings.prog1_time : 0);
 
       windows.push({
-        gridCharge: getGridCharge(settings[modeKey] || 0),
+        gridCharge: getGridCharge(settings[modeKey] ?? 0),
+        generatorCharge: getGeneratorCharge(settings[modeKey] ?? 0),
         startTime: hhmmToTime(startMinutes),
         endTime: hhmmToTime(endMinutes),
-        power: settings[powerKey] || 1000,
-        targetSoc: settings[socKey] || 50,
+        power: settings[powerKey] ?? 1000,
+        targetSoc: settings[socKey] ?? 50,
         enabled: true,
       });
     }
@@ -269,7 +272,7 @@ export function mapConfigToApiSettings(
       settings[`prog${progNum}_time`] = timeToHhmm(window.startTime);
       settings[`prog${progNum}_power_w`] = window.power;
       settings[`prog${progNum}_capacity_pct`] = window.targetSoc;
-      settings[`prog${progNum}_charge_mode`] = window.gridCharge ? 1 : 0;
+      settings[`prog${progNum}_charge_mode`] = (window.gridCharge ? 1 : 0) | (window.generatorCharge ? 2 : 0);
     }
   });
 
