@@ -56,14 +56,14 @@ protocols:
     adapter_class: "adapters.senergy.SenergyAdapter"
 
     identification:
-      # Senergy has different identification registers
-      register: 0
+      # Senergy register map starts at 0x1A00 (6656)
+      register: 6656
       size: 1
       expected_values: [100, 101, 102, 103]
       timeout: 5.0
 
     serial_number:
-      register: 10
+      register: 6666  # 0x1A00 + 10
       size: 8
       encoding: ascii
 
