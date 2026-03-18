@@ -23,7 +23,7 @@ import {
   Cpu, Plus, Trash2, Sun, Shield, Settings2, Power, Clock, Info, Zap, Battery, Edit3, Check, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mapApiSettingsToConfig, mapApiSettingsToTOUWindows, type InverterConfig, type TOUWindowData } from "@/lib/settings-mapper";
+import { mapApiSettingsToConfig, mapApiSettingsToTOUWindows, mapConfigToApiSettings, type InverterConfig, type TOUWindowData } from "@/lib/settings-mapper";
 
 // ============== Reusable Components ==============
 
@@ -389,9 +389,10 @@ interface InverterConfigPageProps {
   deviceId?: string;
   deviceName?: string;
   settings?: Record<string, any>;
+  onSettingsChange?: (settings: Record<string, any>) => void;
 }
 
-export function InverterConfigPage({ deviceId, deviceName, settings }: InverterConfigPageProps) {
+export function InverterConfigPage({ deviceId, deviceName, settings, onSettingsChange }: InverterConfigPageProps) {
   // Initialize config from actual device settings or use defaults
   const [config, setConfig] = useState<InverterConfig>(() => {
     if (settings && Object.keys(settings).length > 0) {
@@ -493,6 +494,13 @@ export function InverterConfigPage({ deviceId, deviceName, settings }: InverterC
       setTouWindows(mapApiSettingsToTOUWindows(settings));
     }
   }, [settings, deviceId, deviceName]);
+
+  // Propagate edits back to parent so it can save the modified values
+  useEffect(() => {
+    if (onSettingsChange) {
+      onSettingsChange(mapConfigToApiSettings(config, touWindows));
+    }
+  }, [config, touWindows]);
 
   const updateAdapter = (key: keyof InverterConfig["adapter"], value: string | number) => {
     setConfig(prev => ({ ...prev, adapter: { ...prev.adapter, [key]: value } }));

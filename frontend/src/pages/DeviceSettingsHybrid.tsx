@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Cpu, Battery, Gauge, Save, RotateCcw, ArrowLeft, Loader2, AlertTriangle, Wifi, WifiOff, Database, HardDrive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { devicesService } from "@/api";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
@@ -41,6 +42,9 @@ const DeviceSettingsPageHybrid = () => {
   });
 
   // Use hybrid device settings hook
+  // Track edits made in the config form so Save uses the modified values
+  const [pendingUISettings, setPendingUISettings] = useState<Record<string, any> | null>(null);
+
   const {
     settings,
     isLoading: settingsLoading,
@@ -63,8 +67,13 @@ const DeviceSettingsPageHybrid = () => {
   const handleSave = async () => {
     if (!settings) return;
 
+    // Merge original device settings with any UI edits (UI edits take precedence)
+    const settingsToSave = pendingUISettings
+      ? { ...settings, ...pendingUISettings }
+      : settings;
+
     try {
-      await updateDevice(settings);
+      await updateDevice(settingsToSave);
       toast({
         title: "Settings Saved",
         description: isDeviceOffline
@@ -256,6 +265,7 @@ const DeviceSettingsPageHybrid = () => {
                 deviceId={device.id}
                 deviceName={device.name}
                 settings={settings}
+                onSettingsChange={setPendingUISettings}
               />
             )}
             {device.device_type === "battery" && (
