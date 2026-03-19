@@ -236,6 +236,10 @@ class TCPModbusAdapter:
         """
         Write single holding register (public API).
 
+        Uses FC16 (Write Multiple Registers) even for single registers because the
+        Deye/Powdrive spec mandates FC16 for all R/W registers (addresses 60-499).
+        FC06 (Write Single Register) is rejected by the inverter for those addresses.
+
         Retries on transient failures (e.g. timeout waiting for Modbus ACK over
         RS485/TCP — the inverter may have accepted the write even if the response
         was lost, so retries are safe for idempotent register writes).
@@ -255,7 +259,9 @@ class TCPModbusAdapter:
         last_exc: Exception = RuntimeError("no attempts made")
         for attempt in range(retries + 1):
             try:
-                await self._write_holding_u16(address, value)
+                # Use FC16 (write multiple registers) with a single value.
+                # The spec restricts registers 60-499 to FC16; FC06 is not accepted.
+                await self._write_holding_u16_list(address, [value])
                 if attempt > 0:
                     logger.info(
                         f"[MODBUS] Write addr={address} succeeded on attempt {attempt + 1}"
@@ -353,6 +359,7 @@ class TCPModbusAdapter:
         t = (r.get("type") or "").lower()
         size = max(1, int(r.get("size", 1)))
         scale = r.get("scale")
+        offset = r.get("offset")
         enc = (r.get("encoder") or "").lower()
 
         # ASCII decoder
@@ -379,6 +386,10 @@ class TCPModbusAdapter:
                 val = -((~val & 0xFFFFFFFF) + 1)
         else:
             val = 0
+
+        # Apply offset before scale: actual = (raw - offset) * scale
+        if offset is not None and isinstance(val, (int, float)):
+            val = val - offset
 
         if scale and isinstance(val, (int, float)):
             val = val * scale
