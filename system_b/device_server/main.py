@@ -100,12 +100,13 @@ class DeviceServer:
             self.device_manager, self.settings
         )
 
-        # Setup connection manager
+        # Setup connection manager (device_registry_client wired after storage init below)
         self.connection_manager = ConnectionManager(
             prober=self.device_prober,
             device_manager=self.device_manager,
             settings=self.settings,
         )
+        # Note: device_registry_client is assigned after connect() below
 
         # Setup device manager callbacks
         self.device_manager.set_on_device_added(self._on_device_added)
@@ -131,6 +132,11 @@ class DeviceServer:
             await self.device_registry_client.connect()
         except Exception as e:
             logger.warning(f"Device registry client connection failed: {e} - serial linking disabled")
+
+        # Wire device_registry_client into connection_manager so HELLO identification
+        # can look up the device's protocol from the registry (was missing — caused
+        # all serial bridge HELLO connections to fall back to pylontech)
+        self.connection_manager._device_registry_client = self.device_registry_client
 
         # Start polling scheduler
         await self.polling_scheduler.start()
