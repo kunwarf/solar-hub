@@ -1,5 +1,5 @@
 """
-Modbus RTU communication for ESP32 Data Logger.
+Modbus RTU communication for ESP32 Data Logger 1.
 
 Handles serial communication with inverters using Modbus RTU protocol.
 """

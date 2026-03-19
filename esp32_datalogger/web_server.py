@@ -603,6 +603,18 @@ class WebServer:
         html += '<input name="model" value="{}" placeholder="e.g. US5000">'.format(
             device_cfg.get("model", ""))
 
+        html += '<label>Protocol</label>'
+        html += '<select name="protocol">'
+        for val, label in [
+            ("modbus_tcp", "Modbus TCP (inverter / meter)"),
+            ("command", "Command (Pylontech / Pytes battery via RS232)"),
+            ("jkbms_passive", "JK BMS Passive RS485 (broadcast mode, switches 0000)"),
+            ("jkbms_modbus", "JK BMS Modbus RTU"),
+        ]:
+            sel = "selected" if device_cfg.get("protocol", "modbus_tcp") == val else ""
+            html += '<option value="{}" {}>{}</option>'.format(val, sel, label)
+        html += '</select>'
+
         html += '<label>Firmware Version</label>'
         html += '<input name="firmware_version" value="{}">'.format(
             device_cfg.get("firmware_version", "1.0.0"))
@@ -632,6 +644,9 @@ class WebServer:
             config["device"]["manufacturer"] = body.get("manufacturer", "SolarHub").strip()
             config["device"]["model"] = body.get("model", "").strip()
             config["device"]["firmware_version"] = body.get("firmware_version", "1.0.0").strip()
+            protocol = body.get("protocol", "modbus_tcp")
+            if protocol in ("modbus_tcp", "command", "jkbms_passive", "jkbms_modbus"):
+                config["device"]["protocol"] = protocol
 
         save_config(config)
 
@@ -643,9 +658,9 @@ class WebServer:
         serial_cfg = config.get("serial", {})
         bridge_cfg = config.get("serial_bridge", {})
 
-        html = '<div class="card"><h2>Serial Port — RS232 / MAX3232</h2>'
-        html += '<p style="color:#888;font-size:0.85em;">UART settings for the Pylontech/Pytes battery console. '
-        html += 'Wire ESP32 TX/RX through a MAX3232 module to the battery RJ11 port.</p>'
+        html = '<div class="card"><h2>Serial Port — RS232 / RS485</h2>'
+        html += '<p style="color:#888;font-size:0.85em;">UART settings for serial device communication. '
+        html += 'Use MAX3232 for RS232 (Pylontech/Pytes), or MAX485 for RS485 (JK BMS broadcast).</p>'
         html += '<form method="POST" action="/serial">'
         html += '<input type="hidden" name="section" value="port">'
 
@@ -663,6 +678,10 @@ class WebServer:
         html += '<label>RX Pin</label>'
         html += '<input type="number" name="rx_pin" value="{}" min="0" max="48">'.format(
             serial_cfg.get("rx_pin", 16))
+
+        html += '<label>DE/RE Pin (RS485 direction, -1 = not used)</label>'
+        html += '<input type="number" name="de_pin" value="{}" min="-1" max="48">'.format(
+            serial_cfg.get("de_pin", -1))
 
         html += '<label>Baud Rate</label>'
         html += '<select name="baudrate">'
@@ -684,6 +703,14 @@ class WebServer:
             sel = "selected" if serial_cfg.get("stop_bits", 1) == s else ""
             html += '<option value="{}" {}>{}</option>'.format(s, sel, s)
         html += '</select>'
+
+        passive_checked = "checked" if serial_cfg.get("passive", False) else ""
+        html += '<label>RS485 Passive Mode (JK BMS broadcast / listen-only)</label>'
+        html += '<input type="checkbox" name="passive" value="1" {}>'.format(passive_checked)
+
+        html += '<label>Max Frame Length (bytes, passive mode)</label>'
+        html += '<input type="number" name="max_frame_len" value="{}" min="64" max="4096">'.format(
+            serial_cfg.get("max_frame_len", 512))
 
         html += '<label>Console Prompt</label>'
         html += '<select name="prompt">'
@@ -755,9 +782,12 @@ class WebServer:
             config["serial"]["uart_id"] = int(body.get("uart_id", 1))
             config["serial"]["tx_pin"] = int(body.get("tx_pin", 17))
             config["serial"]["rx_pin"] = int(body.get("rx_pin", 16))
+            config["serial"]["de_pin"] = int(body.get("de_pin", -1))
             config["serial"]["baudrate"] = int(body.get("baudrate", 115200))
             config["serial"]["parity"] = body.get("parity", "N")
             config["serial"]["stop_bits"] = int(body.get("stop_bits", 1))
+            config["serial"]["passive"] = body.get("passive") == "1"
+            config["serial"]["max_frame_len"] = int(body.get("max_frame_len", 512))
             config["serial"]["prompt"] = body.get("prompt", "pylon>")
             config["serial"]["response_timeout_ms"] = int(
                 body.get("response_timeout_ms", 5000))

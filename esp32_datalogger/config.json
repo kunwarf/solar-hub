@@ -1,9 +1,9 @@
 {
   "mode": "modbus_bridge",
   "rtu": {
-    "uart_id": 2,
+    "uart_id": 1,
     "tx_pin": 17,
-    "rx_pin": 16,
+    "rx_pin": 18,
     "de_pin": 0,
     "unit_id": 1,
     "baudrate": 9600,
@@ -21,7 +21,7 @@
   "serial": {
     "uart_id": 1,
     "tx_pin": 17,
-    "rx_pin": 16,
+    "rx_pin": 18,
     "baudrate": 115200,
     "parity": "N",
     "stop_bits": 1,
@@ -41,12 +41,12 @@
     "register_endpoint": "/api/v1/devices/self-register"
   },
   "device": {
-    "serial": "SH01INHY765RY2V0",
-    "name": "SolarLogger-ESP32",
+    "serial": "SH01GWZSJ5WT7Y30",
+    "name": "SolarLogger",
     "type": "inverter",
-    "manufacturer": "SolarHub",
+    "manufacturer": "Solarmax",
     "firmware_version": "1.0.0",
-    "protocol": "modbus_tcp",
-    "model": ""
+    "protocol": "modbus-rtu",
+    "model": "PV9000"
   }
 }
