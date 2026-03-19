@@ -149,12 +149,16 @@ class SerialBridge:
             print("[SerialBridge] No serial number configured, skipping registration")
             return False
 
+        protocol = device_config.get("protocol", "command")
+        print("[SerialBridge] device config: type={} protocol={}".format(
+            device_config.get("type"), protocol))
+
         payload = {
             "serial_number": serial,
             "device_type": device_config.get("type", "battery"),
             "firmware_version": device_config.get("firmware_version", "1.0.0"),
             "manufacturer": device_config.get("manufacturer", "SolarHub"),
-            "protocol": device_config.get("protocol", "command"),
+            "protocol": protocol,
             "model": device_config.get("model"),
         }
 
@@ -187,6 +191,9 @@ class SerialBridge:
         cfg = self.config["serial_bridge"]
         reconnect_delay = cfg.get("reconnect_delay", 5)
         keepalive_interval = cfg.get("keepalive_interval", 30)
+        passive = self.config.get("serial", {}).get("passive", False)
+        print("[SerialBridge] mode: {} (passive={})".format(
+            self.config.get("device", {}).get("protocol", "command"), passive))
 
         while self._running:
             # Connect if needed

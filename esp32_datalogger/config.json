@@ -1,34 +1,20 @@
 {
-  "mode": "modbus_bridge",
-  "rtu": {
-    "uart_id": 1,
-    "tx_pin": 17,
-    "rx_pin": 18,
-    "de_pin": 0,
-    "unit_id": 1,
-    "baudrate": 9600,
-    "parity": "N",
-    "stop_bits": 1,
-    "data_bits": 8,
-    "timeout_ms": 1000
-  },
-  "modbus_bridge": {
-    "server_host": "182.180.150.107",
-    "server_port": 8502,
-    "reconnect_delay": 5,
-    "keepalive_interval": 30
-  },
+  "mode": "serial_bridge",
   "serial": {
     "uart_id": 1,
     "tx_pin": 17,
-    "rx_pin": 18,
+    "rx_pin": 16,
+    "de_pin": -1,
     "baudrate": 115200,
     "parity": "N",
     "stop_bits": 1,
     "data_bits": 8,
-    "response_timeout_ms": 5000,
+    "response_timeout_ms": 10000,
     "prompt": "pylon>",
-    "line_ending": "\r\n"
+    "line_ending": "\r\n",
+    "passive": true,
+    "frame_header": [85, 170, 235, 144],
+    "max_frame_len": 512
   },
   "serial_bridge": {
     "server_host": "182.180.150.107",
@@ -41,12 +27,12 @@
     "register_endpoint": "/api/v1/devices/self-register"
   },
   "device": {
-    "serial": "SH01GWZSJ5WT7Y30",
-    "name": "SolarLogger",
-    "type": "inverter",
-    "manufacturer": "Solarmax",
+    "serial": "SH01GW6FHUFAX7L0",
+    "name": "JK BMS Gateway",
+    "type": "battery",
+    "manufacturer": "JK",
     "firmware_version": "1.0.0",
-    "protocol": "modbus-rtu",
-    "model": "PV9000"
+    "protocol": "jkbms_serial",
+    "model": ""
   }
 }
