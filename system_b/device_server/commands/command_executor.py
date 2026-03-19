@@ -599,8 +599,9 @@ class ModbusCommandExecutor:
                         address = reg_def["addr"]
                         scale = reg_def.get("scale", 1.0)
 
-                        # Unscale value before writing
-                        raw_value = int(new_value / scale)
+                        # Unscale value before writing (round to avoid float precision errors,
+                        # e.g. int(56.0 / 0.01) = int(5599.999...) = 5599 instead of 5600)
+                        raw_value = round(new_value / scale)
 
                         logger.info(f"[COMMAND_EXECUTOR] Writing {reg_id} to register {address}: {new_value} (raw={raw_value})")
                         await adapter.write_register(address, raw_value)

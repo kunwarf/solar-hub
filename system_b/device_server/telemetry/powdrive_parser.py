@@ -22,8 +22,9 @@ class PowdriveParser(TelemetryParser):
     from the flat JSON telemetry format into normalized rows.
 
     NOTE: Powdrive uses negative values for battery charging.
-    Standard convention: positive = charging, negative = discharging.
-    Battery power values are inverted during parsing to match standard convention.
+    Sign inversion (negative_charging → positive_charging) is applied upstream
+    in DeviceServer._on_telemetry() before this parser is called, so this
+    parser receives already-normalised values and must NOT invert again.
     """
 
     # Metric mappings: json_field -> (metric_name, unit, category)

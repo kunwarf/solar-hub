@@ -16,6 +16,11 @@ Hardware notes:
 import machine
 import time
 
+try:
+    from log_buffer import log_print as print
+except ImportError:
+    pass  # log_buffer not available in test/host environments
+
 
 class SerialPort:
     """
@@ -150,6 +155,11 @@ class SerialPort:
                 time.sleep_ms(10)
 
         if not header_found or len(buf) <= len(header):
+            print("[Serial] read_frame: timeout after {}ms, {} bytes rx, header_found={}{}".format(
+                timeout_ms, len(buf),
+                header_found,
+                (" first={}".format(buf[:8].hex()) if buf else ""),
+            ))
             return None
         return buf
 

@@ -23,6 +23,7 @@ import struct
 import time
 
 from config import get_config
+from log_buffer import log_print as print
 from modbus_bridge import http_post_json
 
 # Frame message types
@@ -329,12 +330,16 @@ class SerialBridge:
             max_len = cfg.get("max_frame_len", 512)
             timeout_ms = cfg.get("response_timeout_ms", 5000)
 
-            return self.serial.read_frame(
+            raw = self.serial.read_frame(
                 header=frame_header,
                 max_len=max_len,
                 timeout_ms=timeout_ms,
             )
-        except Exception:
+            if raw is not None:
+                print("[SerialBridge] Passive: frame received, {} bytes".format(len(raw)))
+            return raw
+        except Exception as e:
+            print("[SerialBridge] Passive exception:", e)
             return None
 
     def _send_frame(self, msg_type, payload):

@@ -18,6 +18,7 @@ from .definitions import (
     ProtocolDefinition,
     ProtocolType,
     SerialNumberConfig,
+    TelemetryConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -153,6 +154,7 @@ class ProtocolLoader:
         polling = self._parse_polling(data.get("polling", {}))
         modbus = self._parse_modbus(data.get("modbus", {}))
         command = self._parse_command(data.get("command", {}))
+        telemetry = self._parse_telemetry(data.get("telemetry", {}))
 
         return ProtocolDefinition(
             protocol_id=protocol_id,
@@ -172,6 +174,7 @@ class ProtocolLoader:
             manufacturer=data.get("manufacturer"),
             model_pattern=data.get("model_pattern"),
             description=data.get("description"),
+            telemetry=telemetry,
         )
 
     def _parse_device_type(self, value: str) -> DeviceType:
@@ -257,4 +260,12 @@ class ProtocolLoader:
             line_ending=data.get("line_ending", "\r\n"),
             response_timeout=data.get("response_timeout", 5.0),
             command_delay=data.get("command_delay", 0.1),
+        )
+
+    def _parse_telemetry(self, data: Dict[str, Any]) -> TelemetryConfig:
+        """Parse telemetry interpretation configuration."""
+        return TelemetryConfig(
+            battery_power_sign_convention=data.get(
+                "battery_power_sign_convention", "positive_charging"
+            ),
         )

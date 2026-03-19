@@ -33,6 +33,6 @@
     "manufacturer": "JK",
     "firmware_version": "1.0.0",
     "protocol": "jkbms_serial",
-    "model": ""
+    "model": "MB280"
   }
 }
