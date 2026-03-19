@@ -356,6 +356,16 @@ class ConnectionManager:
             # 1. Try explicit protocol hint from registry metadata
             if protocol_id_hint:
                 protocol = self.prober.registry.get(protocol_id_hint)
+                if not protocol:
+                    logger.warning(
+                        f"HELLO {serial_number}: protocol_id_hint={protocol_id_hint!r} "
+                        f"not found in registry — falling back to priority order"
+                    )
+            else:
+                logger.warning(
+                    f"HELLO {serial_number}: no protocol_id_hint in registry "
+                    f"(device_type={device_type}) — falling back to priority order"
+                )
 
             # 2. Find highest-priority command protocol matching device_type
             if not protocol:

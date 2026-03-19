@@ -131,7 +131,18 @@ class DeviceService:
                 existing.firmware_version = firmware_version
             if manufacturer:
                 existing.manufacturer = manufacturer
-            if protocol:
+            # Only update protocol if the incoming value is more specific than
+            # generic placeholders that the ESP32 sends before the user has
+            # configured it properly (e.g. "command", "modbus_tcp", "modbus-rtu").
+            # This prevents a reconnect with a stale generic value from overwriting
+            # a specific protocol (e.g. "jkbms_serial") set via the DB or web UI.
+            _GENERIC_PROTOCOLS = {"command", "modbus_tcp", "modbus_rtu", "modbus-rtu"}
+            if protocol and (protocol not in _GENERIC_PROTOCOLS or not existing.protocol):
+                if existing.protocol != protocol:
+                    logger.info(
+                        f"Device {serial_number} protocol updated: "
+                        f"{existing.protocol!r} -> {protocol!r}"
+                    )
                 existing.protocol = protocol
             if capabilities:
                 existing.capabilities = capabilities
