@@ -608,7 +608,7 @@ class WebServer:
         for val, label in [
             ("modbus_tcp", "Modbus TCP (inverter / meter)"),
             ("command", "Command (Pylontech / Pytes battery via RS232)"),
-            ("jkbms_passive", "JK BMS Passive RS485 (broadcast mode, switches 0000)"),
+            ("jkbms_serial", "JK BMS Passive RS485 (broadcast mode, switches 0000)"),
             ("jkbms_modbus", "JK BMS Modbus RTU"),
         ]:
             sel = "selected" if device_cfg.get("protocol", "modbus_tcp") == val else ""
@@ -645,7 +645,7 @@ class WebServer:
             config["device"]["model"] = body.get("model", "").strip()
             config["device"]["firmware_version"] = body.get("firmware_version", "1.0.0").strip()
             protocol = body.get("protocol", "modbus_tcp")
-            if protocol in ("modbus_tcp", "command", "jkbms_passive", "jkbms_modbus"):
+            if protocol in ("modbus_tcp", "command", "jkbms_serial", "jkbms_modbus"):
                 config["device"]["protocol"] = protocol
 
         save_config(config)
