@@ -56,11 +56,15 @@ protocols:
     adapter_class: "adapters.senergy.SenergyAdapter"
 
     identification:
-      # Grid Phase Number at 0x1A48 — returns 1 (single-phase) or 3 (three-phase)
-      # 0x1A00 is ASCII device model, not a numeric register — can't use it for identification
-      register: 6728
+      # Inverter Mode at 0x101D (4125) — in the core real-time data block (0x1010+)
+      # which all Senergy firmware versions must support.
+      # Enum: 0=Initial, 1=Standby, 3=OnGrid, 4=OffGrid, 5=Fault (2 is absent).
+      # Preferred over the device-info block (0x1A00+) which some firmware versions
+      # may not fully populate, causing the probe to fail silently.
+      # Register 4125 is far outside Powdrive's register range (0-600), so no false match.
+      register: 4125
       size: 1
-      expected_values: [1, 3]
+      expected_values: [0, 1, 3, 4, 5]
       timeout: 2.0
 
     serial_number:
