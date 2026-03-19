@@ -598,12 +598,26 @@ class ModbusCommandExecutor:
                         reg_def = register_lookup[reg_id]
                         address = reg_def["addr"]
                         scale = reg_def.get("scale", 1.0)
+                        encoder = (reg_def.get("encoder") or "").lower()
 
-                        # Unscale value before writing (round to avoid float precision errors,
-                        # e.g. int(56.0 / 0.01) = int(5599.999...) = 5599 instead of 5600)
-                        raw_value = round(new_value / scale)
+                        # Encode value for HHMM time registers.
+                        # Both formats expect the user to supply decimal HHMM (e.g. 630 = 06:30).
+                        if encoder == "hhmm_decimal":
+                            # Powdrive: decimal HHMM stored directly (630 → register 630).
+                            raw_value = int(new_value)
+                        elif encoder == "hhmm_binary":
+                            # Senergy: binary-packed byte — High byte=hour, Low byte=minute.
+                            # e.g. 630 → hour=6, minute=30 → 6*256+30 = 1566 (0x061E).
+                            decimal_hhmm = int(new_value)
+                            hour = decimal_hhmm // 100
+                            minute = decimal_hhmm % 100
+                            raw_value = (hour << 8) | minute
+                        else:
+                            # Unscale value before writing (round to avoid float precision errors,
+                            # e.g. int(56.0 / 0.01) = int(5599.999...) = 5599 instead of 5600)
+                            raw_value = round(new_value / scale)
 
-                        logger.info(f"[COMMAND_EXECUTOR] Writing {reg_id} to register {address}: {new_value} (raw={raw_value})")
+                        logger.info(f"[COMMAND_EXECUTOR] Writing {reg_id} to register {address}: {new_value} (raw={raw_value}, encoder={encoder or 'none'})")
                         await adapter.write_register(address, raw_value)
                         written_registers.append(reg_id)
                         logger.debug(f"[COMMAND_EXECUTOR] Successfully wrote {reg_id}")
@@ -621,8 +635,18 @@ class ModbusCommandExecutor:
                             reg_def = register_lookup[rolled_back_reg_id]
                             address = reg_def["addr"]
                             scale = reg_def.get("scale", 1.0)
+                            encoder = (reg_def.get("encoder") or "").lower()
                             original_value = current_values[rolled_back_reg_id]
-                            raw_value = round(original_value / scale)
+
+                            if encoder == "hhmm_decimal":
+                                raw_value = int(original_value)
+                            elif encoder == "hhmm_binary":
+                                decimal_hhmm = int(original_value)
+                                hour = decimal_hhmm // 100
+                                minute = decimal_hhmm % 100
+                                raw_value = (hour << 8) | minute
+                            else:
+                                raw_value = round(original_value / scale)
 
                             await adapter.write_register(address, raw_value)
                             logger.info(f"[COMMAND_EXECUTOR] Rolled back {rolled_back_reg_id} to {original_value}")

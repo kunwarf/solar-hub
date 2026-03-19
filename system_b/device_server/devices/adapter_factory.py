@@ -384,8 +384,33 @@ class TCPModbusAdapter:
             val = (hi << 16) | lo
             if "s32" in t and val & 0x80000000:
                 val = -((~val & 0xFFFFFFFF) + 1)
+
+            # Diagnostic logging: show both word-order interpretations so we can
+            # verify the big-endian assumption (regs[0]=HIGH word) against live data.
+            reg_id = r.get("id", "?")
+            hi_first = (hi << 16) | lo   # current assumption: regs[0] is HIGH word
+            lo_first = (lo << 16) | hi   # alternative: regs[0] is LOW word
+            logger.info(
+                f"[U32_WORDORDER] {reg_id} raw[0]={hi:#06x} raw[1]={lo:#06x} | "
+                f"hi_first={hi_first} lo_first={lo_first} "
+                f"(using hi_first={val})"
+            )
         else:
             val = 0
+
+        # HHMM decoders: both normalise to decimal-HHMM integer (e.g. 630 = 06:30)
+        # so the same user-facing value format works for reads and writes.
+        if enc == "hhmm_decimal":
+            # Powdrive stores time as decimal HHMM (e.g. 630 means 06:30).
+            # Raw register value IS already in this format — return as-is.
+            return int(val)
+        if enc == "hhmm_binary":
+            # Senergy stores time as binary-packed byte (hour<<8 | minute).
+            # Normalise to decimal HHMM so the user always works in one format.
+            raw_int = int(val)
+            hour = (raw_int >> 8) & 0xFF
+            minute = raw_int & 0xFF
+            return hour * 100 + minute  # e.g. 0x061E (1566) → 630
 
         # Apply offset before scale: actual = (raw - offset) * scale
         if offset is not None and isinstance(val, (int, float)):

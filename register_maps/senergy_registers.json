@@ -806,7 +806,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "charge_end_time_1",
@@ -816,7 +816,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "charge_power_1",
@@ -869,7 +869,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "discharge_end_time_1",
@@ -879,7 +879,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "discharge_power_1",
@@ -932,7 +932,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "charge_end_time_2",
@@ -942,7 +942,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "charge_power_2",
@@ -995,7 +995,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "discharge_end_time_2",
@@ -1005,7 +1005,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "discharge_power_2",
@@ -1023,7 +1023,7 @@
     "mode": "slider"
   },
   {
-    "id": "discharge_end_soc_3",
+    "id": "discharge_end_soc_2",
     "name": "Discharge end (SOC) 2",
     "addr": 8566,
     "type": "U16",
@@ -1058,7 +1058,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "charge_end_time_3",
@@ -1068,7 +1068,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "charge_power_3",
@@ -1121,7 +1121,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "discharge_end_time_3",
@@ -1131,7 +1131,7 @@
     "rw": "RW",
     "kind": "holding",
     "size": 1,
-    "encoder": "hhmm"
+    "encoder": "hhmm_binary"
   },
   {
     "id": "discharge_power_3",
@@ -1414,5 +1414,77 @@
       "0x0000": "Power on",
       "0x0001": "Shut down"
     }
+  },
+  {
+    "id": "stop_discharge_voltage",
+    "name": "Stop Discharge Voltage",
+    "addr": 8467,
+    "type": "U16",
+    "rw": "RW",
+    "kind": "holding",
+    "size": 1,
+    "ha_config": true,
+    "unit": "V",
+    "scale": 0.1,
+    "min": 400,
+    "max": 600,
+    "step": 1,
+    "suggested_display_precision": 1,
+    "mode": "box",
+    "comment": "0x2113 — minimum battery voltage during discharge"
+  },
+  {
+    "id": "stop_charge_voltage",
+    "name": "Stop Charge Voltage",
+    "addr": 8468,
+    "type": "U16",
+    "rw": "RW",
+    "kind": "holding",
+    "size": 1,
+    "ha_config": true,
+    "unit": "V",
+    "scale": 0.1,
+    "min": 400,
+    "max": 600,
+    "step": 1,
+    "suggested_display_precision": 1,
+    "mode": "box",
+    "comment": "0x2114 — maximum battery voltage during charge"
+  },
+  {
+    "id": "max_discharge_current",
+    "name": "Max Discharge Current",
+    "addr": 8480,
+    "type": "U16",
+    "rw": "RW",
+    "kind": "holding",
+    "size": 1,
+    "ha_config": true,
+    "unit": "A",
+    "scale": 0.01,
+    "min": 0,
+    "max": 200,
+    "step": 1,
+    "suggested_display_precision": 1,
+    "mode": "box",
+    "comment": "0x2120 — maximum battery discharge current"
+  },
+  {
+    "id": "max_charger_current",
+    "name": "Max Charger Current",
+    "addr": 8481,
+    "type": "U16",
+    "rw": "RW",
+    "kind": "holding",
+    "size": 1,
+    "ha_config": true,
+    "unit": "A",
+    "scale": 0.01,
+    "min": 0,
+    "max": 200,
+    "step": 1,
+    "suggested_display_precision": 1,
+    "mode": "box",
+    "comment": "0x2121 — maximum battery charge current"
   }
 ]
