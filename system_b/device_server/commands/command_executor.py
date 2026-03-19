@@ -622,7 +622,7 @@ class ModbusCommandExecutor:
                             address = reg_def["addr"]
                             scale = reg_def.get("scale", 1.0)
                             original_value = current_values[rolled_back_reg_id]
-                            raw_value = int(original_value / scale)
+                            raw_value = round(original_value / scale)
 
                             await adapter.write_register(address, raw_value)
                             logger.info(f"[COMMAND_EXECUTOR] Rolled back {rolled_back_reg_id} to {original_value}")

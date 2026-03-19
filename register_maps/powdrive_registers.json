@@ -3,7 +3,7 @@
   {"id":"modbus_address", "name":"Modbus Address", "addr":1, "kind":"holding", "type":"U16", "size":1, "rw":"RO"},
   {"id":"protocol_version_raw", "name":"Communication Protocol Version", "addr":2, "kind":"holding", "type":"U16", "size":1, "rw":"RO"},
   {"id":"device_serial_number", "name":"Device Serial Number", "addr":3, "kind":"holding", "type":"U16", "size":5, "rw":"RO", "encoder":"ascii"},
-  {"id":"rated_power_w", "name":"Rated power", "addr":20, "kind":"holding", "type":"U32", "size":2, "unit":"W", "scale":0.1, "rw":"RO"},
+  {"id":"rated_power_w", "name":"Rated power", "addr":19, "kind":"holding", "type":"U32", "size":2, "unit":"W", "scale":0.1, "rw":"RO", "comment":"Low word at 19, high word at 20"},
   {"id":"grid_power_w", "name":"Grid Power", "addr":625, "kind":"holding", "type":"S16", "size":1, "unit":"W", "rw":"RO"},
   {"id":"load_power_w", "name":"Total Load Power", "addr":653, "kind":"holding", "type":"S16", "size":1, "unit":"W", "rw":"RO"},
   {"id":"load_l1_power_w", "name":"Load L1 Power", "addr":650, "kind":"holding", "type":"S16", "size":1, "unit":"W", "rw":"RO"},
@@ -47,7 +47,7 @@
   {"id":"battery_discharge_energy_today_kwh", "name":"Battery Discharge Energy Today", "addr":515, "kind":"holding", "type":"U16", "size":1, "unit":"kWh", "scale":0.1, "rw":"RO"},
   {"id":"day_gen_energy_kwh", "name":"Gen Energy Today", "addr":536, "kind":"holding", "type":"U16", "size":1, "unit":"kWh", "scale":0.1, "rw":"RO", "comment": "Generation energy today (total energy generated)"}
   ,
-  {"id":"day_active_energy_kwh", "name":"Day Active Energy", "addr":502, "kind":"holding", "type":"U16", "size":1, "unit":"kWh", "scale":0.1, "rw":"RO"},
+  {"id":"day_active_energy_kwh", "name":"Day Active Energy", "addr":501, "kind":"holding", "type":"U16", "size":1, "unit":"kWh", "scale":0.1, "rw":"RO"},
   {"id":"total_active_energy_kwh", "name":"Total Active Energy", "addr":506, "kind":"holding", "type":"U32", "size":2, "unit":"kWh", "scale":0.1, "rw":"RO"},
   {"id":"battery_charge_energy_total_kwh", "name":"Battery Charge Energy Total", "addr":516, "kind":"holding", "type":"U32", "size":2, "unit":"kWh", "scale":0.1, "rw":"RO"},
   {"id":"battery_discharge_energy_total_kwh", "name":"Battery Discharge Energy Total", "addr":518, "kind":"holding", "type":"U32", "size":2, "unit":"kWh", "scale":0.1, "rw":"RO"},
@@ -168,7 +168,7 @@
   {"id":"grid_peak_shaving_power_w", "name":"GRID Peak Shaving Power", "addr":191, "kind":"holding", "type":"U16", "size":1, "unit":"W", "rw":"RW"},
   {"id":"max_solar_sell_power_w", "name":"Max Solar Sell Power", "addr":340, "kind":"holding", "type":"U16", "size":1, "unit":"W", "rw":"RW", "comment": "Low Vol: 1W, High Vol: 10W"},
   
-  {"id":"mppt_number_and_phases", "name":"MPPT number and phases", "addr":22, "kind":"holding", "type":"U16", "size":1, "rw":"RO", "comment": "Low byte: MPPT number [1-8], High byte: Phases [1-3]. Example: 0x0503 = 5 MPPTs, 3 phases"},
+  {"id":"mppt_number_and_phases", "name":"MPPT number and phases", "addr":21, "kind":"holding", "type":"U16", "size":1, "rw":"RO", "comment": "Low byte: MPPT number [1-8], High byte: Phases [1-3]. Example: 0x0503 = 5 MPPTs, 3 phases"},
   {"id":"parallel_1", "name":"Parallel-1", "addr":336, "kind":"holding", "type":"U16", "size":1, "rw":"RO", "comment": "Bit0: 1=Parallel Enable, 0=Parallel Disable. Bit1: 1=Master, 0=Slave. Bit8-9: Phase (00=A, 01=B, 10=C). Bit10-15: Modbus SN (0-63)"},
   {"id":"grid_voltage_high_v", "name":"Grid Voltage High Protection", "addr":185, "kind":"holding", "type":"U16", "size":1, "unit":"V", "scale":0.1, "rw":"RW", "min":180, "max":270, "comment": "Grid high voltage protection point [1800-2700] 0.1V"},
   {"id":"grid_voltage_low_v", "name":"Grid Voltage Low Protection", "addr":186, "kind":"holding", "type":"U16", "size":1, "unit":"V", "scale":0.1, "rw":"RW", "min":180, "max":270, "comment": "Grid low voltage protection point [1800-2700] 0.1V"},
