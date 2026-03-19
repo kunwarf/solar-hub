@@ -236,9 +236,13 @@ class DeviceRegistryClient:
 
         try:
             async with self._session_factory() as session:
+                # Only select columns that definitely exist in all schema versions.
+                # manufacturer/model/firmware_version were added in migration 0003 and
+                # may be absent on older deployments — a missing column would silently
+                # cause the whole query to fail and return None, breaking HELLO lookup.
                 result = await session.execute(
                     text("""
-                    SELECT device_type, manufacturer, model, firmware_version, protocol
+                    SELECT device_type, protocol
                     FROM device_registry
                     WHERE serial_number = CAST(:serial_number AS text)
                     LIMIT 1
@@ -253,13 +257,14 @@ class DeviceRegistryClient:
                     )
                     return None
 
-                device_type, manufacturer, model, firmware_version, protocol_id = row
+                device_type, protocol_id = row
+                logger.debug(
+                    f"Registration for {serial_number}: device_type={device_type!r}, "
+                    f"protocol={protocol_id!r}"
+                )
 
                 return {
                     "device_type": device_type,
-                    "manufacturer": manufacturer,
-                    "model": model,
-                    "firmware_version": firmware_version,
                     "protocol_id": protocol_id,
                 }
 
