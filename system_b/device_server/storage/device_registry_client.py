@@ -252,13 +252,13 @@ class DeviceRegistryClient:
                 row = result.fetchone()
 
                 if not row:
-                    logger.debug(
-                        f"No registration found for serial {serial_number}"
+                    logger.warning(
+                        f"No registration found in device_registry for serial {serial_number}"
                     )
                     return None
 
                 device_type, protocol_id = row
-                logger.debug(
+                logger.info(
                     f"Registration for {serial_number}: device_type={device_type!r}, "
                     f"protocol={protocol_id!r}"
                 )
