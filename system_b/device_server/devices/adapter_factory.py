@@ -232,21 +232,49 @@ class TCPModbusAdapter:
 
             logger.info(f"[SERVER<-DEVICE] WRITE MULTIPLE response: OK")
 
-    async def write_register(self, address: int, value: int) -> None:
+    async def write_register(self, address: int, value: int, retries: int = 2) -> None:
         """
         Write single holding register (public API).
+
+        Retries on transient failures (e.g. timeout waiting for Modbus ACK over
+        RS485/TCP — the inverter may have accepted the write even if the response
+        was lost, so retries are safe for idempotent register writes).
 
         Args:
             address: Register address.
             value: Value to write (0-65535).
+            retries: Number of additional attempts after first failure (default 2).
 
         Raises:
             ValueError: If value is out of range.
-            Exception: On communication error.
+            Exception: On communication error after all retries exhausted.
         """
         if not 0 <= value <= 65535:
             raise ValueError(f"Value {value} out of range [0, 65535]")
-        await self._write_holding_u16(address, value)
+
+        last_exc: Exception = RuntimeError("no attempts made")
+        for attempt in range(retries + 1):
+            try:
+                await self._write_holding_u16(address, value)
+                if attempt > 0:
+                    logger.info(
+                        f"[MODBUS] Write addr={address} succeeded on attempt {attempt + 1}"
+                    )
+                return
+            except Exception as e:
+                last_exc = e
+                if attempt < retries:
+                    logger.warning(
+                        f"[MODBUS] Write addr={address} attempt {attempt + 1} failed "
+                        f"({type(e).__name__}: {e}), retrying in 1s..."
+                    )
+                    await asyncio.sleep(1.0)
+                else:
+                    logger.error(
+                        f"[MODBUS] Write addr={address} failed after {retries + 1} attempts: "
+                        f"{type(e).__name__}: {e}"
+                    )
+        raise last_exc
 
     async def write_registers(self, address: int, values: List[int]) -> None:
         """

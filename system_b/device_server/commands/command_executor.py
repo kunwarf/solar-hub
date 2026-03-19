@@ -610,7 +610,10 @@ class ModbusCommandExecutor:
 
                 except Exception as e:
                     # Rollback: restore previous values
-                    logger.error(f"[COMMAND_EXECUTOR] Write failed at {reg_id}: {e}")
+                    logger.error(
+                        f"[COMMAND_EXECUTOR] Write failed at {reg_id}: "
+                        f"{type(e).__name__}: {e}"
+                    )
                     logger.warning(f"[COMMAND_EXECUTOR] Attempting rollback of {len(written_registers)} registers")
 
                     for rolled_back_reg_id in written_registers:
@@ -626,7 +629,7 @@ class ModbusCommandExecutor:
                         except Exception as rollback_error:
                             logger.error(f"[COMMAND_EXECUTOR] Rollback failed for {rolled_back_reg_id}: {rollback_error}")
 
-                    error_msg = f"Write failed, rollback attempted: {str(e)}"
+                    error_msg = f"Write failed ({type(e).__name__}), rollback attempted: {str(e)}"
                     return CommandResult(
                         success=False,
                         command_type=command_type,
