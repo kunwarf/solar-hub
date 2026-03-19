@@ -44,6 +44,8 @@ protocols:
     telemetry:
       # Powdrive uses negative values for charging
       battery_power_sign_convention: "negative_charging"
+      # Deye/Powdrive spec explicitly states "low word at lower address" for U32 registers
+      u32_word_order: "little_endian"
 
   - id: senergy
     name: "Senergy Hybrid Inverter"

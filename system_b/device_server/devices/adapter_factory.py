@@ -380,21 +380,20 @@ class TCPModbusAdapter:
             if "s16" in t and val >= 0x8000:
                 val = val - 0x10000
         elif size == 2 and regs and len(regs) >= 2:
-            hi, lo = regs[0], regs[1]
+            # Word order is manufacturer-specific, configured per protocol in protocols.yaml.
+            # Powdrive/Deye: "little_endian" — regs[0] is LOW word, regs[1] is HIGH word.
+            # Senergy and most others: "big_endian" — regs[0] is HIGH word (standard Modbus).
+            little_endian = (
+                self.protocol is not None
+                and self.protocol.telemetry.u32_word_order == "little_endian"
+            )
+            if little_endian:
+                lo, hi = regs[0], regs[1]
+            else:
+                hi, lo = regs[0], regs[1]
             val = (hi << 16) | lo
             if "s32" in t and val & 0x80000000:
                 val = -((~val & 0xFFFFFFFF) + 1)
-
-            # Diagnostic logging: show both word-order interpretations so we can
-            # verify the big-endian assumption (regs[0]=HIGH word) against live data.
-            reg_id = r.get("id", "?")
-            hi_first = (hi << 16) | lo   # current assumption: regs[0] is HIGH word
-            lo_first = (lo << 16) | hi   # alternative: regs[0] is LOW word
-            logger.info(
-                f"[U32_WORDORDER] {reg_id} raw[0]={hi:#06x} raw[1]={lo:#06x} | "
-                f"hi_first={hi_first} lo_first={lo_first} "
-                f"(using hi_first={val})"
-            )
         else:
             val = 0
 

@@ -121,6 +121,12 @@ class TelemetryConfig:
     # - "positive_charging": positive power = charging (e.g., Senergy, SMA)
     battery_power_sign_convention: str = "positive_charging"
 
+    # U32 register word order for 32-bit values spanning two 16-bit Modbus registers
+    # - "little_endian": lower register address holds the LOW word (e.g., Powdrive/Deye —
+    #                    spec explicitly states "low word at lower address")
+    # - "big_endian": lower register address holds the HIGH word (standard Modbus / Senergy)
+    u32_word_order: str = "big_endian"
+
     def should_invert_battery_power(self) -> bool:
         """
         Check if battery power should be inverted for standard representation.
