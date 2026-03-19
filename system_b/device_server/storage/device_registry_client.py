@@ -238,7 +238,7 @@ class DeviceRegistryClient:
             async with self._session_factory() as session:
                 result = await session.execute(
                     text("""
-                    SELECT device_type, manufacturer, model, firmware_version, metadata
+                    SELECT device_type, manufacturer, model, firmware_version, protocol
                     FROM device_registry
                     WHERE serial_number = CAST(:serial_number AS text)
                     LIMIT 1
@@ -253,12 +253,7 @@ class DeviceRegistryClient:
                     )
                     return None
 
-                device_type, manufacturer, model, firmware_version, metadata = row
-
-                # Extract protocol_id from metadata if the ESP32 stored it
-                protocol_id = None
-                if isinstance(metadata, dict):
-                    protocol_id = metadata.get("protocol_id")
+                device_type, manufacturer, model, firmware_version, protocol_id = row
 
                 return {
                     "device_type": device_type,
