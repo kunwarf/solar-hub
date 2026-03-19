@@ -712,6 +712,13 @@ class WebServer:
         html += '<input type="number" name="max_frame_len" value="{}" min="64" max="4096">'.format(
             serial_cfg.get("max_frame_len", 512))
 
+        fh = serial_cfg.get("frame_header", [0x55, 0xAA, 0xEB, 0x90])
+        fh_str = ",".join(str(b) for b in fh)
+        html += '<label>Frame Header (decimal bytes, passive mode)</label>'
+        html += '<input name="frame_header" value="{}" placeholder="85,170,235,144">'.format(fh_str)
+        html += '<p style="color:#888;font-size:0.85em;margin-top:-5px;">'
+        html += 'JK BMS default: 85,170,235,144 (0x55 0xAA 0xEB 0x90)</p>'
+
         html += '<label>Console Prompt</label>'
         html += '<select name="prompt">'
         for p in ["pylon>", "pytes>", ">"]:
@@ -788,6 +795,11 @@ class WebServer:
             config["serial"]["stop_bits"] = int(body.get("stop_bits", 1))
             config["serial"]["passive"] = body.get("passive") == "1"
             config["serial"]["max_frame_len"] = int(body.get("max_frame_len", 512))
+            try:
+                fh = [int(x.strip()) for x in body.get("frame_header", "85,170,235,144").split(",") if x.strip()]
+                config["serial"]["frame_header"] = fh if fh else [0x55, 0xAA, 0xEB, 0x90]
+            except Exception:
+                config["serial"]["frame_header"] = [0x55, 0xAA, 0xEB, 0x90]
             config["serial"]["prompt"] = body.get("prompt", "pylon>")
             config["serial"]["response_timeout_ms"] = int(
                 body.get("response_timeout_ms", 5000))
