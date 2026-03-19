@@ -24,7 +24,7 @@ protocols:
       register: 0
       size: 1
       expected_values: [2, 3, 4, 5]  # 2=Inverter, 3=Hybrid, 4=Micro, 5=3Phase Hybrid
-      timeout: 5.0
+      timeout: 2.0
 
     serial_number:
       register: 3
@@ -61,7 +61,7 @@ protocols:
       register: 6728
       size: 1
       expected_values: [1, 3]
-      timeout: 5.0
+      timeout: 2.0
 
     serial_number:
       # Device Serial Number at 0x1A10 = 6672, 8 registers, ASCII
@@ -103,7 +103,7 @@ protocols:
       register: 9
       size: 1
       expected_values: [1, 2, 3, 4]
-      timeout: 5.0
+      timeout: 2.0
 
     serial_number:
       register: 56
@@ -330,7 +330,7 @@ connection:
   keepalive: 60
 
 identification:
-  timeout: 10
+  timeout: 30
   max_retries: 3
 
 polling:
