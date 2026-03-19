@@ -6,6 +6,11 @@ Handles serial communication with inverters using Modbus RTU protocol.
 import machine
 import time
 
+try:
+    from log_buffer import log_print as print
+except ImportError:
+    pass  # not available in test/host environments
+
 
 def crc16_modbus(data):
     """Calculate Modbus CRC16."""
@@ -142,7 +147,7 @@ class ModbusRTU:
         self._flush_rx()
 
         if not quiet:
-            print("[RTU] TX:", hex_str(frame))
+            print("[RTU] TX {} bytes: {}".format(len(frame), hex_str(frame)))
 
         # Set RS485 to TX mode
         if self.de_pin:
@@ -184,8 +189,8 @@ class ModbusRTU:
 
         # Validate response
         if len(response) < 5:
-            if not quiet:
-                print("[RTU] RX: Timeout or incomplete ({} bytes)".format(len(response)))
+            # Always log RTU failures — silent timeouts make debugging impossible
+            print("[RTU] RX: timeout/incomplete ({} bytes)".format(len(response)))
             return None
 
         # Verify CRC
@@ -193,8 +198,8 @@ class ModbusRTU:
         calculated_crc = crc16_modbus(response[:-2])
 
         if received_crc != calculated_crc:
-            if not quiet:
-                print("[RTU] RX: CRC error")
+            # Always log CRC errors
+            print("[RTU] RX: CRC error ({} bytes)".format(len(response)))
             return None
 
         if not quiet:

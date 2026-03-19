@@ -13,6 +13,7 @@ import time
 import json
 
 from config import get_config
+from log_buffer import log_print as print
 
 
 def http_post_json(url, data, timeout=10):
@@ -323,10 +324,23 @@ class ModbusBridge:
                 self.stats["requests"] += 1
                 func_code = pdu[0]
 
+                # Brief logging: always log writes; log reads only on failure.
+                # Decode address and count/value from PDU for context.
+                is_write = func_code in (0x06, 0x10)
+                addr = ((pdu[1] << 8) | pdu[2]) if len(pdu) >= 3 else 0
+                if is_write and func_code == 0x06:
+                    val = ((pdu[3] << 8) | pdu[4]) if len(pdu) >= 5 else 0
+                    print("[Bridge] FC06 write addr={} val={} unit={}".format(addr, val, unit_id))
+                elif is_write and func_code == 0x10:
+                    cnt = ((pdu[3] << 8) | pdu[4]) if len(pdu) >= 5 else 0
+                    print("[Bridge] FC10 write addr={} cnt={} unit={}".format(addr, cnt, unit_id))
+
                 # Forward to RTU and get response
                 response_pdu = self.rtu.forward_pdu(pdu, unit_id)
 
                 if response_pdu:
+                    if is_write:
+                        print("[Bridge] → OK")
                     resp_length = len(response_pdu) + 1  # +1 for unit_id
                     resp_header = struct.pack(
                         ">HHHB",
@@ -338,6 +352,9 @@ class ModbusBridge:
                     self.socket.sendall(resp_header + response_pdu)
                     self.stats["responses"] += 1
                 else:
+                    # RTU did not respond — always log regardless of function code
+                    print("[Bridge] FC{:02X} addr={} unit={} → RTU no response".format(
+                        func_code, addr, unit_id))
                     # Send exception response (gateway target device failed)
                     exc_pdu = bytes([func_code | 0x80, 0x0B])
                     resp_header = struct.pack(
