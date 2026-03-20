@@ -327,6 +327,22 @@ class ModbusProber:
                 f"register {ident_config.register} = {value}"
             )
 
+        # Optional negative check: reject if a disqualifying register matches
+        if ident_config.reject_register is not None and ident_config.reject_values:
+            reject_regs = await self.read_registers(
+                connection,
+                ident_config.reject_register,
+                1,
+                unit_id,
+            )
+            if reject_regs and reject_regs[0] in ident_config.reject_values:
+                logger.debug(
+                    f"{protocol.protocol_id}: rejected — register "
+                    f"{ident_config.reject_register} = {reject_regs[0]} "
+                    f"is in reject_values {ident_config.reject_values}"
+                )
+                return None
+
         # Read serial number
         serial_config = protocol.serial_number
         serial_number = None

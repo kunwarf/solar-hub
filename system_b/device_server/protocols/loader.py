@@ -215,6 +215,8 @@ class ProtocolLoader:
             size=data.get("size", 1),
             expected_values=data.get("expected_values", []),
             match_any=data.get("match_any", False),
+            reject_register=data.get("reject_register"),
+            reject_values=data.get("reject_values", []),
             command=data.get("command"),
             expected_response=data.get("expected_response"),
             timeout=data.get("timeout", 5.0),

@@ -61,13 +61,16 @@ protocols:
       # Inverter Mode at 0x101D (4125) — in the core real-time data block (0x1010+)
       # which all Senergy firmware versions must support.
       # Enum: 0=Initial, 1=Standby, 3=OnGrid, 4=OffGrid, 5=Fault (2 is absent).
-      # Preferred over the device-info block (0x1A00+) which some firmware versions
-      # may not fully populate, causing the probe to fail silently.
-      # Register 4125 is far outside Powdrive's register range (0-600), so no false match.
       register: 4125
       size: 1
       expected_values: [0, 1, 3, 4, 5]
       timeout: 2.0
+      # Reject if register 0 returns a Powdrive inverter-type value.
+      # Powdrive devices that return 0 for unknown register 4125 would otherwise
+      # be mis-identified as Senergy. This guard reads register 0 and rejects
+      # the probe if the value is in the Powdrive identification range.
+      reject_register: 0
+      reject_values: [2, 3, 4, 5]
 
     serial_number:
       # Device Serial Number at 0x1A10 = 6672, 8 registers, ASCII
