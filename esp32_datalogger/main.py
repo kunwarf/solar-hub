@@ -39,7 +39,6 @@ def main():
 
     print("\n" + "=" * 50)
     print("Solar Data Logger")
-    print("Device ID:", get_device_id())
     print("=" * 50 + "\n")
 
     # Load configuration
@@ -49,10 +48,13 @@ def main():
 
     # Free heap before WiFi init — heavy imports above can fragment memory
     gc.collect()
-    print("[Main] Free heap before WiFi: {}".format(gc.mem_free()))
 
     # Initialize WiFi manager
+    # NOTE: get_device_id() must NOT be called before this — it calls
+    # network.WLAN().active(True) which does a partial WiFi init that
+    # exhausts RX buffers and leaves the driver broken for the real init.
     wifi = WiFiManager()
+    print("Device ID:", get_device_id())
 
     # Try to connect to saved WiFi
     connected = wifi.connect_sta(timeout_s=15)
