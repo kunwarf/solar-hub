@@ -13,14 +13,12 @@ Usage:
     - Open http://192.168.4.1 to configure WiFi and server settings
     - After configuration, device will connect to WiFi and server automatically
 """
+import gc
 import time
 import _thread
 
 from config import get_config, get_device_id, AP_PASSWORD, get_ap_ssid
 from wifi_manager import WiFiManager
-from modbus_rtu import ModbusRTU
-from modbus_bridge import ModbusBridge
-from web_server import WebServer
 
 
 # Global instances
@@ -49,6 +47,10 @@ def main():
     mode = config.get("mode", "modbus_bridge")
     print("[Main] Mode:", mode)
 
+    # Free heap before WiFi init — heavy imports above can fragment memory
+    gc.collect()
+    print("[Main] Free heap before WiFi: {}".format(gc.mem_free()))
+
     # Initialize WiFi manager
     wifi = WiFiManager()
 
@@ -62,17 +64,21 @@ def main():
         print("[Main] Connect to WiFi: {} (password: {})".format(ap_ssid, AP_PASSWORD))
         print("[Main] Then open http://192.168.4.1/")
 
+    # Deferred imports — load after WiFi is up to avoid heap fragmentation
+    gc.collect()
     if mode == "serial_bridge":
-        # Serial bridge mode — deferred imports save heap in Modbus mode
         from serial_port import SerialPort
         from serial_bridge import SerialBridge
+        from web_server import WebServer
 
         serial = SerialPort(config["serial"])
         bridge = SerialBridge(serial, config)
-
         web = WebServer(wifi, serial_bridge=bridge)
     else:
-        # Modbus bridge mode (default)
+        from modbus_rtu import ModbusRTU
+        from modbus_bridge import ModbusBridge
+        from web_server import WebServer
+
         rtu = ModbusRTU(config["rtu"])
         bridge = ModbusBridge(rtu, config)
         web = WebServer(wifi, bridge, rtu)
@@ -198,4 +204,3 @@ if __name__ == "__main__":
         print("[Main] Resetting in 3s...")
         time.sleep(3)
         machine.reset()
-
