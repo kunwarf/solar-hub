@@ -258,11 +258,21 @@ class TelemetryCacheWriter:
         protocol_id_for_load = (telemetry.get("_protocol_id") or "").lower()
         if "senergy" in protocol_id_for_load and not power_data.get("load_w"):
             pv = power_data.get("pv_total_w") or 0
-            bat = float(telemetry.get("battery_power_w") or 0)   # S32: positive=charging
+            # Senergy raw battery_power_w: negative = charging, positive = discharging.
+            # Formula needs positive = charging convention → negate to match.
+            bat = -float(telemetry.get("battery_power_w") or 0)  # normalized: positive=charging
             grid = float(telemetry.get("grid_power_w") or 0)     # S32: positive=import
             derived = pv - bat + grid
             if derived > 0:
                 power_data["load_w"] = round(derived, 1)
+
+        # Senergy: raw battery_power_w is negative when charging (V × I, where I < 0 charging).
+        # Normalize to positive = charging convention so power-flow visualizations and
+        # aggregation totals work the same way as Powdrive and all other protocols.
+        if "senergy" in protocol_id_for_load and "battery_w" in power_data:
+            val = power_data["battery_w"]
+            if val is not None:
+                power_data["battery_w"] = -val
 
         if power_data:
             cache_data["power"] = power_data
@@ -460,5 +470,13 @@ class TelemetryCacheWriter:
             k: v for k, v in telemetry.items()
             if not k.startswith("_")  # Exclude internal metadata
         }
+
+        # Add standard key aliases for devices that use protocol-specific field names.
+        # The DeviceCard reads raw.battery_voltage_v and raw.battery_temp_c directly;
+        # JK BMS uses pack_voltage / temp1 which won't match those lookups without aliases.
+        if "battery_voltage_v" not in cache_data["raw"] and "voltage_v" in battery_data:
+            cache_data["raw"]["battery_voltage_v"] = battery_data["voltage_v"]
+        if "battery_temp_c" not in cache_data["raw"] and "battery_c" in temp_data:
+            cache_data["raw"]["battery_temp_c"] = temp_data["battery_c"]
 
         return cache_data
