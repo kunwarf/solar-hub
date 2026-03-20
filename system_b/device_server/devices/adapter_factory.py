@@ -18,7 +18,7 @@ _MSG_COMMAND_RESPONSE = 0x02
 _MSG_ERROR = 0x03
 _MSG_PING = 0x04
 _MSG_PONG = 0x05
-_MAX_PAYLOAD = 8192
+_MAX_PAYLOAD = 65536   # JK BMS bus dumps can exceed 8 KB (multiple broadcast cycles)
 
 from ..config import DeviceServerSettings, get_device_server_settings
 from ..connection.tcp_connection import TCPConnection
@@ -556,8 +556,11 @@ class TCPCommandAdapter:
                 resp_len = struct.unpack(">I", resp_header[1:5])[0]
 
                 if resp_len > _MAX_PAYLOAD:
-                    logger.warning(f"Binary framed response too large: {resp_len} bytes")
-                    return None
+                    logger.warning(f"Binary framed response too large: {resp_len} bytes — closing connection to prevent framing corruption")
+                    # Do NOT leave payload bytes in the socket; close so the next
+                    # connection starts clean.  Returning None without draining
+                    # causes every subsequent read to parse garbage lengths.
+                    raise ValueError(f"Response payload too large: {resp_len} bytes")
 
                 resp_payload = b""
                 if resp_len > 0:
