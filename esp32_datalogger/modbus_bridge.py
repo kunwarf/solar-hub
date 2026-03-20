@@ -144,6 +144,8 @@ class ModbusBridge:
         # requests regardless of what unit_id System B sends in the MBAP header.
         # This lets the ESP32 config control the physical device's Modbus address.
         self._rtu_unit_id = self.config.get("rtu", {}).get("unit_id", 0) or 0
+        if self._rtu_unit_id > 0:
+            print("[Bridge] RTU unit_id override: {}".format(self._rtu_unit_id))
         self._connected = False
         self._running = False
         self._registered = False
@@ -332,15 +334,15 @@ class ModbusBridge:
                 # Decode address and count/value from PDU for context.
                 is_write = func_code in (0x06, 0x10)
                 addr = ((pdu[1] << 8) | pdu[2]) if len(pdu) >= 3 else 0
+                # Resolve actual RTU unit_id — config overrides MBAP if set
+                rtu_unit = self._rtu_unit_id if self._rtu_unit_id > 0 else unit_id
+
                 if is_write and func_code == 0x06:
                     val = ((pdu[3] << 8) | pdu[4]) if len(pdu) >= 5 else 0
-                    print("[Bridge] FC06 write addr={} val={} unit={}".format(addr, val, unit_id))
+                    print("[Bridge] FC06 write addr={} val={} unit={}".format(addr, val, rtu_unit))
                 elif is_write and func_code == 0x10:
                     cnt = ((pdu[3] << 8) | pdu[4]) if len(pdu) >= 5 else 0
-                    print("[Bridge] FC10 write addr={} cnt={} unit={}".format(addr, cnt, unit_id))
-
-                # Forward to RTU — use local config unit_id if set, else MBAP unit_id
-                rtu_unit = self._rtu_unit_id if self._rtu_unit_id > 0 else unit_id
+                    print("[Bridge] FC10 write addr={} cnt={} unit={}".format(addr, cnt, rtu_unit))
                 response_pdu = self.rtu.forward_pdu(pdu, rtu_unit)
 
                 if response_pdu:
@@ -359,7 +361,7 @@ class ModbusBridge:
                 else:
                     # RTU did not respond — always log regardless of function code
                     print("[Bridge] FC{:02X} addr={} unit={} → RTU no response".format(
-                        func_code, addr, unit_id))
+                        func_code, addr, rtu_unit))
                     # Send exception response (gateway target device failed)
                     exc_pdu = bytes([func_code | 0x80, 0x0B])
                     resp_header = struct.pack(
