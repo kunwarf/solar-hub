@@ -64,13 +64,14 @@ protocols:
       register: 4125
       size: 1
       expected_values: [0, 1, 3, 4, 5]
-      timeout: 2.0
       # Reject if register 0 returns a Powdrive inverter-type value.
       # Powdrive devices that return 0 for unknown register 4125 would otherwise
       # be mis-identified as Senergy. This guard reads register 0 and rejects
       # the probe if the value is in the Powdrive identification range.
       reject_register: 0
       reject_values: [2, 3, 4, 5]
+      # 8s: allows time for probe reg (4125) + reject check (reg 0) + serial read (6672×8)
+      timeout: 8.0
 
     serial_number:
       # Device Serial Number at 0x1A10 = 6672, 8 registers, ASCII
