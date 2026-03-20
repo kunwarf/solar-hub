@@ -193,4 +193,9 @@ if __name__ == "__main__":
         print("[Main] Fatal error:", e)
         import sys
         sys.print_exception(e)
+        # Hard reset recovers from WiFi OOM after unclean shutdown (ESP32S3)
+        import machine
+        print("[Main] Resetting in 3s...")
+        time.sleep(3)
+        machine.reset()
 
