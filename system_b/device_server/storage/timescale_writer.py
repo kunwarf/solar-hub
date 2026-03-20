@@ -255,7 +255,7 @@ class TimescaleWriter:
             return self.parsers['jkbms']
         elif "jkbms_modbus" in protocol_id:
             return self.parsers['jkbms_modbus']
-        elif "powdrive" in protocol_id:
+        elif "powdrive" in protocol_id or "senergy" in protocol_id:
             return self.parsers['powdrive']
 
         # Method 2: Auto-detect based on JSON structure
