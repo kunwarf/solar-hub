@@ -5,6 +5,7 @@
     "tx_pin": 17,
     "rx_pin": 16,
     "de_pin": -1,
+    "re_pin": 5,
     "baudrate": 115200,
     "parity": "N",
     "stop_bits": 1,

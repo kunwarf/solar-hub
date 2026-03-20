@@ -75,7 +75,7 @@ DEFAULT_CONFIG = {
         "tx_pin": 17,
         "rx_pin": 16,
         "de_pin": -1,           # RS485 DE pin (Driver Enable, active-HIGH; -1 = not used)
-        "re_pin": -1,           # RS485 RE pin (Receiver Enable, active-LOW; -1 = not used)
+        "re_pin": 5,            # RS485 RE pin (GPIO5, held LOW by code = receiver always on)
         "baudrate": 115200,
         "parity": "N",          # N/E/O
         "stop_bits": 1,
