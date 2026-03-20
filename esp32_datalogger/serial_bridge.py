@@ -18,6 +18,7 @@ Message types:
 The ESP32 sends HELLO immediately after TCP connect so System B can
 identify the device without probing, then relays command/response pairs.
 """
+import gc
 import socket
 import struct
 import time
@@ -327,11 +328,15 @@ class SerialBridge:
             Raw bytes from the current broadcast burst, or None on timeout.
         """
         try:
+            # Collect garbage before the large bytearray allocation so the
+            # web server thread's dead objects are freed first.
+            gc.collect()
             raw = self.serial.read_available()
             if raw is not None:
                 print("[SerialBridge] Passive: {} bytes".format(len(raw)))
             return raw
         except Exception as e:
+            gc.collect()  # Recover heap after any allocation failure
             print("[SerialBridge] Passive exception:", e)
             return None
 

@@ -4,6 +4,7 @@ Web server for ESP32 Data Logger configuration.
 Provides a simple HTTP interface for configuring WiFi, Modbus settings,
 and viewing device status.
 """
+import gc
 import json
 import socket
 
@@ -127,6 +128,11 @@ class WebServer:
             client.settimeout(5)
 
             try:
+                # Free dead objects before any allocations in the request path.
+                # The serial bridge thread may have released large bytearrays
+                # that the GC hasn't reclaimed yet.
+                gc.collect()
+
                 # Read headers first (up to 2 KB)
                 raw = b""
                 while b"\r\n\r\n" not in raw:
@@ -190,6 +196,9 @@ class WebServer:
                 print("[Web] Request error:", e)
             finally:
                 client.close()
+                # Immediately free the response string and request buffers so
+                # the serial bridge thread doesn't compete for that heap space.
+                gc.collect()
 
         except OSError:
             # Timeout, no connection
