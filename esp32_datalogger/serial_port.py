@@ -21,6 +21,11 @@ try:
 except ImportError:
     pass  # log_buffer not available in test/host environments
 
+# Static receive buffer — allocated once at module load, never freed.
+# 12 KB fits 3 JK BMS units × ~3.5 KB each.  Using a fixed buffer and
+# uart.readinto() eliminates all per-poll heap allocation in read_available().
+_RX_BUF = bytearray(12288)
+
 
 class SerialPort:
     """
@@ -209,19 +214,25 @@ class SerialPort:
 
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
         idle_threshold = max(1, idle_ms // 10)  # convert to 10 ms ticks
-        # Use bytearray (mutable, grows in-place) instead of bytes (immutable,
-        # each += copies the whole buffer).  With 3 JK BMS units × ~3.5 KB each
-        # the bytes-concatenation pattern exhausts MicroPython's heap.
-        buf = bytearray()
+        # Read directly into the module-level static buffer via readinto().
+        # This eliminates all heap allocation during the read — no bytearray
+        # growth, no copies.  Returns a memoryview slice (also zero-allocation).
+        # socket.sendall() accepts memoryview, so no copy is needed on send.
+        mv = memoryview(_RX_BUF)
+        buf_len = 0
         idle_count = 0
         has_data = False
 
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
             available = self.uart.any()
             if available:
-                chunk = self.uart.read(available)
-                if chunk:
-                    buf.extend(chunk)
+                space = len(_RX_BUF) - buf_len
+                if space <= 0:
+                    print("[Serial] RX buffer full ({} bytes)".format(buf_len))
+                    break
+                n = self.uart.readinto(mv[buf_len:buf_len + min(available, space)])
+                if n:
+                    buf_len += n
                     idle_count = 0
                     has_data = True
             else:
@@ -231,11 +242,9 @@ class SerialPort:
                         break  # bus went idle after burst — done
                 time.sleep_ms(10)
 
-        if buf:
-            print("[Serial] read_available: {} bytes".format(len(buf)))
-        # Return the bytearray directly — avoids a full bytes(buf) copy that
-        # would double peak heap usage.  socket.sendall() accepts bytearray.
-        return buf if buf else None
+        if buf_len:
+            print("[Serial] read_available: {} bytes".format(buf_len))
+        return mv[:buf_len] if buf_len else None
 
     def write(self, data_str, line_ending=None):
         """
@@ -269,14 +278,14 @@ class SerialPort:
 
         prompt_bytes = prompt.encode("utf-8")
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
-        response = b""
+        response = bytearray()
 
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
             available = self.uart.any()
             if available:
                 chunk = self.uart.read(available)
                 if chunk:
-                    response += chunk
+                    response.extend(chunk)
                     if prompt_bytes in response:
                         break
             time.sleep_ms(10)

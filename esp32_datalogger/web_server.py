@@ -168,10 +168,10 @@ class WebServer:
 
                     # Stream file uploads directly to flash — no full-body buffering
                     if req_method == "POST" and req_path.startswith("/api/files/upload"):
-                        response = self._stream_file_upload(
+                        result = self._stream_file_upload(
                             client, body_so_far, content_length, req_path
                         )
-                        client.sendall(response.encode("utf-8"))
+                        self._send_result(client, result)
                     else:
                         while len(body_so_far) < content_length:
                             chunk = client.recv(512)
@@ -180,13 +180,11 @@ class WebServer:
                             body_so_far += chunk
                         request = headers_raw + "\r\n\r\n" + body_so_far.decode("utf-8", "replace")
                         if request:
-                            response = self._handle_request(request)
-                            client.sendall(response.encode("utf-8"))
+                            self._send_result(client, self._handle_request(request))
                 else:
                     request = raw.decode("utf-8", "replace")
                     if request:
-                        response = self._handle_request(request)
-                        client.sendall(response.encode("utf-8"))
+                        self._send_result(client, self._handle_request(request))
             except OSError as e:
                 # ETIMEDOUT (116) — client connected but did not send headers
                 # in time (e.g. browser prefetch, network scanner).  Benign.
@@ -312,22 +310,47 @@ class WebServer:
             else:
                 return self._response(404, "Not Found")
 
-            return self._response(200, HTML_HEADER + content + HTML_FOOTER)
+            # Return just the page body — HTML_HEADER/FOOTER added by _send_result
+            return self._response(200, content)
 
         except Exception as e:
             print("[Web] Error:", e)
             return self._response(500, "Error: " + str(e))
 
-    def _response(self, code, body, content_type="text/html"):
-        """Build HTTP response."""
-        status = {200: "OK", 404: "Not Found", 500: "Error"}.get(code, "OK")
-        return "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nConnection: close\r\n\r\n{}".format(
-            code, status, content_type, body
-        )
+    def _response(self, code, body="", content_type="text/html"):
+        """Return (code, content_type, body) tuple — streamed by _send_result."""
+        return (code, content_type, body)
 
-    def _json_response(self, data):
-        """Build JSON response."""
-        return self._response(200, json.dumps(data), "application/json")
+    def _json_response(self, data, status=200):
+        """Return JSON response tuple."""
+        return (status, "application/json", json.dumps(data))
+
+    def _send_result(self, client, result):
+        """
+        Stream a (code, content_type, body) tuple to the client.
+
+        For text/html responses, HTML_HEADER and HTML_FOOTER are sent as
+        separate sendall() calls so the full page is never concatenated in
+        RAM.  This reduces peak allocation from 3× page size to 1× page size.
+        """
+        code, ct, body = result
+        status = {200: "OK", 404: "Not Found", 405: "Method Not Allowed",
+                  500: "Internal Server Error"}.get(code, "OK")
+        client.sendall(
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nConnection: close\r\n\r\n"
+            .format(code, status, ct).encode()
+        )
+        if ct == "text/html":
+            client.sendall(HTML_HEADER.encode())
+            gc.collect()
+        if isinstance(body, (bytes, bytearray, memoryview)):
+            client.sendall(body)
+        else:
+            client.sendall(body.encode())
+        del body
+        gc.collect()
+        if ct == "text/html":
+            client.sendall(HTML_FOOTER.encode())
 
     def _url_decode(self, s):
         """Decode URL-encoded string."""

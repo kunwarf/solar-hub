@@ -25,7 +25,7 @@ import time
 
 from config import get_config
 from log_buffer import log_print as print
-from modbus_bridge import http_post_json
+from http_utils import http_post_json
 
 # Frame message types
 MSG_HELLO = 0x06
@@ -250,6 +250,12 @@ class SerialBridge:
                         raw = self._handle_command_passive()
                         if raw is not None:
                             self._send_frame(MSG_COMMAND_RESPONSE, raw)
+                            # Release the buffer immediately — if raw is a
+                            # memoryview of the static _RX_BUF it costs nothing,
+                            # but if it's a bytearray this frees it before the
+                            # next gc.collect() call in _handle_command_passive.
+                            del raw
+                            gc.collect()
                             self.stats["responses"] += 1
                         else:
                             self._send_frame(MSG_ERROR,
