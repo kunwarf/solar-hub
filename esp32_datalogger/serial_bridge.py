@@ -341,10 +341,15 @@ class SerialBridge:
 
         Args:
             msg_type: Message type byte (0x01–0x06).
-            payload: Payload bytes.
+            payload: Payload bytes or bytearray.
         """
         header = struct.pack(">BI", msg_type, len(payload))
-        self.socket.sendall(header + payload)
+        # Send header and payload separately — avoids allocating a combined
+        # copy (header + payload) which would duplicate the entire payload in
+        # memory.  TCP buffers the two sends transparently.
+        self.socket.sendall(header)
+        if payload:
+            self.socket.sendall(payload)
 
     def _recv_exact(self, length):
         """

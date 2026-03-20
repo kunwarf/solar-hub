@@ -174,10 +174,10 @@ class SerialPort:
             print("[Serial] read_frame: timeout after {}ms, {} bytes rx, header_found={}{}".format(
                 timeout_ms, len(buf),
                 header_found,
-                (" first={}".format(bytes(buf[:8]).hex()) if buf else ""),
+                (" first={}".format(buf[:8].hex()) if buf else ""),
             ))
             return None
-        return bytes(buf)
+        return buf
 
     def read_available(self, idle_ms=500, timeout_ms=None):
         """
@@ -233,7 +233,9 @@ class SerialPort:
 
         if buf:
             print("[Serial] read_available: {} bytes".format(len(buf)))
-        return bytes(buf) if buf else None
+        # Return the bytearray directly — avoids a full bytes(buf) copy that
+        # would double peak heap usage.  socket.sendall() accepts bytearray.
+        return buf if buf else None
 
     def write(self, data_str, line_ending=None):
         """
