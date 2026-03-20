@@ -143,7 +143,7 @@ class SerialPort:
             timeout_ms = self.config.get("response_timeout_ms", 5000)
 
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
-        buf = b""
+        buf = bytearray()
         header_found = False
         idle_count = 0
 
@@ -152,13 +152,13 @@ class SerialPort:
             if available:
                 chunk = self.uart.read(available)
                 if chunk:
-                    buf += chunk
+                    buf.extend(chunk)
                     idle_count = 0
 
                     if not header_found:
-                        idx = buf.find(header)
+                        idx = bytes(buf).find(header)
                         if idx >= 0:
-                            buf = buf[idx:]  # Trim pre-header garbage
+                            del buf[:idx]  # Trim pre-header garbage in-place
                             header_found = True
 
                     if header_found and len(buf) >= max_len:
@@ -174,10 +174,10 @@ class SerialPort:
             print("[Serial] read_frame: timeout after {}ms, {} bytes rx, header_found={}{}".format(
                 timeout_ms, len(buf),
                 header_found,
-                (" first={}".format(buf[:8].hex()) if buf else ""),
+                (" first={}".format(bytes(buf[:8]).hex()) if buf else ""),
             ))
             return None
-        return buf
+        return bytes(buf)
 
     def read_available(self, idle_ms=500, timeout_ms=None):
         """
@@ -209,7 +209,10 @@ class SerialPort:
 
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
         idle_threshold = max(1, idle_ms // 10)  # convert to 10 ms ticks
-        buf = b""
+        # Use bytearray (mutable, grows in-place) instead of bytes (immutable,
+        # each += copies the whole buffer).  With 3 JK BMS units × ~3.5 KB each
+        # the bytes-concatenation pattern exhausts MicroPython's heap.
+        buf = bytearray()
         idle_count = 0
         has_data = False
 
@@ -218,7 +221,7 @@ class SerialPort:
             if available:
                 chunk = self.uart.read(available)
                 if chunk:
-                    buf += chunk
+                    buf.extend(chunk)
                     idle_count = 0
                     has_data = True
             else:
@@ -230,7 +233,7 @@ class SerialPort:
 
         if buf:
             print("[Serial] read_available: {} bytes".format(len(buf)))
-        return buf if buf else None
+        return bytes(buf) if buf else None
 
     def write(self, data_str, line_ending=None):
         """

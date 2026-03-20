@@ -356,16 +356,17 @@ class SerialBridge:
         Returns:
             Bytes received or None on error/close.
         """
-        data = b""
+        # bytearray avoids the O(n²) copy cost of bytes += on MicroPython.
+        data = bytearray()
         while len(data) < length:
             try:
                 chunk = self.socket.recv(length - len(data))
                 if not chunk:
                     return None
-                data += chunk
+                data.extend(chunk)
             except Exception:
                 return None
-        return data
+        return bytes(data)
 
     def get_stats(self):
         """Get bridge statistics."""
