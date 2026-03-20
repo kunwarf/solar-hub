@@ -341,7 +341,7 @@ class TCPModbusAdapter:
         # Log summary with key metrics
         key_metrics = []
         for key in ["pv1_power_w", "pv2_power_w", "battery_power_w", "battery_soc_pct",
-                    "grid_power_w", "load_power_w", "inverter_temp_c"]:
+                    "grid_power_w", "load_power_w", "phase_r_watt_of_eps", "inverter_temp_c"]:
             if key in values:
                 val = values[key]
                 if isinstance(val, float):

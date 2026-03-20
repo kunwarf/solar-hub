@@ -249,6 +249,21 @@ class TelemetryCacheWriter:
             power_data["load_w"] = eps_w
             power_data["smart_load_w"] = eps_w
 
+        # For Senergy inverters: if load registers still read 0, derive load from power balance.
+        # Formula: load = pv_total - battery_power_w + grid_power_w
+        #   battery_power_w (S32): positive = charging, negative = discharging
+        #   grid_power_w    (S32): positive = import,   negative = export
+        # This handles cases where loads are on neither the main output port nor the EPS port
+        # reporting path, yet the inverter is clearly supplying power (battery discharging).
+        protocol_id_for_load = (telemetry.get("_protocol_id") or "").lower()
+        if "senergy" in protocol_id_for_load and not power_data.get("load_w"):
+            pv = power_data.get("pv_total_w") or 0
+            bat = float(telemetry.get("battery_power_w") or 0)   # S32: positive=charging
+            grid = float(telemetry.get("grid_power_w") or 0)     # S32: positive=import
+            derived = pv - bat + grid
+            if derived > 0:
+                power_data["load_w"] = round(derived, 1)
+
         if power_data:
             cache_data["power"] = power_data
 
