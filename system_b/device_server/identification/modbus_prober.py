@@ -327,14 +327,27 @@ class ModbusProber:
                 f"register {ident_config.register} = {value}"
             )
 
-        # Optional negative check: reject if a disqualifying register matches
+        # Optional negative check: reject if a disqualifying register matches.
+        # Use a short fixed timeout (3s): if the device doesn't respond to the
+        # reject register quickly it means the register doesn't exist for this
+        # device, so treat as "not rejected" and continue.
         if ident_config.reject_register is not None and ident_config.reject_values:
-            reject_regs = await self.read_registers(
-                connection,
-                ident_config.reject_register,
-                1,
-                unit_id,
-            )
+            try:
+                reject_regs = await asyncio.wait_for(
+                    self.read_registers(
+                        connection,
+                        ident_config.reject_register,
+                        1,
+                        unit_id,
+                    ),
+                    timeout=3.0,
+                )
+            except asyncio.TimeoutError:
+                logger.debug(
+                    f"{protocol.protocol_id}: reject register "
+                    f"{ident_config.reject_register} timed out — treating as not rejected"
+                )
+                reject_regs = None
             if reject_regs and reject_regs[0] in ident_config.reject_values:
                 logger.debug(
                     f"{protocol.protocol_id}: rejected — register "
