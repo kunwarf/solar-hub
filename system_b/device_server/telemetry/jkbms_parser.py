@@ -89,11 +89,22 @@ def parse_jkbms_status_frame(frame: bytes, cells_per_bms: int = 16) -> Optional[
         cell_voltages.append(round(v, 3) if v is not None else None)
     result["cell_voltages"] = [v for v in cell_voltages if v is not None]
 
+    # Cell resistances: offset 80 + cell*2, 2 bytes LE, ÷1000 → Ω
+    cell_resistances = []
+    for cell in range(cells_per_bms):
+        r = _read_int_le(frame, 80 + cell * 2, 2, signed=True, scale=1000.0)
+        if r is not None:
+            cell_resistances.append(r)
+    if cell_resistances:
+        result["cell_resistances"] = cell_resistances
+
     result["mos_temp"]           = _read_int_le(frame, 144, 2, signed=True, scale=10.0)
     result["power"]              = _read_int_le(frame, 154, 4, signed=False, scale=1000.0)
     result["current"]            = _read_int_le(frame, 158, 4, signed=True,  scale=1000.0)
     result["temp1"]              = _read_int_le(frame, 162, 2, signed=True, scale=10.0)
     result["temp2"]              = _read_int_le(frame, 164, 2, signed=True, scale=10.0)
+    result["temp3"]              = _read_int_le(frame, 254, 2, signed=True, scale=10.0)
+    result["temp4"]              = _read_int_le(frame, 258, 2, signed=True, scale=10.0)
     result["balance_current"]    = _read_int_le(frame, 170, 2, signed=True, scale=1000.0)
     result["balance_action"]     = _read_bool(frame, 172)
 
@@ -102,18 +113,15 @@ def parse_jkbms_status_frame(frame: bytes, cells_per_bms: int = 16) -> Optional[
     result["remaining_capacity"] = _read_int_le(frame, 174, 4, signed=True, scale=1000.0)
     result["total_capacity"]     = _read_int_le(frame, 178, 4, signed=True, scale=1000.0)
     result["cycle_count"]        = _read_int_le(frame, 182, 4, signed=True, scale=1.0)
+    result["cycle_capacity"]     = _read_int_le(frame, 186, 4, signed=True, scale=100.0)
     if len(frame) > 190:
         result["soh"] = frame[190]
+    result["total_runtime"]      = _read_int_le(frame, 194, 4, signed=False, scale=1.0)
 
     result["charge_switch"]      = _read_bool(frame, 198)
     result["discharge_switch"]   = _read_bool(frame, 199)
     result["balance_switch"]     = _read_bool(frame, 200)
     result["pack_voltage"]       = _read_int_le(frame, 234, 2, signed=False, scale=100.0)
-
-    if len(frame) > 255:
-        result["temp3"] = _read_int_le(frame, 254, 2, signed=True, scale=10.0)
-    if len(frame) > 259:
-        result["temp4"] = _read_int_le(frame, 258, 2, signed=True, scale=10.0)
 
     return result
 
@@ -122,17 +130,21 @@ def parse_jkbms_status_frame(frame: bytes, cells_per_bms: int = 16) -> Optional[
 # Multi-unit RS485 bus-dump parsing
 # ---------------------------------------------------------------------------
 
-# Modbus request pattern bytes 1-2 (byte 0 is battery_id)
+# Modbus request frame: [battery_id] 0x10 0x16 0x20 [data...]
+# Bytes 1-2 identify the frame as Modbus; byte 3 = 0x20 marks it as a master
+# request (which sets current_battery_id). Response frames also match bytes 1-2
+# but have a different type byte and must NOT update current_battery_id.
 _MODBUS_PATTERN = b'\x10\x16'
+_MODBUS_REQUEST_TYPE = 0x20
 
 
 def _find_next_bus_frame(data: bytes, pos: int = 0):
-    """Return (position, kind) of the next Modbus or data frame, or (-1, None)."""
+    """Return (position, kind) of the next Modbus request or data frame, or (-1, None)."""
     data_pos = data.find(JKBMS_FRAME_HEADER, pos)
 
     modbus_pos = -1
-    for i in range(pos, len(data) - 2):
-        if data[i + 1:i + 3] == _MODBUS_PATTERN:
+    for i in range(pos, len(data) - 3):
+        if data[i + 1:i + 3] == _MODBUS_PATTERN and data[i + 3] == _MODBUS_REQUEST_TYPE:
             modbus_pos = i
             break
 
@@ -216,7 +228,7 @@ def parse_jkbms_bus_dump(
 
     soc_vals = [u['soc'] for u in parsed_units if 'soc' in u]
     if soc_vals:
-        result['soc'] = min(soc_vals)          # min SOC is the limiting constraint
+        result['soc'] = sum(soc_vals) // len(soc_vals)   # average SOC for parallel pack
 
     current_vals = [u['current'] for u in parsed_units if 'current' in u]
     if current_vals:
