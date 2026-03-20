@@ -926,7 +926,11 @@ async def get_device_battery_bank(
             "voltage_v": battery.get("voltage_v"),
             "current_a": battery.get("current_a"),
             "charging": battery.get("charging"),
-            "power_w": telemetry.get("raw", {}).get("battery_power_w"),
+            "power_w": (
+                telemetry.get("raw", {}).get("battery_power_w")
+                or telemetry.get("raw", {}).get("power")
+                or telemetry.get("power", {}).get("battery_w")
+            ),
             "temp_c": telemetry.get("temperatures", {}).get("battery_c"),
             "soh_pct": battery_bank.get("soh_pct") if battery_bank else None,
             "cycle_count": battery_bank.get("cycle_count") if battery_bank else None,

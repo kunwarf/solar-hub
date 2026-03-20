@@ -220,7 +220,7 @@ class TelemetryCacheWriter:
             "pv2_w": ["pv2_power_w", "pv2_power", "pv_power_2"],
             "grid_w": ["grid_power_w", "grid_power", "ac_power"],
             "load_w": ["load_power_w", "load_power", "consumption_power"],
-            "battery_w": ["battery_power_w", "battery_power", "bat_power"],
+            "battery_w": ["battery_power_w", "battery_power", "bat_power", "power"],
         }
         for target_key, source_keys in power_mappings.items():
             for src in source_keys:
@@ -243,8 +243,10 @@ class TelemetryCacheWriter:
         battery_data = {}
         battery_mappings = {
             "soc_pct": ["battery_soc_pct", "battery_soc", "soc", "state_of_charge"],
-            "voltage_v": ["battery_voltage_v", "battery_voltage", "bat_voltage"],
-            "current_a": ["battery_current_a", "battery_current", "bat_current"],
+            "voltage_v": ["battery_voltage_v", "battery_voltage", "bat_voltage", "pack_voltage"],
+            "current_a": ["battery_current_a", "battery_current", "bat_current", "current"],
+            "soh_pct": ["battery_soh_pct", "battery_soh", "soh"],
+            "cycle_count": ["battery_cycle_count", "cycle_count"],
         }
         for target_key, source_keys in battery_mappings.items():
             for src in source_keys:
@@ -257,6 +259,8 @@ class TelemetryCacheWriter:
             battery_data["charging"] = telemetry["battery_current_a"] > 0
         elif "battery_current" in telemetry:
             battery_data["charging"] = telemetry["battery_current"] > 0
+        elif "current" in telemetry:
+            battery_data["charging"] = telemetry["current"] > 0
         elif "battery_power_w" in telemetry:
             battery_data["charging"] = telemetry["battery_power_w"] > 0
         elif "battery_power" in telemetry:
@@ -311,6 +315,7 @@ class TelemetryCacheWriter:
             ],
             "battery_c": [
                 "battery_temp_c", "battery_temp", "bat_temp_c", "bat_temp",
+                "temp1", "mos_temp",
             ],
             "ambient_c": [
                 "ambient_temp_c", "ambient_temp", "env_temp_c", "env_temp",
@@ -368,15 +373,37 @@ class TelemetryCacheWriter:
             status_data["working_mode_name"] = telemetry["working_mode_name"]
         cache_data["status"] = status_data
 
-        # Battery bank detail (Pylontech/Pytes per-unit and per-cell data)
+        # Battery bank detail — supports both Pylontech (battery_units/battery_cells)
+        # and JK BMS (cell_voltages list) in a unified format.
         battery_units = telemetry.get("battery_units")
         battery_cells = telemetry.get("battery_cells")
-        if battery_units or battery_cells:
+        cell_voltages = telemetry.get("cell_voltages")  # JK BMS native field
+        if battery_units or battery_cells or cell_voltages:
             bank_data: dict = {}
             if battery_units:
                 bank_data["units"] = battery_units
             if battery_cells:
                 bank_data["cells"] = battery_cells
+            # JK BMS: synthesize a single unit entry and per-cell rows
+            if cell_voltages and not battery_units:
+                # One logical unit representing the whole pack
+                unit_entry: dict = {"unit": 1}
+                for field, jk_key in (
+                    ("voltage_v", "pack_voltage"),
+                    ("current_a", "current"),
+                    ("soc_pct", "soc"),
+                    ("soh_pct", "soh"),
+                    ("temp_c", "temp1"),
+                    ("cycle_count", "cycle_count"),
+                ):
+                    if jk_key in telemetry:
+                        unit_entry[field] = telemetry[jk_key]
+                bank_data["units"] = [unit_entry]
+                bank_data["cells"] = [
+                    {"unit": 1, "cell": i + 1, "voltage_v": v}
+                    for i, v in enumerate(cell_voltages)
+                    if v is not None
+                ]
             # Carry over bank-level extras
             for key in ("battery_soh_pct", "battery_cycle_count", "battery_units_count",
                         "battery_has_alarm", "battery_has_fault", "battery_alarms"):
