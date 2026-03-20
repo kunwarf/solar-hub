@@ -23,6 +23,7 @@ interface DeviceTelemetry {
   battery_soc_pct: number;
   is_charging: boolean;
   online: boolean;
+  raw?: Record<string, any>;
 }
 
 interface InverterTelemetryProps {
@@ -113,6 +114,11 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
   const batterySoc = telemetry?.battery_soc_pct !== undefined ? telemetry.battery_soc_pct : 0;
   const isCharging = telemetry?.is_charging ?? batteryPower > 0;
   const isGridExporting = gridPower < 0;
+
+  // Load port breakdown (Senergy: main output port + EPS/Smart Load port)
+  const mainLoadW: number | null = telemetry?.raw?.load_power_w ?? null;
+  const epsLoadW: number | null = telemetry?.raw?.phase_r_watt_of_eps ?? telemetry?.raw?.smart_load_power_w ?? null;
+  const hasLoadBreakdown = mainLoadW !== null || epsLoadW !== null;
 
   // Power flow data from real telemetry
   const powerFlowData = {
@@ -320,6 +326,53 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
           </div>
         </div>
       </motion.div>
+
+      {/* Load Port Breakdown — shown when register data is available (e.g. Senergy) */}
+      {hasLoadBreakdown && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="glass-card p-3 sm:p-5"
+        >
+          <div className="mb-3 sm:mb-4">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground">Load Breakdown</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">Output port power split</p>
+          </div>
+          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Home className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-consumption" />
+                <span className="text-[10px] sm:text-xs text-muted-foreground">Main Port</span>
+              </div>
+              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
+                {mainLoadW !== null ? ((mainLoadW) / 1000).toFixed(2) : "--"}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">kW · addr 4874</p>
+            </div>
+            <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-solar" />
+                <span className="text-[10px] sm:text-xs text-muted-foreground">EPS / Smart Load</span>
+              </div>
+              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
+                {epsLoadW !== null ? ((epsLoadW) / 1000).toFixed(2) : "--"}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">kW · addr 4947</p>
+            </div>
+            <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                <span className="text-[10px] sm:text-xs text-muted-foreground">Total Load</span>
+              </div>
+              <p className="text-lg sm:text-2xl font-mono font-bold text-consumption">
+                {loadPower.toFixed(2)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">kW · combined</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Historical Power Chart - Real Data */}
       <motion.div
