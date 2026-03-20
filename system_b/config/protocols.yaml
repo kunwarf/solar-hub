@@ -13,7 +13,7 @@ protocols:
     description: "Powdrive 12K and similar hybrid inverters"
     device_type: inverter
     protocol_type: modbus_tcp
-    priority: 1
+    priority: 2
     manufacturer: "Powdrive"
     model_pattern: "^(12K|15K|20K).*"
     register_map: "powdrive_registers.json"
@@ -52,7 +52,7 @@ protocols:
     description: "Senergy series hybrid inverters"
     device_type: inverter
     protocol_type: modbus_tcp
-    priority: 2
+    priority: 1
     manufacturer: "Senergy"
     register_map: "senergy_registers.json"
     adapter_class: "adapters.senergy.SenergyAdapter"
