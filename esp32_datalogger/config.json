@@ -13,10 +13,7 @@
     "response_timeout_ms": 10000,
     "prompt": "pylon>",
     "line_ending": "\r\n",
-    "passive": true,
-    "frame_header": [85, 170, 235, 144],
-    "max_frame_len": 512,
-    "collect_window_ms": 6000
+    "passive": true
   },
   "serial_bridge": {
     "server_host": "182.180.150.107",

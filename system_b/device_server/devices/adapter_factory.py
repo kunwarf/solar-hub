@@ -463,6 +463,11 @@ class TCPCommandAdapter:
         # Background task that responds to PING keepalives during idle periods
         self._keepalive_task: Optional[asyncio.Task] = None
 
+        # Stateful stream parser for JK BMS serial bridge (reference approach):
+        # accumulates raw RS485 bytes across polls, tracks current_battery_id
+        # via Modbus request frames, returns latest per-unit telemetry.
+        self._jkbms_stream: Optional[Any] = None
+
     async def _keepalive_loop(self) -> None:
         """
         Respond to PING frames from the ESP32 during idle periods between polls.
@@ -746,17 +751,28 @@ class TCPCommandAdapter:
                 f"{len(all_cells)} cells total"
             )
 
-        # For JK BMS serial bridge (binary RS485 broadcast protocol)
-        # raw may be a single-frame or a multi-unit bus dump (Modbus request
-        # frames + data frames); parse_jkbms_bus_dump handles both cases and
-        # returns battery_units/battery_cells for multi-unit stacks.
+        # For JK BMS serial bridge: reference approach — ESP32 is a dumb byte
+        # pipe returning a burst of raw RS485 bytes per poll.  The stateful
+        # JKBMSStreamParser accumulates these across polls, tracks
+        # current_battery_id via Modbus request frames, and returns the
+        # latest per-unit telemetry (battery_units / battery_cells lists).
         elif "jkbms_serial" in pid or ("jkbms" in pid and self.connection.bridged):
+            if self._jkbms_stream is None:
+                from ..telemetry.jkbms_parser import JKBMSStreamParser
+                self._jkbms_stream = JKBMSStreamParser(cells_per_bms=16)
+
             raw = await self.send_command_bytes(b"")
             if raw:
-                from ..telemetry.jkbms_parser import parse_jkbms_bus_dump
-                parsed = parse_jkbms_bus_dump(raw)
-                if parsed:
-                    values.update(parsed)
+                self._jkbms_stream.feed(raw)
+                logger.debug(
+                    f"JK BMS stream: fed {len(raw)} bytes, "
+                    f"units={self._jkbms_stream.unit_count}, "
+                    f"cycles={self._jkbms_stream.cycle_count}"
+                )
+
+            result = self._jkbms_stream.get_result()
+            if result:
+                values.update(result)
 
         return values
 

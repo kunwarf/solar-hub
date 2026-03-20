@@ -281,6 +281,181 @@ def parse_jkbms_bus_dump(
 
 
 # ---------------------------------------------------------------------------
+# Stateful stream parser (reference approach)
+# ---------------------------------------------------------------------------
+
+class JKBMSStreamParser:
+    """
+    Stateful JK BMS RS485 stream parser.
+
+    Accumulates raw bytes across multiple poll cycles and continuously
+    parses frames from the byte stream.  Tracks ``current_battery_id``
+    via Modbus request frames (``<battery_id> 0x10 0x16 0x20 ...``) which
+    the JK BMS master controller emits before each unit's data frame,
+    attributing each ``55 AA EB 90`` data frame to the correct unit.
+
+    Unlike the stateless ``parse_jkbms_bus_dump()``, this class maintains
+    per-unit state across polls so short byte chunks from the "dumb pipe"
+    ESP32 accumulate into complete frames naturally.
+
+    Cycle detection: when a ``battery_id`` that was already seen in a
+    Modbus request re-appears as the lowest known id, a full RS485 bus
+    cycle has completed.  After the first complete cycle the ``unit_count``
+    property reflects how many units are on the bus.
+
+    Usage::
+
+        stream = JKBMSStreamParser(cells_per_bms=16)
+
+        # On each poll, feed new bytes from the ESP32:
+        stream.feed(raw_bytes)
+        result = stream.get_result()   # None until first frame parsed
+    """
+
+    def __init__(self, cells_per_bms: int = 16) -> None:
+        self._cells_per_bms = cells_per_bms
+        self._buffer: bytes = b""
+        self._current_battery_id: int = 0
+        self._batteries: Dict[int, Dict[str, Any]] = {}
+        self._known_ids: set = set()       # unit IDs seen in the current cycle
+        self._unit_count: Optional[int] = None
+        self._cycle_count: int = 0
+
+    def feed(self, data: bytes) -> None:
+        """Append raw bytes and parse all complete frames found."""
+        self._buffer += data
+        self._process()
+
+    def _process(self) -> None:
+        pos = 0
+        while pos < len(self._buffer):
+            next_pos, kind = _find_next_bus_frame(self._buffer, pos)
+            if next_pos < 0:
+                break
+
+            if kind == "modbus":
+                battery_id = self._buffer[next_pos]
+                if battery_id == 15:   # JK wraparound quirk
+                    battery_id = 0
+
+                # Cycle detection: re-seeing the lowest known id means a new
+                # cycle has started — record how many units the previous cycle had.
+                if self._known_ids and battery_id in self._known_ids and battery_id == min(self._known_ids):
+                    self._unit_count = len(self._known_ids)
+                    self._cycle_count += 1
+                    self._known_ids = set()
+                    logger.debug(
+                        f"JK BMS stream: cycle {self._cycle_count} complete, "
+                        f"{self._unit_count} unit(s) on bus"
+                    )
+
+                self._known_ids.add(battery_id)
+                self._current_battery_id = battery_id
+                pos = next_pos + 1
+
+            elif kind == "data":
+                slice_data = self._buffer[next_pos:]
+                next_header = slice_data.find(JKBMS_FRAME_HEADER, 4)
+                if next_header < 0:
+                    # Frame is incomplete — keep from here and wait for more bytes
+                    pos = next_pos
+                    break
+
+                frame_bytes = slice_data[:next_header]
+                parsed = parse_jkbms_status_frame(frame_bytes, self._cells_per_bms)
+                if parsed:
+                    b_id = self._current_battery_id
+                    if b_id not in self._batteries:
+                        logger.info(f"JK BMS stream: unit {b_id} discovered")
+                    self._batteries[b_id] = parsed
+
+                pos = next_pos + next_header
+
+            else:
+                pos = next_pos + 1
+
+        # Discard consumed bytes; keep only unprocessed tail
+        self._buffer = self._buffer[pos:]
+
+        # Safety cap: prevent unbounded growth if framing is consistently broken
+        if len(self._buffer) > 8192:
+            self._buffer = self._buffer[-4096:]
+            logger.warning("JK BMS stream buffer trimmed (framing issue?)")
+
+    def get_result(self) -> Optional[Dict[str, Any]]:
+        """
+        Return aggregated telemetry from all discovered units.
+
+        Returns None if no frames have been parsed yet.
+        """
+        if not self._batteries:
+            return None
+
+        if len(self._batteries) == 1:
+            return dict(list(self._batteries.values())[0])
+
+        # Multi-unit: aggregate bank-level scalars + build structured lists
+        sorted_ids = sorted(self._batteries.keys())
+        parsed_units = [self._batteries[bid] for bid in sorted_ids]
+
+        result = dict(parsed_units[0])
+
+        for key, agg in (
+            ("soc",                lambda vs: sum(vs) // len(vs)),  # average SOC
+            ("current",            sum),
+            ("power",              sum),
+            ("remaining_capacity", sum),
+            ("total_capacity",     sum),
+        ):
+            vals = [u[key] for u in parsed_units if key in u and u[key] is not None]
+            if vals:
+                result[key] = agg(vals)
+
+        battery_units: List[Dict[str, Any]] = []
+        battery_cells: List[Dict[str, Any]] = []
+        for unit_num, unit in enumerate(parsed_units, 1):
+            entry: Dict[str, Any] = {"unit": unit_num}
+            for dst, src in (
+                ("voltage_v",    "pack_voltage"),
+                ("current_a",    "current"),
+                ("soc_pct",      "soc"),
+                ("soh_pct",      "soh"),
+                ("temp_c",       "temp1"),
+                ("cycle_count",  "cycle_count"),
+                ("remaining_ah", "remaining_capacity"),
+                ("total_ah",     "total_capacity"),
+            ):
+                if src in unit and unit[src] is not None:
+                    entry[dst] = unit[src]
+            if "voltage_v" in entry and "current_a" in entry:
+                entry["power_w"] = round(entry["voltage_v"] * entry["current_a"], 1)
+            battery_units.append(entry)
+
+            for cell_idx, v in enumerate(unit.get("cell_voltages", []), 1):
+                if v is not None:
+                    battery_cells.append({"unit": unit_num, "cell": cell_idx, "voltage_v": v})
+
+        result["battery_units"] = battery_units
+        result["battery_cells"] = battery_cells
+
+        logger.debug(
+            f"JK BMS stream result: {len(parsed_units)} units, "
+            f"{len(battery_cells)} cells, cycle={self._cycle_count}"
+        )
+        return result
+
+    @property
+    def unit_count(self) -> Optional[int]:
+        """Units discovered on the bus (None until first complete cycle)."""
+        return self._unit_count
+
+    @property
+    def cycle_count(self) -> int:
+        """Number of complete RS485 bus cycles parsed so far."""
+        return self._cycle_count
+
+
+# ---------------------------------------------------------------------------
 # TelemetryParser implementation
 # ---------------------------------------------------------------------------
 

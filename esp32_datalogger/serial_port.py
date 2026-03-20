@@ -66,7 +66,7 @@ class SerialPort:
             stop=cfg.get("stop_bits", 1),
             tx=cfg["tx_pin"],
             rx=cfg["rx_pin"],
-            rxbuf=2048,
+            rxbuf=8192,
         )
         self.uart.init(timeout=0)
 
@@ -179,24 +179,39 @@ class SerialPort:
             return None
         return buf
 
-    def read_raw_window(self, window_ms=6000):
+    def read_available(self, idle_ms=500, timeout_ms=None):
         """
-        Accumulate all bytes received within a time window.
+        Drain UART: return all bytes received until the bus goes idle.
 
-        Used for JK BMS multi-unit capture: reads everything on the RS485
-        bus for ``window_ms`` milliseconds so that all BMS units' broadcast
-        frames (and the Modbus request frames used to identify them) are
-        captured in a single response.
+        Waits up to ``timeout_ms`` for the first byte to arrive.  Once data
+        starts arriving, returns as soon as the bus has been idle for
+        ``idle_ms`` milliseconds — this marks the end of the current RS485
+        broadcast burst (all BMS units have finished transmitting).
+
+        This makes the ESP32 a dumb byte pipe: System B accumulates chunks
+        across polls and parses frames from the stream, using Modbus request
+        frames (``<battery_id> 0x10 0x16 0x20 ...``) to track which unit
+        each ``55 AA EB 90`` data frame belongs to.
 
         Args:
-            window_ms: Collection window in milliseconds.
+            idle_ms:    Bus-idle threshold in milliseconds.  Return once the
+                        bus has been silent for this long after receiving the
+                        first byte.  Default 500 ms covers inter-unit gaps
+                        within a cycle while still returning quickly.
+            timeout_ms: Maximum total wait in milliseconds.  Defaults to
+                        ``response_timeout_ms`` from config.
 
         Returns:
-            All bytes received (may contain multiple frames), or None if
-            nothing was received during the window.
+            All bytes received during the burst, or None if no data arrived.
         """
-        deadline = time.ticks_add(time.ticks_ms(), window_ms)
+        if timeout_ms is None:
+            timeout_ms = self.config.get("response_timeout_ms", 5000)
+
+        deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+        idle_threshold = max(1, idle_ms // 10)  # convert to 10 ms ticks
         buf = b""
+        idle_count = 0
+        has_data = False
 
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
             available = self.uart.any()
@@ -204,11 +219,17 @@ class SerialPort:
                 chunk = self.uart.read(available)
                 if chunk:
                     buf += chunk
+                    idle_count = 0
+                    has_data = True
             else:
+                if has_data:
+                    idle_count += 1
+                    if idle_count >= idle_threshold:
+                        break  # bus went idle after burst — done
                 time.sleep_ms(10)
 
         if buf:
-            print("[Serial] read_raw_window: {} bytes in {}ms".format(len(buf), window_ms))
+            print("[Serial] read_available: {} bytes".format(len(buf)))
         return buf if buf else None
 
     def write(self, data_str, line_ending=None):
