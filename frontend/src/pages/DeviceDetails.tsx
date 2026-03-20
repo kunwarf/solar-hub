@@ -101,13 +101,14 @@ export default function DeviceDetails() {
 
   // Accumulate telemetry history for the chart
   useEffect(() => {
-    if (realtimeTelemetry) {
+    const tel = realtimeTelemetry?.telemetry;
+    if (tel) {
       const point: TelemetryPoint = {
-        timestamp: realtimeTelemetry.timestamp || new Date().toISOString(),
-        power: realtimeTelemetry.ac_output_power_w ?? realtimeTelemetry.power_w ?? 0,
-        voltage: realtimeTelemetry.ac_output_voltage_v ?? realtimeTelemetry.grid_voltage_v ?? 0,
-        current: realtimeTelemetry.ac_output_current_a ?? realtimeTelemetry.grid_current_a ?? 0,
-        temperature: realtimeTelemetry.inverter_temp_c ?? realtimeTelemetry.temperature_c ?? 0,
+        timestamp: tel.timestamp || new Date().toISOString(),
+        power: tel.power?.pv_total_w ?? tel.power?.pv1_w ?? 0,
+        voltage: tel.grid?.voltage_v ?? 0,
+        current: 0,
+        temperature: tel.temperatures?.inverter_c ?? 0,
       };
       setTelemetryHistory((prev) => {
         // Keep last 24 data points
@@ -236,14 +237,16 @@ export default function DeviceDetails() {
   };
 
   // Current metrics from realtime telemetry
-  const currentMetrics = realtimeTelemetry
+  // API response shape: { device_id, serial_number, status, last_seen, telemetry: { power, battery, temperatures, grid, ... } }
+  const tel = realtimeTelemetry?.telemetry;
+  const currentMetrics = tel
     ? {
-        power: realtimeTelemetry.ac_output_power_w ?? realtimeTelemetry.power_w ?? 0,
-        voltage: realtimeTelemetry.ac_output_voltage_v ?? realtimeTelemetry.grid_voltage_v ?? 0,
-        current: realtimeTelemetry.ac_output_current_a ?? realtimeTelemetry.grid_current_a ?? 0,
-        temperature: realtimeTelemetry.inverter_temp_c ?? realtimeTelemetry.temperature_c ?? 0,
-        solarPower: realtimeTelemetry.solar_power_w ?? realtimeTelemetry.pv_power_w ?? 0,
-        batteryPercent: realtimeTelemetry.battery_percent ?? realtimeTelemetry.battery_soc ?? null,
+        power: tel.power?.pv_total_w ?? tel.power?.pv1_w ?? 0,
+        voltage: tel.grid?.voltage_v ?? 0,
+        current: 0,
+        temperature: tel.temperatures?.inverter_c ?? 0,
+        solarPower: tel.power?.pv_total_w ?? tel.power?.pv1_w ?? 0,
+        batteryPercent: tel.battery?.soc_pct ?? null,
       }
     : null;
 
@@ -497,17 +500,32 @@ export default function DeviceDetails() {
                 <CardTitle>Current Telemetry Readings</CardTitle>
               </CardHeader>
               <CardContent>
-                {realtimeTelemetry ? (
+                {realtimeTelemetry?.telemetry ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Object.entries(realtimeTelemetry)
-                      .filter(([key]) => !["timestamp", "device_id", "serial_number"].includes(key))
-                      .map(([key, value]) => (
+                    {Object.entries(realtimeTelemetry.telemetry)
+                      .filter(([key]) => !["timestamp", "serial_number", "status"].includes(key))
+                      .flatMap(([section, sectionVal]) =>
+                        typeof sectionVal === "object" && sectionVal !== null && !Array.isArray(sectionVal)
+                          ? Object.entries(sectionVal as Record<string, unknown>).map(([k, v]) => ({
+                              key: `${section}.${k}`,
+                              label: `${section.replace(/_/g, " ")} / ${k.replace(/_/g, " ")}`,
+                              value: v,
+                            }))
+                          : [{ key: section, label: section.replace(/_/g, " "), value: sectionVal }]
+                      )
+                      .map(({ key, label, value }) => (
                         <div key={key} className="p-3 rounded-md border">
                           <p className="text-xs text-muted-foreground mb-1 capitalize">
-                            {key.replace(/_/g, " ")}
+                            {label}
                           </p>
                           <p className="font-medium text-sm">
-                            {typeof value === "number" ? value.toFixed(2) : String(value)}
+                            {typeof value === "number"
+                              ? value.toFixed(2)
+                              : typeof value === "boolean"
+                              ? value ? "Yes" : "No"
+                              : Array.isArray(value)
+                              ? value.length === 0 ? "None" : JSON.stringify(value)
+                              : String(value)}
                           </p>
                         </div>
                       ))}
