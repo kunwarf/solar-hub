@@ -3,8 +3,8 @@
   "serial": {
     "uart_id": 1,
     "tx_pin": 17,
-    "rx_pin": 16,
-    "de_pin": -1,
+    "rx_pin": 18,
+    "de_pin": 4,
     "re_pin": 5,
     "baudrate": 115200,
     "parity": "N",
@@ -28,12 +28,12 @@
     "register_endpoint": "/api/v1/devices/self-register"
   },
   "device": {
-    "serial": "SH01GW6FHUFAX7L0",
-    "name": "JK BMS Gateway",
-    "type": "battery",
-    "manufacturer": "JK",
+    "serial": "SH01GWAT9Q7YDV90",
+    "name": "Solar Hut Logger",
+    "type": "inverter",
+    "manufacturer": "Senergy",
     "firmware_version": "1.0.0",
-    "protocol": "jkbms_serial",
-    "model": "MB280"
+    "protocol": "modbus_rtu",
+    "model": "PV9000"
   }
 }

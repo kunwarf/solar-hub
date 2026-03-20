@@ -21,7 +21,7 @@ except ImportError:
     asyncpg = None
 
 from ..config import DeviceServerSettings, get_device_server_settings
-from ..telemetry import DeyeHybridParser, JKBMSModbusParser, JKBMSParser, PowdriveParser, PylontechParser, TelemetryMetric, TelemetryParser
+from ..telemetry import DeyeHybridParser, JKBMSModbusParser, JKBMSParser, PowdriveParser, PylontechParser, SenergyParser, TelemetryMetric, TelemetryParser
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ class TimescaleWriter:
             'pytes': PylontechParser(),
             'jkbms': JKBMSParser(),
             'jkbms_modbus': JKBMSModbusParser(),
+            'senergy': SenergyParser(),
         }
         # Default parser for backwards compatibility
         self.default_parser = self.parsers['powdrive']
@@ -255,7 +256,9 @@ class TimescaleWriter:
             return self.parsers['jkbms']
         elif "jkbms_modbus" in protocol_id:
             return self.parsers['jkbms_modbus']
-        elif "powdrive" in protocol_id or "senergy" in protocol_id:
+        elif "senergy" in protocol_id:
+            return self.parsers['senergy']
+        elif "powdrive" in protocol_id:
             return self.parsers['powdrive']
 
         # Method 2: Auto-detect based on JSON structure
