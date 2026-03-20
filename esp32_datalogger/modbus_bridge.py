@@ -140,6 +140,10 @@ class ModbusBridge:
         self.rtu = rtu_master
         self.config = config or get_config()
         self.socket = None
+        # Unit ID override: if rtu.unit_id is set (>0), use it for all RTU
+        # requests regardless of what unit_id System B sends in the MBAP header.
+        # This lets the ESP32 config control the physical device's Modbus address.
+        self._rtu_unit_id = self.config.get("rtu", {}).get("unit_id", 0) or 0
         self._connected = False
         self._running = False
         self._registered = False
@@ -335,8 +339,9 @@ class ModbusBridge:
                     cnt = ((pdu[3] << 8) | pdu[4]) if len(pdu) >= 5 else 0
                     print("[Bridge] FC10 write addr={} cnt={} unit={}".format(addr, cnt, unit_id))
 
-                # Forward to RTU and get response
-                response_pdu = self.rtu.forward_pdu(pdu, unit_id)
+                # Forward to RTU — use local config unit_id if set, else MBAP unit_id
+                rtu_unit = self._rtu_unit_id if self._rtu_unit_id > 0 else unit_id
+                response_pdu = self.rtu.forward_pdu(pdu, rtu_unit)
 
                 if response_pdu:
                     if is_write:
