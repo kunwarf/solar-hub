@@ -708,19 +708,19 @@
     "id": "battery_power_w",
     "name": "Battery Power",
     "addr": 8201,
-    "type": "U32",
+    "type": "S32",
     "rw": "RO",
     "kind": "holding",
     "size": 2,
     "unit": "W",
     "scale": 0.1,
-    "comment": "Standardized ID (alias: battery_power)"
+    "comment": "Standardized ID (alias: battery_power). S32: positive=charging, negative=discharging"
   },
   {
     "id": "battery_power",
     "name": "Battery power",
     "addr": 8201,
-    "type": "U32",
+    "type": "S32",
     "rw": "RO",
     "kind": "holding",
     "size": 2,

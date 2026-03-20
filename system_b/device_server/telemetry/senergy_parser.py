@@ -6,7 +6,8 @@ Extracts normalized metrics from Senergy inverter telemetry.
 Key differences from Powdrive:
 - battery_current_a is S32 with NEGATIVE = charging convention.
   We normalize to positive = charging for TimescaleDB consistency.
-- battery_power_w is U32 (unsigned). We derive its sign from battery_current_a.
+- battery_power_w is S32 (signed): positive=charging, negative=discharging.
+  We take abs() and re-derive sign from battery_current_a for consistency.
 - Energy field names differ (today_pv_kwh, today_import_kwh, etc.)
 - Has a Smart Load / EPS port (smart_load_power_w / phase_r_watt_of_eps)
 """
@@ -126,7 +127,7 @@ class SenergyParser(TelemetryParser):
             normalized_current = -raw_current  # flip: negative charging → positive charging
             metrics.append(_metric('battery_current_a', normalized_current, 'A', 'battery'))
 
-        # ── Battery power: U32 (unsigned) → derive sign from normalized current direction ──
+        # ── Battery power: S32 (signed) → take abs magnitude, re-derive sign from normalized current ──
         raw_power_w = telemetry_data.get('battery_power_w') or telemetry_data.get('battery_power')
         if raw_power_w is not None:
             try:
