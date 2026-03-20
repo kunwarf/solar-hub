@@ -463,6 +463,30 @@
     "unit": "kWh",
     "scale": 0.01
   },
+  {
+    "id": "phase_r_voltage_of_load",
+    "name": "L1-N phase voltage of load",
+    "addr": 4899,
+    "type": "U16",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 1,
+    "unit": "V",
+    "scale": 0.1,
+    "comment": "0x1323 — L1-N load output port voltage"
+  },
+  {
+    "id": "phase_r_current_of_load",
+    "name": "L1 current of load",
+    "addr": 4902,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "A",
+    "scale": 0.01,
+    "comment": "0x1326 — L1 load output port current"
+  },
 
   {
     "id": "grid_frequency_hz",

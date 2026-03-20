@@ -117,7 +117,11 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
 
   // Load port breakdown (Senergy: main output port + EPS/Smart Load port)
   const mainLoadW: number | null = telemetry?.raw?.load_power_w ?? null;
+  const mainLoadV: number | null = telemetry?.raw?.phase_r_voltage_of_load ?? null;
+  const mainLoadA: number | null = telemetry?.raw?.phase_r_current_of_load ?? null;
   const epsLoadW: number | null = telemetry?.raw?.phase_r_watt_of_eps ?? telemetry?.raw?.smart_load_power_w ?? null;
+  const epsLoadV: number | null = telemetry?.raw?.phase_r_voltage_of_eps ?? null;
+  const epsLoadA: number | null = telemetry?.raw?.phase_r_current_of_eps ?? null;
   const hasLoadBreakdown = mainLoadW !== null || epsLoadW !== null;
 
   // Power flow data from real telemetry
@@ -346,9 +350,19 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
                 <span className="text-[10px] sm:text-xs text-muted-foreground">Main Port</span>
               </div>
               <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
-                {mainLoadW !== null ? ((mainLoadW) / 1000).toFixed(2) : "--"}
+                {mainLoadW !== null ? (mainLoadW / 1000).toFixed(2) : "--"}
+                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
               </p>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">kW · addr 4874</p>
+              <div className="flex gap-2 mt-1.5">
+                <span className="text-[10px] sm:text-xs text-muted-foreground">
+                  {mainLoadV !== null ? `${mainLoadV.toFixed(1)} V` : "-- V"}
+                </span>
+                <span className="text-[10px] sm:text-xs text-muted-foreground">·</span>
+                <span className="text-[10px] sm:text-xs text-muted-foreground">
+                  {mainLoadA !== null ? `${mainLoadA.toFixed(2)} A` : "-- A"}
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground/50 mt-0.5">addr 4874 / 4899 / 4902</p>
             </div>
             <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
               <div className="flex items-center gap-1.5 mb-1.5">
@@ -356,9 +370,19 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
                 <span className="text-[10px] sm:text-xs text-muted-foreground">EPS / Smart Load</span>
               </div>
               <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
-                {epsLoadW !== null ? ((epsLoadW) / 1000).toFixed(2) : "--"}
+                {epsLoadW !== null ? (epsLoadW / 1000).toFixed(2) : "--"}
+                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
               </p>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">kW · addr 4947</p>
+              <div className="flex gap-2 mt-1.5">
+                <span className="text-[10px] sm:text-xs text-muted-foreground">
+                  {epsLoadV !== null ? `${epsLoadV.toFixed(1)} V` : "-- V"}
+                </span>
+                <span className="text-[10px] sm:text-xs text-muted-foreground">·</span>
+                <span className="text-[10px] sm:text-xs text-muted-foreground">
+                  {epsLoadA !== null ? `${epsLoadA.toFixed(2)} A` : "-- A"}
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground/50 mt-0.5">addr 4947 / 4944 / 4945</p>
             </div>
             <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
               <div className="flex items-center gap-1.5 mb-1.5">
@@ -367,8 +391,10 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
               </div>
               <p className="text-lg sm:text-2xl font-mono font-bold text-consumption">
                 {loadPower.toFixed(2)}
+                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
               </p>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">kW · combined</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1.5">combined output</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground/50 mt-0.5">Main + EPS</p>
             </div>
           </div>
         </motion.div>
