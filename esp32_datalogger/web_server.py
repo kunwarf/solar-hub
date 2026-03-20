@@ -181,6 +181,11 @@ class WebServer:
                     if request:
                         response = self._handle_request(request)
                         client.sendall(response.encode("utf-8"))
+            except OSError as e:
+                # ETIMEDOUT (116) — client connected but did not send headers
+                # in time (e.g. browser prefetch, network scanner).  Benign.
+                if e.args[0] != 116:
+                    print("[Web] Request error:", e)
             except Exception as e:
                 print("[Web] Request error:", e)
             finally:
