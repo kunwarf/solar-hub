@@ -23,35 +23,6 @@ units) plus ``battery_units`` and ``battery_cells`` lists in the same format
 used by the Pylontech parser so redis_cache and the frontend handle them
 identically.
 """
-
-Parses the dict produced from JK BMS 55 AA EB 90 status frames
-(frame type 0x02) into normalized TelemetryMetric objects.
-
-The dict schema matches the output of parse_jkbms_status_frame(), which
-is called by TCPCommandAdapter.poll() for the jkbms_serial protocol:
-
-    {
-        "soc": int,                  # 0-100 %
-        "soh": int,                  # 0-100 %
-        "pack_voltage": float,       # V
-        "current": float,            # A (negative = discharging)
-        "power": float,              # W (unsigned, always positive)
-        "temp1": float,              # °C (battery temp sensor 1)
-        "temp2": float,              # °C (battery temp sensor 2)
-        "temp3": float,              # °C (extra sensor)
-        "temp4": float,              # °C (extra sensor)
-        "mos_temp": float,           # °C (MOSFET temperature)
-        "remaining_capacity": float, # Ah
-        "total_capacity": float,     # Ah
-        "cycle_count": int,
-        "charge_switch": bool,
-        "discharge_switch": bool,
-        "balance_switch": bool,
-        "balance_current": float,    # A
-        "balance_action": bool,
-        "cell_voltages": [float, ...],  # V per cell
-    }
-"""
 import logging
 import struct
 from datetime import datetime
