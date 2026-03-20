@@ -369,7 +369,11 @@ class JKBMSStreamParser:
                         logger.info(f"JK BMS stream: unit {b_id} discovered")
                     self._batteries[b_id] = parsed
 
-                pos = next_pos + next_header
+                # Advance by 1 byte past the current frame header, NOT by next_header.
+                # If we jumped directly to next_header, any Modbus request frames that
+                # appear between this data frame and the next data frame would be skipped,
+                # causing all subsequent data frames to be attributed to the wrong unit.
+                pos = next_pos + 1
 
             else:
                 pos = next_pos + 1
