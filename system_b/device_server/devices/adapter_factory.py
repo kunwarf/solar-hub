@@ -747,11 +747,14 @@ class TCPCommandAdapter:
             )
 
         # For JK BMS serial bridge (binary RS485 broadcast protocol)
+        # raw may be a single-frame or a multi-unit bus dump (Modbus request
+        # frames + data frames); parse_jkbms_bus_dump handles both cases and
+        # returns battery_units/battery_cells for multi-unit stacks.
         elif "jkbms_serial" in pid or ("jkbms" in pid and self.connection.bridged):
             raw = await self.send_command_bytes(b"")
             if raw:
-                from ..telemetry.jkbms_parser import parse_jkbms_status_frame
-                parsed = parse_jkbms_status_frame(raw)
+                from ..telemetry.jkbms_parser import parse_jkbms_bus_dump
+                parsed = parse_jkbms_bus_dump(raw)
                 if parsed:
                     values.update(parsed)
 

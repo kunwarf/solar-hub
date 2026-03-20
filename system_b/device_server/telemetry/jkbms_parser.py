@@ -1,6 +1,29 @@
 """
 JK BMS binary telemetry parser.
 
+Multi-unit RS485 support
+------------------------
+When multiple JK BMS units share an RS485 bus in broadcast mode, the ESP32
+collects a raw bus dump that interleaves two frame types:
+
+  Modbus request  (``<battery_id> 0x10 0x16 ...``): emitted by the master to
+    address a specific unit; the battery_id byte identifies which unit's data
+    frame follows next.
+
+  Data frame      (``55 AA EB 90 0x02 ...``): status payload from the
+    addressed unit.
+
+``parse_jkbms_bus_dump()`` handles this combined stream, tracking
+``current_battery_id`` across Modbus frames and attributing each data frame
+to the correct unit.  When no Modbus frames are present (pure broadcast mode)
+data frames are assigned unit IDs 1, 2, 3, … in order of appearance.
+
+The returned dict contains standard bank-level scalars (aggregated over all
+units) plus ``battery_units`` and ``battery_cells`` lists in the same format
+used by the Pylontech parser so redis_cache and the frontend handle them
+identically.
+"""
+
 Parses the dict produced from JK BMS 55 AA EB 90 status frames
 (frame type 0x02) into normalized TelemetryMetric objects.
 
@@ -125,6 +148,156 @@ def parse_jkbms_status_frame(frame: bytes, cells_per_bms: int = 16) -> Optional[
 
 
 # ---------------------------------------------------------------------------
+# Multi-unit RS485 bus-dump parsing
+# ---------------------------------------------------------------------------
+
+# Modbus request pattern bytes 1-2 (byte 0 is battery_id)
+_MODBUS_PATTERN = b'\x10\x16'
+
+
+def _find_next_bus_frame(data: bytes, pos: int = 0):
+    """Return (position, kind) of the next Modbus or data frame, or (-1, None)."""
+    data_pos = data.find(JKBMS_FRAME_HEADER, pos)
+
+    modbus_pos = -1
+    for i in range(pos, len(data) - 2):
+        if data[i + 1:i + 3] == _MODBUS_PATTERN:
+            modbus_pos = i
+            break
+
+    if data_pos >= 0 and (modbus_pos < 0 or data_pos <= modbus_pos):
+        return data_pos, "data"
+    elif modbus_pos >= 0:
+        return modbus_pos, "modbus"
+    return -1, None
+
+
+def parse_jkbms_bus_dump(
+    data: bytes,
+    cells_per_bms: int = 16,
+) -> Optional[Dict[str, Any]]:
+    """
+    Parse a raw RS485 bus dump that may contain frames from multiple JK BMS units.
+
+    Handles both:
+    - Pure broadcast dumps (only ``55 AA EB 90`` data frames)
+    - Master-polled dumps (Modbus request frames interleaved with data frames)
+
+    For single-unit dumps this is equivalent to ``parse_jkbms_status_frame()``.
+    For multi-unit dumps it returns an aggregated dict with ``battery_units``
+    and ``battery_cells`` in Pylontech-compatible format so redis_cache.py and
+    the frontend display all units correctly.
+
+    Args:
+        data: Raw bytes from the RS485 bus (may span multiple frames).
+        cells_per_bms: Number of cells per BMS unit.
+
+    Returns:
+        Aggregated dict or None if no valid frames found.
+    """
+    batteries: Dict[int, Dict] = {}
+    current_battery_id = 0
+    pos = 0
+
+    while pos < len(data):
+        next_pos, kind = _find_next_bus_frame(data, pos)
+        if next_pos < 0:
+            break
+
+        if kind == "modbus":
+            # First byte is battery_id; bytes 1-2 are 0x10 0x16
+            battery_id = data[next_pos]
+            if battery_id == 15:   # JK wraparound quirk
+                battery_id = 0
+            current_battery_id = battery_id
+            pos = next_pos + 1
+
+        elif kind == "data":
+            slice_data = data[next_pos:]
+            # Find end of this frame (start of next header or end of buffer)
+            next_header = slice_data.find(JKBMS_FRAME_HEADER, 4)
+            frame_bytes = slice_data[:next_header] if next_header > 0 else slice_data
+
+            parsed = parse_jkbms_status_frame(frame_bytes, cells_per_bms)
+            if parsed:
+                b_id = current_battery_id
+                if b_id not in batteries:
+                    batteries[b_id] = {}
+                batteries[b_id].update(parsed)
+
+            pos = next_pos + (next_header if next_header > 0 else len(slice_data))
+        else:
+            pos = next_pos + 1
+
+    if not batteries:
+        # Fallback: try treating the whole blob as a single frame
+        return parse_jkbms_status_frame(data, cells_per_bms)
+
+    if len(batteries) == 1:
+        # Single unit — return as-is for backward compat
+        return list(batteries.values())[0]
+
+    # Multiple units — aggregate bank-level scalars and build structured lists
+    sorted_ids = sorted(batteries.keys())
+    parsed_units = [batteries[bid] for bid in sorted_ids]
+
+    result = dict(parsed_units[0])  # base from first unit
+
+    soc_vals = [u['soc'] for u in parsed_units if 'soc' in u]
+    if soc_vals:
+        result['soc'] = min(soc_vals)          # min SOC is the limiting constraint
+
+    current_vals = [u['current'] for u in parsed_units if 'current' in u]
+    if current_vals:
+        result['current'] = sum(current_vals)  # parallel pack: sum currents
+
+    power_vals = [u['power'] for u in parsed_units if 'power' in u]
+    if power_vals:
+        result['power'] = sum(power_vals)
+
+    remaining_vals = [u['remaining_capacity'] for u in parsed_units if 'remaining_capacity' in u]
+    if remaining_vals:
+        result['remaining_capacity'] = sum(remaining_vals)
+
+    total_vals = [u['total_capacity'] for u in parsed_units if 'total_capacity' in u]
+    if total_vals:
+        result['total_capacity'] = sum(total_vals)
+
+    # Build Pylontech-compatible battery_units and battery_cells
+    battery_units = []
+    battery_cells = []
+    for unit_num, unit in enumerate(parsed_units, 1):
+        entry: Dict[str, Any] = {"unit": unit_num}
+        for dst, src in (
+            ("voltage_v",    "pack_voltage"),
+            ("current_a",    "current"),
+            ("soc_pct",      "soc"),
+            ("soh_pct",      "soh"),
+            ("temp_c",       "temp1"),
+            ("cycle_count",  "cycle_count"),
+            ("remaining_ah", "remaining_capacity"),
+            ("total_ah",     "total_capacity"),
+        ):
+            if src in unit and unit[src] is not None:
+                entry[dst] = unit[src]
+        if "voltage_v" in entry and "current_a" in entry:
+            entry["power_w"] = round(entry["voltage_v"] * entry["current_a"], 1)
+        battery_units.append(entry)
+
+        for cell_idx, v in enumerate(unit.get("cell_voltages", []), 1):
+            if v is not None:
+                battery_cells.append({"unit": unit_num, "cell": cell_idx, "voltage_v": v})
+
+    result["battery_units"] = battery_units
+    result["battery_cells"] = battery_cells
+
+    logger.info(
+        f"JK BMS bus dump: {len(parsed_units)} units, {len(battery_cells)} cells total"
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # TelemetryParser implementation
 # ---------------------------------------------------------------------------
 
@@ -216,27 +389,56 @@ class JKBMSParser(TelemetryParser):
                 ))
 
         # --- Per-cell voltage metrics ---
-        cell_voltages: List = telemetry_data.get("cell_voltages", [])
-        for i, voltage in enumerate(cell_voltages):
-            if voltage is None:
-                continue
-            try:
-                metrics.append(TelemetryMetric(
-                    time=timestamp,
-                    device_id=device_id,
-                    site_id=site_id,
-                    metric_name=f"battery_cell_{i + 1}_voltage_v",
-                    metric_value=float(voltage),
-                    quality="good",
-                    unit="V",
-                    source="telemetry",
-                    tags={"category": "battery_cell", "cell": i + 1},
-                ))
-            except (ValueError, TypeError):
-                logger.warning(f"Could not convert cell {i + 1} voltage={voltage} to float")
-
-        logger.debug(
-            f"Parsed {len(metrics)} metrics from JK BMS telemetry "
-            f"(device {device_id}, {len(cell_voltages)} cells)"
-        )
+        # Prefer battery_cells (multi-unit, unit-tagged) over cell_voltages (single-unit)
+        battery_cells: List = telemetry_data.get("battery_cells", [])
+        if battery_cells:
+            total_cells = 0
+            for cell_info in battery_cells:
+                unit_num = cell_info.get("unit", 1)
+                cell_num = cell_info.get("cell")
+                voltage = cell_info.get("voltage_v")
+                if cell_num is None or voltage is None:
+                    continue
+                try:
+                    metrics.append(TelemetryMetric(
+                        time=timestamp,
+                        device_id=device_id,
+                        site_id=site_id,
+                        metric_name=f"battery_unit_{unit_num}_cell_{cell_num}_voltage_v",
+                        metric_value=float(voltage),
+                        quality="good",
+                        unit="V",
+                        source="telemetry",
+                        tags={"category": "battery_cell", "unit": unit_num, "cell": cell_num},
+                    ))
+                    total_cells += 1
+                except (ValueError, TypeError):
+                    logger.warning(f"Could not convert unit {unit_num} cell {cell_num} voltage={voltage}")
+            logger.debug(
+                f"Parsed {len(metrics)} metrics from JK BMS telemetry "
+                f"(device {device_id}, {total_cells} cells across multi-unit)"
+            )
+        else:
+            cell_voltages: List = telemetry_data.get("cell_voltages", [])
+            for i, voltage in enumerate(cell_voltages):
+                if voltage is None:
+                    continue
+                try:
+                    metrics.append(TelemetryMetric(
+                        time=timestamp,
+                        device_id=device_id,
+                        site_id=site_id,
+                        metric_name=f"battery_cell_{i + 1}_voltage_v",
+                        metric_value=float(voltage),
+                        quality="good",
+                        unit="V",
+                        source="telemetry",
+                        tags={"category": "battery_cell", "cell": i + 1},
+                    ))
+                except (ValueError, TypeError):
+                    logger.warning(f"Could not convert cell {i + 1} voltage={voltage} to float")
+            logger.debug(
+                f"Parsed {len(metrics)} metrics from JK BMS telemetry "
+                f"(device {device_id}, {len(cell_voltages)} cells)"
+            )
         return metrics

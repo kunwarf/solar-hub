@@ -179,6 +179,38 @@ class SerialPort:
             return None
         return buf
 
+    def read_raw_window(self, window_ms=6000):
+        """
+        Accumulate all bytes received within a time window.
+
+        Used for JK BMS multi-unit capture: reads everything on the RS485
+        bus for ``window_ms`` milliseconds so that all BMS units' broadcast
+        frames (and the Modbus request frames used to identify them) are
+        captured in a single response.
+
+        Args:
+            window_ms: Collection window in milliseconds.
+
+        Returns:
+            All bytes received (may contain multiple frames), or None if
+            nothing was received during the window.
+        """
+        deadline = time.ticks_add(time.ticks_ms(), window_ms)
+        buf = b""
+
+        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            available = self.uart.any()
+            if available:
+                chunk = self.uart.read(available)
+                if chunk:
+                    buf += chunk
+            else:
+                time.sleep_ms(10)
+
+        if buf:
+            print("[Serial] read_raw_window: {} bytes in {}ms".format(len(buf), window_ms))
+        return buf if buf else None
+
     def write(self, data_str, line_ending=None):
         """
         Send command string to device.

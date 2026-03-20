@@ -312,32 +312,48 @@ class SerialBridge:
 
     def _handle_command_passive(self):
         """
-        Read a binary broadcast frame from the serial port (passive RS485 mode).
+        Read broadcast frame(s) from the serial port (passive RS485 mode).
 
-        Used for JK BMS in master/broadcast mode (DIP switches 0000) where the
-        BMS emits ``55 AA EB 90`` status frames automatically every ~5 s on the
-        RS485 bus.  The ESP32 never transmits — it simply waits for the next
-        complete frame and returns the raw bytes to System B.
+        Used for JK BMS in broadcast mode where each BMS unit emits
+        ``55 AA EB 90`` status frames automatically on the RS485 bus.
+
+        Two modes controlled by ``collect_window_ms`` in config:
+        - 0  (default): single-frame mode — wait for one complete frame and
+          return it.  Used for single-BMS setups.
+        - >0: window mode — collect ALL raw bytes for ``collect_window_ms``
+          milliseconds and return them concatenated.  Used for multi-BMS
+          stacks where Modbus request frames (``xx 10 16 ...``) interleave
+          with data frames; System B parses the whole bus dump.
 
         Returns:
-            Raw frame bytes (from header onwards) or None on timeout.
+            Raw bytes or None on timeout.
         """
         try:
             cfg = self.config.get("serial", {})
-            frame_header = cfg.get("frame_header", [0x55, 0xAA, 0xEB, 0x90])
-            if isinstance(frame_header, list):
-                frame_header = bytes(frame_header)
-            max_len = cfg.get("max_frame_len", 512)
-            timeout_ms = cfg.get("response_timeout_ms", 5000)
+            collect_window_ms = cfg.get("collect_window_ms", 0)
 
-            raw = self.serial.read_frame(
-                header=frame_header,
-                max_len=max_len,
-                timeout_ms=timeout_ms,
-            )
-            if raw is not None:
-                print("[SerialBridge] Passive: frame received, {} bytes".format(len(raw)))
-            return raw
+            if collect_window_ms > 0:
+                # Multi-unit mode: collect full RS485 bus window
+                raw = self.serial.read_raw_window(window_ms=collect_window_ms)
+                if raw is not None:
+                    print("[SerialBridge] Passive window: {} bytes collected".format(len(raw)))
+                return raw
+            else:
+                # Single-unit mode: wait for one complete framed response
+                frame_header = cfg.get("frame_header", [0x55, 0xAA, 0xEB, 0x90])
+                if isinstance(frame_header, list):
+                    frame_header = bytes(frame_header)
+                max_len = cfg.get("max_frame_len", 512)
+                timeout_ms = cfg.get("response_timeout_ms", 5000)
+
+                raw = self.serial.read_frame(
+                    header=frame_header,
+                    max_len=max_len,
+                    timeout_ms=timeout_ms,
+                )
+                if raw is not None:
+                    print("[SerialBridge] Passive: frame received, {} bytes".format(len(raw)))
+                return raw
         except Exception as e:
             print("[SerialBridge] Passive exception:", e)
             return None
