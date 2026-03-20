@@ -21,7 +21,7 @@ except ImportError:
     asyncpg = None
 
 from ..config import DeviceServerSettings, get_device_server_settings
-from ..telemetry import DeyeHybridParser, JKBMSModbusParser, PowdriveParser, PylontechParser, TelemetryMetric, TelemetryParser
+from ..telemetry import DeyeHybridParser, JKBMSModbusParser, JKBMSParser, PowdriveParser, PylontechParser, TelemetryMetric, TelemetryParser
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,7 @@ class TimescaleWriter:
             'powdrive': PowdriveParser(),
             'pylontech': PylontechParser(),
             'pytes': PylontechParser(),
+            'jkbms': JKBMSParser(),
             'jkbms_modbus': JKBMSModbusParser(),
         }
         # Default parser for backwards compatibility
@@ -250,6 +251,8 @@ class TimescaleWriter:
             return self.parsers['deye_hybrid']
         elif "pylontech" in protocol_id or "pytes" in protocol_id:
             return self.parsers['pylontech']
+        elif "jkbms_serial" in protocol_id:
+            return self.parsers['jkbms']
         elif "jkbms_modbus" in protocol_id:
             return self.parsers['jkbms_modbus']
         elif "powdrive" in protocol_id:
