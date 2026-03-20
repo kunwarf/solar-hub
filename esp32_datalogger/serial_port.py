@@ -71,7 +71,7 @@ class SerialPort:
             stop=cfg.get("stop_bits", 1),
             tx=cfg["tx_pin"],
             rx=cfg["rx_pin"],
-            rxbuf=8192,
+            rxbuf=4096,
         )
         self.uart.init(timeout=0)
 

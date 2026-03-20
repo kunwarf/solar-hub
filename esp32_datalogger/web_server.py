@@ -14,17 +14,6 @@ from config import (
 )
 from file_manager import FileManager
 
-# Optional log buffer for web interface logging
-try:
-    from log_buffer import get_log_buffer
-    _LOG_BUFFER_AVAILABLE = True
-except ImportError:
-    _LOG_BUFFER_AVAILABLE = False
-    def get_log_buffer():
-        """Dummy function when log_buffer not available."""
-        return None
-
-
 # HTML Templates
 HTML_HEADER = """<!DOCTYPE html>
 <html>
@@ -56,11 +45,9 @@ td:first-child{font-weight:bold;width:40%}
 <h1>Solar Logger</h1>
 <div class="nav">
 <a href="/">Status</a>
-<a href="/logs">Logs</a>
 <a href="/files">Files</a>
 <a href="/wifi">WiFi</a>
 <a href="/device">Device</a>
-<a href="/modbus">Modbus</a>
 <a href="/serial">Serial</a>
 <a href="/server">Server</a>
 </div>
@@ -251,18 +238,6 @@ class WebServer:
             # Route request
             if path == "/" or path == "/status":
                 content = self._page_status()
-            elif path == "/logs":
-                content = self._page_logs()
-            elif path == "/api/logs":
-                # API endpoint for fetching logs
-                since_id = query.get("since_id")
-                since_id = int(since_id) if since_id else None
-                return self._json_response(self._get_logs_json(since_id))
-            elif path == "/api/logs/clear":
-                log_buffer = get_log_buffer()
-                if log_buffer:
-                    log_buffer.clear()
-                return self._json_response({"success": True})
             elif path == "/files":
                 content = self._page_files()
             elif path == "/api/files/list":
@@ -288,11 +263,6 @@ class WebServer:
                     content = self._handle_wifi_save(body)
                 else:
                     content = self._page_wifi()
-            elif path == "/modbus":
-                if method == "POST":
-                    content = self._handle_modbus_save(body)
-                else:
-                    content = self._page_modbus()
             elif path == "/serial":
                 if method == "POST":
                     content = self._handle_serial_save(body)
@@ -420,25 +390,6 @@ class WebServer:
             html += "<tr><td>Errors</td><td>{}</td></tr>".format(bridge_stats.get("errors", 0))
             html += "</table></div>"
 
-        # Recent Logs
-        log_buffer = get_log_buffer()
-        recent_logs = log_buffer.get_recent(count=10) if log_buffer else []
-
-        html += '<div class="card"><h2>Recent Logs</h2>'
-        if recent_logs:
-            html += '<div style="background:#1e1e1e;color:#d4d4d4;padding:10px;border-radius:4px;font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;">'
-            for log in recent_logs:
-                html += '<div style="margin-bottom:3px;">'
-                html += '<span style="color:#858585;">[{}]</span> {}'.format(log["time"], log["msg"])
-                html += '</div>'
-            html += '</div>'
-            html += '<div style="margin-top:10px;">'
-            html += '<button onclick="location.href=\'/logs\'">View All Logs</button>'
-            html += '</div>'
-        else:
-            html += '<p style="color:#888;">No logs available</p>'
-        html += '</div>'
-
         # Actions
         html += '<div class="card">'
         html += '<button onclick="location.reload()">Refresh</button>'
@@ -477,82 +428,6 @@ class WebServer:
                 return '<div class="status status-err">Failed to connect to ' + ssid + '</div>' + self._page_wifi()
         else:
             return '<div class="status status-err">SSID required</div>' + self._page_wifi()
-
-    def _page_modbus(self):
-        """Modbus RTU configuration page."""
-        config = get_config()
-        rtu = config.get("rtu", {})
-
-        html = '<div class="card"><h2>Modbus RTU Configuration</h2>'
-        html += '<form method="POST" action="/modbus">'
-
-        html += '<label>UART ID</label>'
-        html += '<select name="uart_id">'
-        for i in [1, 2]:
-            sel = "selected" if rtu.get("uart_id") == i else ""
-            html += '<option value="{}" {}>{}</option>'.format(i, sel, i)
-        html += '</select>'
-
-        html += '<label>TX Pin</label>'
-        html += '<input type="number" name="tx_pin" value="{}">'.format(rtu.get("tx_pin", 17))
-
-        html += '<label>RX Pin</label>'
-        html += '<input type="number" name="rx_pin" value="{}">'.format(rtu.get("rx_pin", 16))
-
-        html += '<label>DE Pin (Driver Enable, active-HIGH; 0=disabled)</label>'
-        html += '<input type="number" name="de_pin" value="{}">'.format(rtu.get("de_pin", 4))
-
-        html += '<label>RE Pin (Receiver Enable, active-LOW; 0=disabled)</label>'
-        html += '<input type="number" name="re_pin" value="{}">'.format(rtu.get("re_pin", 5))
-
-        html += '<label>Unit ID</label>'
-        html += '<input type="number" name="unit_id" value="{}">'.format(rtu.get("unit_id", 1))
-
-        html += '<label>Baud Rate</label>'
-        html += '<select name="baudrate">'
-        for baud in [9600, 19200, 38400, 57600, 115200]:
-            sel = "selected" if rtu.get("baudrate") == baud else ""
-            html += '<option value="{}" {}>{}</option>'.format(baud, sel, baud)
-        html += '</select>'
-
-        html += '<label>Parity</label>'
-        html += '<select name="parity">'
-        for p, name in [("N", "None"), ("E", "Even"), ("O", "Odd")]:
-            sel = "selected" if rtu.get("parity") == p else ""
-            html += '<option value="{}" {}>{}</option>'.format(p, sel, name)
-        html += '</select>'
-
-        html += '<label>Stop Bits</label>'
-        html += '<select name="stop_bits">'
-        for s in [1, 2]:
-            sel = "selected" if rtu.get("stop_bits") == s else ""
-            html += '<option value="{}" {}>{}</option>'.format(s, sel, s)
-        html += '</select>'
-
-        html += '<button type="submit">Save</button>'
-        html += '</form></div>'
-
-        return html
-
-    def _handle_modbus_save(self, body):
-        """Handle Modbus save."""
-        config = load_config()
-        if "rtu" not in config:
-            config["rtu"] = {}
-
-        config["rtu"]["uart_id"] = int(body.get("uart_id", 1))
-        config["rtu"]["tx_pin"] = int(body.get("tx_pin", 17))
-        config["rtu"]["rx_pin"] = int(body.get("rx_pin", 16))
-        config["rtu"]["de_pin"] = int(body.get("de_pin", 4))
-        config["rtu"]["re_pin"] = int(body.get("re_pin", 5))
-        config["rtu"]["unit_id"] = int(body.get("unit_id", 1))
-        config["rtu"]["baudrate"] = int(body.get("baudrate", 9600))
-        config["rtu"]["parity"] = body.get("parity", "N")
-        config["rtu"]["stop_bits"] = int(body.get("stop_bits", 1))
-
-        save_config(config)
-
-        return '<div class="status status-ok">Modbus settings saved. Reboot to apply.</div>' + self._page_modbus()
 
     def _page_server(self):
         """Server configuration page."""
@@ -872,193 +747,6 @@ class WebServer:
         _thread.start_new_thread(reboot_later, ())
 
         return html
-
-    def _page_logs(self):
-        """Console logs page with real-time updates."""
-        # Check if log buffer is available
-        if not _LOG_BUFFER_AVAILABLE:
-            return '''
-<div class="card">
-    <h2>Console Logs</h2>
-    <div class="status status-err">
-        Log buffer not available. Please upload <code>log_buffer.py</code> to enable web logging.
-    </div>
-    <p>The log buffer module is required for viewing logs through the web interface.</p>
-</div>
-'''
-
-        html = '''
-<div class="card">
-    <h2>Console Logs</h2>
-    <div style="margin-bottom: 15px;">
-        <button id="startBtn" onclick="startLogs()">▶ Start Live Logs</button>
-        <button id="stopBtn" onclick="stopLogs()" disabled>⏸ Stop</button>
-        <button onclick="clearLogs()">🗑 Clear</button>
-        <button onclick="refreshLogs()">🔄 Refresh</button>
-        <span id="status" style="margin-left: 15px; color: #888;"></span>
-    </div>
-    <div id="logContainer" style="
-        background: #1e1e1e;
-        color: #d4d4d4;
-        padding: 15px;
-        border-radius: 4px;
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        height: 500px;
-        overflow-y: auto;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-    ">
-        Loading logs...
-    </div>
-</div>
-
-<script>
-let isStreaming = false;
-let streamInterval = null;
-let lastLogId = 0;
-let autoScroll = true;
-
-function startLogs() {
-    isStreaming = true;
-    document.getElementById('startBtn').disabled = true;
-    document.getElementById('stopBtn').disabled = false;
-    document.getElementById('status').textContent = '🟢 Live';
-    document.getElementById('status').style.color = '#4CAF50';
-
-    // Initial load
-    refreshLogs();
-
-    // Poll every 1 second
-    streamInterval = setInterval(fetchNewLogs, 1000);
-}
-
-function stopLogs() {
-    isStreaming = false;
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
-    document.getElementById('status').textContent = '⏸ Paused';
-    document.getElementById('status').style.color = '#888';
-
-    if (streamInterval) {
-        clearInterval(streamInterval);
-        streamInterval = null;
-    }
-}
-
-function refreshLogs() {
-    fetch('/api/logs?count=50')
-        .then(r => r.json())
-        .then(data => {
-            displayLogs(data.logs, true);
-            lastLogId = data.last_id;
-        })
-        .catch(err => {
-            document.getElementById('logContainer').textContent = 'Error loading logs: ' + err;
-        });
-}
-
-function fetchNewLogs() {
-    if (!isStreaming) return;
-
-    fetch('/api/logs?since_id=' + lastLogId)
-        .then(r => r.json())
-        .then(data => {
-            if (data.logs.length > 0) {
-                displayLogs(data.logs, false);
-                lastLogId = data.last_id;
-            }
-        })
-        .catch(err => console.error('Failed to fetch logs:', err));
-}
-
-function displayLogs(logs, clearFirst) {
-    const container = document.getElementById('logContainer');
-
-    if (clearFirst) {
-        container.innerHTML = '';
-    }
-
-    logs.forEach(log => {
-        const line = document.createElement('div');
-        line.style.marginBottom = '2px';
-
-        // Format: [TIME] MESSAGE
-        const timeSpan = document.createElement('span');
-        timeSpan.style.color = '#858585';
-        timeSpan.textContent = '[' + log.time + '] ';
-
-        const msgSpan = document.createElement('span');
-        msgSpan.textContent = log.msg;
-
-        // Color code based on message content
-        if (log.msg.includes('ERROR') || log.msg.includes('Error') || log.msg.includes('error')) {
-            msgSpan.style.color = '#f48771';
-        } else if (log.msg.includes('WARNING') || log.msg.includes('Warning') || log.msg.includes('Failed')) {
-            msgSpan.style.color = '#dcdcaa';
-        } else if (log.msg.includes('SUCCESS') || log.msg.includes('Connected') || log.msg.includes('successful')) {
-            msgSpan.style.color = '#4ec9b0';
-        } else if (log.msg.includes('[RTU]')) {
-            msgSpan.style.color = '#ce9178';
-        } else if (log.msg.includes('[Bridge]')) {
-            msgSpan.style.color = '#9cdcfe';
-        } else if (log.msg.includes('[WiFi]')) {
-            msgSpan.style.color = '#c586c0';
-        } else if (log.msg.includes('[Web]')) {
-            msgSpan.style.color = '#b5cea8';
-        }
-
-        line.appendChild(timeSpan);
-        line.appendChild(msgSpan);
-        container.appendChild(line);
-    });
-
-    // Auto-scroll to bottom if enabled
-    if (autoScroll) {
-        container.scrollTop = container.scrollHeight;
-    }
-}
-
-function clearLogs() {
-    if (confirm('Clear all logs?')) {
-        fetch('/api/logs/clear')
-            .then(() => {
-                document.getElementById('logContainer').innerHTML = '<span style="color: #888;">Logs cleared</span>';
-                lastLogId = 0;
-            })
-            .catch(err => alert('Failed to clear logs'));
-    }
-}
-
-// Detect manual scroll to disable auto-scroll
-document.getElementById('logContainer').addEventListener('scroll', function() {
-    const el = this;
-    autoScroll = (el.scrollHeight - el.scrollTop - el.clientHeight) < 50;
-});
-
-// Initial load
-refreshLogs();
-</script>
-'''
-        return html
-
-    def _get_logs_json(self, since_id=None):
-        """Get logs as JSON."""
-        log_buffer = get_log_buffer()
-
-        if not log_buffer:
-            return {"logs": [], "count": 0, "last_id": 0}
-
-        if since_id is not None:
-            logs = log_buffer.get_recent(count=100, since_id=since_id)
-        else:
-            logs = log_buffer.get_recent(count=50)
-
-        return {
-            "logs": logs,
-            "count": len(logs),
-            "last_id": log_buffer.get_last_id()
-        }
 
     def _get_status_json(self):
         """Get status as JSON."""
