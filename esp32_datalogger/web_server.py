@@ -462,8 +462,11 @@ class WebServer:
         html += '<label>RX Pin</label>'
         html += '<input type="number" name="rx_pin" value="{}">'.format(rtu.get("rx_pin", 16))
 
-        html += '<label>DE Pin (0=disabled)</label>'
+        html += '<label>DE Pin (Driver Enable, active-HIGH; 0=disabled)</label>'
         html += '<input type="number" name="de_pin" value="{}">'.format(rtu.get("de_pin", 4))
+
+        html += '<label>RE Pin (Receiver Enable, active-LOW; 0=disabled)</label>'
+        html += '<input type="number" name="re_pin" value="{}">'.format(rtu.get("re_pin", 5))
 
         html += '<label>Unit ID</label>'
         html += '<input type="number" name="unit_id" value="{}">'.format(rtu.get("unit_id", 1))
@@ -504,6 +507,7 @@ class WebServer:
         config["rtu"]["tx_pin"] = int(body.get("tx_pin", 17))
         config["rtu"]["rx_pin"] = int(body.get("rx_pin", 16))
         config["rtu"]["de_pin"] = int(body.get("de_pin", 4))
+        config["rtu"]["re_pin"] = int(body.get("re_pin", 5))
         config["rtu"]["unit_id"] = int(body.get("unit_id", 1))
         config["rtu"]["baudrate"] = int(body.get("baudrate", 9600))
         config["rtu"]["parity"] = body.get("parity", "N")
@@ -679,9 +683,13 @@ class WebServer:
         html += '<input type="number" name="rx_pin" value="{}" min="0" max="48">'.format(
             serial_cfg.get("rx_pin", 16))
 
-        html += '<label>DE/RE Pin (RS485 direction, -1 = not used)</label>'
+        html += '<label>DE Pin (Driver Enable, active-HIGH; -1 = not used)</label>'
         html += '<input type="number" name="de_pin" value="{}" min="-1" max="48">'.format(
             serial_cfg.get("de_pin", -1))
+
+        html += '<label>RE Pin (Receiver Enable, active-LOW; -1 = not used)</label>'
+        html += '<input type="number" name="re_pin" value="{}" min="-1" max="48">'.format(
+            serial_cfg.get("re_pin", -1))
 
         html += '<label>Baud Rate</label>'
         html += '<select name="baudrate">'
@@ -790,6 +798,7 @@ class WebServer:
             config["serial"]["tx_pin"] = int(body.get("tx_pin", 17))
             config["serial"]["rx_pin"] = int(body.get("rx_pin", 16))
             config["serial"]["de_pin"] = int(body.get("de_pin", -1))
+            config["serial"]["re_pin"] = int(body.get("re_pin", -1))
             config["serial"]["baudrate"] = int(body.get("baudrate", 115200))
             config["serial"]["parity"] = body.get("parity", "N")
             config["serial"]["stop_bits"] = int(body.get("stop_bits", 1))

@@ -43,7 +43,8 @@ class SerialPort:
         """
         self.config = config
         self.uart = None
-        self._de_pin = None
+        self._de_pin = None  # RS485 DE pin (Driver Enable, active-HIGH)
+        self._re_pin = None  # RS485 RE pin (Receiver Enable, active-LOW)
         self._init_uart()
 
     def _init_uart(self):
@@ -69,17 +70,27 @@ class SerialPort:
         )
         self.uart.init(timeout=0)
 
-        # Optional DE/RE pin for RS485 (MAX485) direction control.
-        # When de_pin is set: assert high before TX, deassert after TX.
-        de_pin_num = cfg.get("de_pin")
+        # Optional DE/RE pins for RS485 (MAX485) direction control.
+        # DE (Driver Enable, active-HIGH): assert before TX, deassert after TX.
+        # RE (Receiver Enable, active-LOW): assert (LOW) for RX, deassert (HIGH) during TX.
+        de_pin_num = cfg.get("de_pin", -1)
+        re_pin_num = cfg.get("re_pin", -1)
         if de_pin_num is not None and de_pin_num >= 0:
             self._de_pin = machine.Pin(de_pin_num, machine.Pin.OUT)
-            self._de_pin.value(0)  # Start in receive mode
+            self._de_pin.value(0)  # Start in RX mode
+        if re_pin_num is not None and re_pin_num >= 0:
+            self._re_pin = machine.Pin(re_pin_num, machine.Pin.OUT)
+            self._re_pin.value(0)  # Start in RX mode (RE=LOW = receiver enabled)
 
+        rs485_info = ""
+        if de_pin_num >= 0 or re_pin_num >= 0:
+            rs485_info = " RS485-DE={} RE={}".format(
+                de_pin_num if de_pin_num >= 0 else "off",
+                re_pin_num if re_pin_num >= 0 else "off"
+            )
         print("[Serial] UART{} initialized: TX={}, RX={}, {}baud{}".format(
             cfg["uart_id"], cfg["tx_pin"], cfg["rx_pin"],
-            cfg.get("baudrate", 115200),
-            " RS485-DE={}".format(de_pin_num) if de_pin_num else ""
+            cfg.get("baudrate", 115200), rs485_info
         ))
 
     def write_bytes(self, data):
@@ -93,12 +104,17 @@ class SerialPort:
         """
         if self._de_pin:
             self._de_pin.value(1)  # Assert DE: enable transmit
+        if self._re_pin:
+            self._re_pin.value(1)  # Deassert RE: disable receiver during TX
         self.uart.write(data)
-        if self._de_pin:
+        if self._de_pin or self._re_pin:
             # Wait for TX FIFO to drain at current baudrate before releasing bus.
             # ~2 ms is sufficient for up to ~23 bytes at 115200 baud.
             time.sleep_ms(2)
-            self._de_pin.value(0)  # Deassert DE: enable receive
+        if self._de_pin:
+            self._de_pin.value(0)  # Deassert DE: disable transmit
+        if self._re_pin:
+            self._re_pin.value(0)  # Assert RE: enable receiver (RE active-LOW)
 
     def read_frame(self, header=None, max_len=512, timeout_ms=None):
         """

@@ -22,7 +22,8 @@ DEFAULT_CONFIG = {
         "uart_id": 1,
         "tx_pin": 17,
         "rx_pin": 18,
-        "de_pin": 4,        # RS485 direction pin (optional, 0 to disable)
+        "de_pin": 4,        # RS485 DE pin (Driver Enable, active-HIGH; 0 to disable)
+        "re_pin": 5,        # RS485 RE pin (Receiver Enable, active-LOW; 0 to disable)
         "unit_id": 1,
         "baudrate": 9600,
         "parity": "N",      # N/E/O
@@ -73,7 +74,8 @@ DEFAULT_CONFIG = {
         "uart_id": 1,
         "tx_pin": 17,
         "rx_pin": 16,
-        "de_pin": -1,           # RS485 DE/RE direction pin (-1 = not used)
+        "de_pin": -1,           # RS485 DE pin (Driver Enable, active-HIGH; -1 = not used)
+        "re_pin": -1,           # RS485 RE pin (Receiver Enable, active-LOW; -1 = not used)
         "baudrate": 115200,
         "parity": "N",          # N/E/O
         "stop_bits": 1,

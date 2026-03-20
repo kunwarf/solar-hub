@@ -50,7 +50,8 @@ class ModbusRTU:
         """
         self.config = config
         self.uart = None
-        self.de_pin = None  # RS485 direction control
+        self.de_pin = None  # RS485 DE pin (Driver Enable, active-HIGH)
+        self.re_pin = None  # RS485 RE pin (Receiver Enable, active-LOW)
 
         self._init_uart()
 
@@ -77,14 +78,24 @@ class ModbusRTU:
         )
         self.uart.init(timeout=0)
 
-        # Initialize RS485 direction pin if configured
-        if cfg.get("de_pin", 0) > 0:
-            self.de_pin = machine.Pin(cfg["de_pin"], machine.Pin.OUT)
-            self.de_pin.value(0)  # RX mode by default
+        # Initialize RS485 direction pins if configured.
+        # DE (Driver Enable, active-HIGH): GPIO4 by default.
+        # RE (Receiver Enable, active-LOW): GPIO5 by default.
+        # TX mode: DE=1, RE=1 (enable driver, disable receiver to avoid echo).
+        # RX mode: DE=0, RE=0 (disable driver, enable receiver).
+        de = cfg.get("de_pin", 0)
+        re = cfg.get("re_pin", 0)
+        if de > 0:
+            self.de_pin = machine.Pin(de, machine.Pin.OUT)
+            self.de_pin.value(0)  # Start in RX mode
+        if re > 0:
+            self.re_pin = machine.Pin(re, machine.Pin.OUT)
+            self.re_pin.value(0)  # Start in RX mode (RE=LOW = receiver enabled)
 
-        print("[RTU] UART{} initialized: TX={}, RX={}, {}baud {}{}{}".format(
+        print("[RTU] UART{} initialized: TX={}, RX={}, {}baud {}{}{} DE={} RE={}".format(
             cfg["uart_id"], cfg["tx_pin"], cfg["rx_pin"],
-            cfg["baudrate"], cfg["data_bits"], cfg["parity"], cfg["stop_bits"]
+            cfg["baudrate"], cfg["data_bits"], cfg["parity"], cfg["stop_bits"],
+            de if de > 0 else "off", re if re > 0 else "off"
         ))
 
     def _flush_rx(self):
@@ -149,9 +160,11 @@ class ModbusRTU:
         if not quiet:
             print("[RTU] TX {} bytes: {}".format(len(frame), hex_str(frame)))
 
-        # Set RS485 to TX mode
+        # Set RS485 to TX mode: DE=1 (enable driver), RE=1 (disable receiver)
         if self.de_pin:
             self.de_pin.value(1)
+        if self.re_pin:
+            self.re_pin.value(1)
 
         # Send frame
         self.uart.write(frame)
@@ -160,9 +173,11 @@ class ModbusRTU:
         tx_time_ms = (len(frame) * 11 * 1000) // self.config["baudrate"] + 5
         time.sleep_ms(tx_time_ms)
 
-        # Set RS485 to RX mode
+        # Set RS485 to RX mode: DE=0 (disable driver), RE=0 (enable receiver)
         if self.de_pin:
             self.de_pin.value(0)
+        if self.re_pin:
+            self.re_pin.value(0)
 
         # Receive response
         timeout_ms = self.config["timeout_ms"]
