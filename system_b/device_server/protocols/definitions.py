@@ -119,12 +119,19 @@ class TelemetryConfig:
     Telemetry interpretation configuration.
 
     Handles manufacturer-specific interpretation of telemetry values,
-    particularly for battery power sign conventions.
+    particularly for battery power and current sign conventions.
     """
     # Battery power sign convention
     # - "negative_charging": negative power = charging (e.g., Powdrive, Deye)
     # - "positive_charging": positive power = charging (e.g., Senergy, SMA)
     battery_power_sign_convention: str = "positive_charging"
+
+    # Battery current sign convention for the Modbus current register
+    # - "positive_charging": positive current = charging (standard electrical: current INTO battery)
+    # - "negative_charging": negative current = charging (conventional: current OUT of battery)
+    #   Senergy uses this convention — positive current = discharging (conventional current
+    #   flows out of the + terminal during discharge).
+    battery_current_sign_convention: str = "positive_charging"
 
     # U32 register word order for 32-bit values spanning two 16-bit Modbus registers
     # - "little_endian": lower register address holds the LOW word (e.g., Powdrive/Deye —
@@ -143,6 +150,20 @@ class TelemetryConfig:
             True if battery power values should be inverted.
         """
         return self.battery_power_sign_convention == "negative_charging"
+
+    def battery_current_charging(self, current: float) -> bool:
+        """
+        Determine charging state from a signed current value.
+
+        Args:
+            current: Raw battery current from Modbus register.
+
+        Returns:
+            True if the battery is charging.
+        """
+        if self.battery_current_sign_convention == "negative_charging":
+            return current < 0
+        return current > 0
 
 
 @dataclass

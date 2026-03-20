@@ -270,5 +270,8 @@ class ProtocolLoader:
             battery_power_sign_convention=data.get(
                 "battery_power_sign_convention", "positive_charging"
             ),
+            battery_current_sign_convention=data.get(
+                "battery_current_sign_convention", "positive_charging"
+            ),
             u32_word_order=data.get("u32_word_order", "big_endian"),
         )

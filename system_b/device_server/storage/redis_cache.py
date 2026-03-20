@@ -235,6 +235,20 @@ class TelemetryCacheWriter:
             if pv1 or pv2:
                 power_data["pv_total_w"] = pv1 + pv2
 
+        # Add EPS / Smart Load port power to total load when present.
+        # Senergy (and similar hybrid inverters) has a secondary "Smart Load" output
+        # (EPS port, addr 4947 / phase_r_watt_of_eps) that is separate from the main
+        # load output. If loads are connected to the Smart Load port the main
+        # load_power_w register reads near zero and the actual consumption only appears
+        # in the EPS register. We sum both to get the true total load.
+        eps_w = telemetry.get("phase_r_watt_of_eps") or telemetry.get("smart_load_power_w")
+        if eps_w and "load_w" in power_data:
+            power_data["load_w"] = (power_data["load_w"] or 0) + eps_w
+            power_data["smart_load_w"] = eps_w  # keep separately for visibility
+        elif eps_w:
+            power_data["load_w"] = eps_w
+            power_data["smart_load_w"] = eps_w
+
         if power_data:
             cache_data["power"] = power_data
 
@@ -254,14 +268,28 @@ class TelemetryCacheWriter:
                     battery_data[target_key] = telemetry[src]
                     break
         # Determine if charging — prefer signed current (reliable direction indicator)
-        # over battery power which may be U32 (unsigned) on some inverters (e.g. Senergy)
+        # over battery power which may be U32 (unsigned) on some inverters (e.g. Senergy).
+        #
+        # Sign conventions differ by protocol:
+        #   positive_charging (default): positive current = charging (current INTO battery)
+        #   negative_charging (Senergy):  negative current = charging (conventional current
+        #       flows OUT of battery during discharge → positive when discharging)
+        protocol_id = (telemetry.get("_protocol_id") or "").lower()
+        negative_current_charging = "senergy" in protocol_id
+
+        def _current_charging(current: float) -> bool:
+            return current < 0 if negative_current_charging else current > 0
+
         if "battery_current_a" in telemetry:
-            battery_data["charging"] = telemetry["battery_current_a"] > 0
+            battery_data["charging"] = _current_charging(telemetry["battery_current_a"])
         elif "battery_current" in telemetry:
-            battery_data["charging"] = telemetry["battery_current"] > 0
+            battery_data["charging"] = _current_charging(telemetry["battery_current"])
         elif "current" in telemetry:
+            # JK BMS: negative current = discharging, positive = charging
             battery_data["charging"] = telemetry["current"] > 0
-        elif "battery_power_w" in telemetry:
+        elif "battery_power_w" in telemetry and not negative_current_charging:
+            # Only use unsigned power as a fallback when we know the protocol
+            # does NOT use unsigned U32 for battery_power_w (e.g. Powdrive uses S16)
             battery_data["charging"] = telemetry["battery_power_w"] > 0
         elif "battery_power" in telemetry:
             battery_data["charging"] = telemetry["battery_power"] > 0

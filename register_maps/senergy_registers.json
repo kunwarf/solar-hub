@@ -562,21 +562,34 @@
     "addr": 4945,
     "type": "S32",
     "rw": "RO",
-    "kind": "input",
+    "kind": "holding",
     "size": 2,
     "unit": "A",
     "scale": 0.01
   },
   {
     "id": "phase_r_watt_of_eps",
-    "name": "Phase R watt of EPS",
+    "name": "Phase R watt of EPS (Smart Load port)",
     "addr": 4947,
     "type": "S32",
     "rw": "RO",
-    "kind": "input",
+    "kind": "holding",
     "size": 2,
     "unit": "W",
-    "scale": 0.1
+    "scale": 0.1,
+    "comment": "EPS / Smart Load port power — must be added to load_power_w for total load"
+  },
+  {
+    "id": "smart_load_power_w",
+    "name": "Smart Load Power (EPS port alias)",
+    "addr": 4947,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1,
+    "comment": "Alias for phase_r_watt_of_eps — used by Redis cache to add to total load"
   },
   {
     "id": "daily_energy_to_eps",
