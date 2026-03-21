@@ -101,6 +101,10 @@ def parse_jkbms_status_frame(frame: bytes, cells_per_bms: int = 16) -> Optional[
     result["mos_temp"]           = _read_int_le(frame, 144, 2, signed=True, scale=10.0)
     result["power"]              = _read_int_le(frame, 154, 4, signed=False, scale=1000.0)
     result["current"]            = _read_int_le(frame, 158, 4, signed=True,  scale=1000.0)
+    # JK BMS power register is an unsigned magnitude; apply current sign for direction.
+    # Negative current = discharging → power must also be negative (positive=charging convention).
+    if result["power"] is not None and result["current"] is not None and result["current"] < 0:
+        result["power"] = -result["power"]
     result["temp1"]              = _read_int_le(frame, 162, 2, signed=True, scale=10.0)
     result["temp2"]              = _read_int_le(frame, 164, 2, signed=True, scale=10.0)
     result["temp3"]              = _read_int_le(frame, 254, 2, signed=True, scale=10.0)

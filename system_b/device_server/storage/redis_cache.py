@@ -209,6 +209,9 @@ class TelemetryCacheWriter:
         cache_data = {
             "serial_number": serial_number,
             "timestamp": timestamp,
+            # Expose device_type so System A can separate inverter vs battery readings
+            # without needing to consult the device registry on every power-flow request.
+            "device_type": (telemetry.get("_device_type") or "").lower(),
         }
 
         # Extract power metrics

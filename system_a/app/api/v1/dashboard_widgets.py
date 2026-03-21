@@ -621,7 +621,6 @@ async def get_power_flow(
     total_pv = 0.0
     total_grid = 0.0
     total_load = 0.0
-    total_battery = 0.0
     total_soc = 0.0
     soc_count = 0
     devices_online = 0
@@ -630,6 +629,16 @@ async def get_power_flow(
     latest_timestamp = None
     any_stale = True
     devices_data = []
+
+    # Separate battery_w by device type to avoid double-counting.
+    # Inverter devices measure the total power on their DC bus — the same
+    # physical power that the individual battery devices (JK BMS, Pylontech)
+    # each measure independently.  Summing both gives ~2× the true value.
+    # Strategy: prefer battery/BMS device measurements; fall back to inverter
+    # only when no dedicated battery device has reported power.
+    battery_device_battery_w = 0.0   # from battery/BMS type devices
+    inverter_device_battery_w = 0.0  # from inverter type devices
+    has_battery_device_power = False  # at least one battery device with non-zero battery_w
 
     for serial in site_info.device_serials:
         telemetry = telemetry_batch.get(serial)
@@ -651,6 +660,7 @@ async def get_power_flow(
             power = telemetry.get("power", {})
             battery = telemetry.get("battery", {})
             status_info = telemetry.get("status", {})
+            device_type = (telemetry.get("device_type") or "").lower()
 
             pv_w = power.get("pv_total_w", 0)
             grid_w = power.get("grid_w", 0)
@@ -662,7 +672,15 @@ async def get_power_flow(
             total_pv += pv_w
             total_grid += grid_w
             total_load += load_w
-            total_battery += battery_w
+
+            # Bucket battery_w by device type — aggregated after the loop
+            if "inverter" in device_type or "meter" in device_type:
+                inverter_device_battery_w += battery_w
+            else:
+                # battery, bms, or unknown — treat as direct battery measurement
+                battery_device_battery_w += battery_w
+                if battery_w != 0:
+                    has_battery_device_power = True
 
             if soc > 0:
                 total_soc += soc
@@ -694,6 +712,15 @@ async def get_power_flow(
             )
 
         devices_data.append(device_data)
+
+    # Use battery device measurements when available (direct, no double-counting).
+    # Fall back to inverter measurement only when no dedicated battery device reported.
+    total_battery = battery_device_battery_w if has_battery_device_power else inverter_device_battery_w
+    logger.info(
+        f"[power-flow] battery_w: battery_devices={battery_device_battery_w:.0f}W "
+        f"inverter_devices={inverter_device_battery_w:.0f}W "
+        f"has_battery_device_power={has_battery_device_power} → total={total_battery:.0f}W"
+    )
 
     avg_soc = total_soc / soc_count if soc_count > 0 else 0
 
