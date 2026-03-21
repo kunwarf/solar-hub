@@ -182,7 +182,7 @@ class ModbusRTU:
         # Receive response
         timeout_ms = self.config["timeout_ms"]
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
-        response = b""
+        response = bytearray()
 
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
             try:
@@ -193,7 +193,7 @@ class ModbusRTU:
             if available:
                 chunk = self.uart.read(available)
                 if chunk:
-                    response += chunk
+                    response.extend(chunk)
 
                     # Check if we have complete response
                     expected_len = self._expected_response_len(response[:3])
@@ -350,7 +350,7 @@ class ModbusRTU:
         count = len(values)
         byte_count = count * 2
 
-        pdu = bytes([
+        pdu = bytearray([
             0x10,
             (address >> 8) & 0xFF,
             address & 0xFF,
@@ -361,7 +361,8 @@ class ModbusRTU:
 
         for value in values:
             v = int(value) & 0xFFFF
-            pdu += bytes([(v >> 8) & 0xFF, v & 0xFF])
+            pdu.append((v >> 8) & 0xFF)
+            pdu.append(v & 0xFF)
 
         response = self.transceive(pdu, unit_id, quiet)
 

@@ -10,112 +10,10 @@ On startup, the device self-registers with System B using its serial number.
 import socket
 import struct
 import time
-import json
 
 from config import get_config
 from log_buffer import log_print as print
-
-
-def http_post_json(url, data, timeout=10):
-    """
-    Simple HTTP POST with JSON body (MicroPython compatible).
-
-    Args:
-        url: Full URL (e.g., http://host:port/path)
-        data: Dict to send as JSON body
-        timeout: Request timeout in seconds
-
-    Returns:
-        Tuple of (status_code, response_dict or None)
-    """
-    try:
-        # Parse URL
-        if url.startswith("http://"):
-            url = url[7:]
-        elif url.startswith("https://"):
-            raise ValueError("HTTPS not supported in simple client")
-
-        # Split host:port and path
-        if "/" in url:
-            host_port, path = url.split("/", 1)
-            path = "/" + path
-        else:
-            host_port = url
-            path = "/"
-
-        if ":" in host_port:
-            host, port = host_port.split(":")
-            port = int(port)
-        else:
-            host = host_port
-            port = 80
-
-        # Create JSON body
-        body = json.dumps(data)
-
-        # Build HTTP request
-        request = (
-            "POST {} HTTP/1.1\r\n"
-            "Host: {}:{}\r\n"
-            "Content-Type: application/json\r\n"
-            "Content-Length: {}\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "{}"
-        ).format(path, host, port, len(body), body)
-
-        # Connect and send
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        sock.connect((host, port))
-        sock.sendall(request.encode())
-
-        # Receive response
-        response = b""
-        while True:
-            try:
-                chunk = sock.recv(1024)
-                if not chunk:
-                    break
-                response += chunk
-            except:
-                break
-
-        sock.close()
-
-        # Parse response (MicroPython doesn't support errors parameter)
-        try:
-            response = response.decode("utf-8")
-        except:
-            # If decode fails, try latin-1 which accepts all byte values
-            response = response.decode("latin-1")
-
-        # Split headers and body
-        if "\r\n\r\n" in response:
-            headers, body = response.split("\r\n\r\n", 1)
-        else:
-            headers = response
-            body = ""
-
-        # Get status code
-        first_line = headers.split("\r\n")[0]
-        parts = first_line.split(" ")
-        if len(parts) >= 2:
-            status_code = int(parts[1])
-        else:
-            status_code = 0
-
-        # Parse JSON body
-        try:
-            result = json.loads(body)
-        except:
-            result = None
-
-        return status_code, result
-
-    except Exception as e:
-        print("[HTTP] Error:", e)
-        return 0, None
+from http_utils import http_post_json
 
 
 class ModbusBridge:
@@ -396,16 +294,16 @@ class ModbusBridge:
         Returns:
             Bytes received or None on error.
         """
-        data = b""
+        data = bytearray()
         while len(data) < length:
             try:
                 chunk = self.socket.recv(length - len(data))
                 if not chunk:
                     return None
-                data += chunk
+                data.extend(chunk)
             except:
                 return None
-        return data
+        return bytes(data)
 
     def get_stats(self):
         """Get bridge statistics."""
