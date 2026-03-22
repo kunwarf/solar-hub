@@ -467,6 +467,37 @@ class TelemetryCacheWriter:
                     bank_data[key.replace("battery_", "")] = telemetry[key]
             cache_data["battery_bank"] = bank_data
 
+        # Load breakdown — per-phase watts and currents for main load port + EPS port.
+        # Available on Senergy inverters; other protocols will simply have no matching fields.
+        load_bd: dict = {}
+        # Main load port phases (0x130A/130C/130E and 0x1326/1328/132A)
+        for phase, field in (("r", "phase_r_watt_of_load"), ("s", "phase_s_watt_of_load"), ("t", "phase_t_watt_of_load")):
+            v = telemetry.get(field)
+            if v is not None:
+                load_bd[f"load_{phase}_w"] = v
+        for phase, field in (("r", "phase_r_current_of_load"), ("s", "phase_s_current_of_load"), ("t", "phase_t_current_of_load")):
+            v = telemetry.get(field)
+            if v is not None:
+                load_bd[f"load_{phase}_a"] = v
+        # EPS / Smart Load port phases (0x1350-0x135E)
+        for phase, field in (("r", "phase_r_watt_of_eps"), ("s", "phase_s_watt_of_eps"), ("t", "phase_t_watt_of_eps")):
+            v = telemetry.get(field)
+            if v is not None:
+                load_bd[f"eps_{phase}_w"] = v
+        for phase, field in (("r", "phase_r_current_of_eps"), ("s", "phase_s_current_of_eps"), ("t", "phase_t_current_of_eps")):
+            v = telemetry.get(field)
+            if v is not None:
+                load_bd[f"eps_{phase}_a"] = v
+        for phase, field in (("r", "phase_r_voltage_of_eps"), ("s", "phase_s_voltage_of_eps"), ("t", "phase_t_voltage_of_eps")):
+            v = telemetry.get(field)
+            if v is not None:
+                load_bd[f"eps_{phase}_v"] = v
+        freq_eps = telemetry.get("frequency_of_eps")
+        if freq_eps is not None:
+            load_bd["eps_frequency_hz"] = freq_eps
+        if load_bd:
+            cache_data["load_breakdown"] = load_bd
+
         # Also include raw telemetry values for flexibility
         # (System A can use either structured or raw data)
         cache_data["raw"] = {

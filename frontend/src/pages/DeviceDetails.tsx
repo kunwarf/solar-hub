@@ -495,6 +495,89 @@ export default function DeviceDetails() {
           </TabsContent>
 
           <TabsContent value="telemetry">
+            {/* Load Breakdown card — shown only when the device reports per-phase load data */}
+            {realtimeTelemetry?.telemetry?.load_breakdown && (
+              <Card className="mb-4">
+                <CardHeader>
+                  <CardTitle>Load Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const lb = realtimeTelemetry.telemetry.load_breakdown as Record<string, number>;
+                    const hasMain = ["r", "s", "t"].some(p => lb[`load_${p}_w`] !== undefined);
+                    const hasEps  = ["r", "s", "t"].some(p => lb[`eps_${p}_w`]  !== undefined);
+                    return (
+                      <div className="space-y-4">
+                        {hasMain && (
+                          <div>
+                            <p className="text-sm font-semibold text-muted-foreground mb-2">Main Load Port</p>
+                            <div className="grid grid-cols-3 gap-3">
+                              {["r", "s", "t"].map(phase => (
+                                (lb[`load_${phase}_w`] !== undefined || lb[`load_${phase}_a`] !== undefined) && (
+                                  <div key={phase} className="p-3 rounded-md border space-y-1">
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">Phase {phase.toUpperCase()}</p>
+                                    {lb[`load_${phase}_w`] !== undefined && (
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-muted-foreground">Power</span>
+                                        <span className="font-medium">{(lb[`load_${phase}_w`] / 1000).toFixed(2)} kW</span>
+                                      </div>
+                                    )}
+                                    {lb[`load_${phase}_a`] !== undefined && (
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-muted-foreground">Current</span>
+                                        <span className="font-medium">{lb[`load_${phase}_a`].toFixed(2)} A</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {hasEps && (
+                          <div>
+                            <p className="text-sm font-semibold text-muted-foreground mb-2">
+                              EPS / Smart Load Port
+                              {lb.eps_frequency_hz !== undefined && (
+                                <span className="ml-2 font-normal text-xs">({lb.eps_frequency_hz.toFixed(2)} Hz)</span>
+                              )}
+                            </p>
+                            <div className="grid grid-cols-3 gap-3">
+                              {["r", "s", "t"].map(phase => (
+                                (lb[`eps_${phase}_w`] !== undefined || lb[`eps_${phase}_a`] !== undefined || lb[`eps_${phase}_v`] !== undefined) && (
+                                  <div key={phase} className="p-3 rounded-md border space-y-1">
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">Phase {phase.toUpperCase()}</p>
+                                    {lb[`eps_${phase}_v`] !== undefined && (
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-muted-foreground">Voltage</span>
+                                        <span className="font-medium">{lb[`eps_${phase}_v`].toFixed(1)} V</span>
+                                      </div>
+                                    )}
+                                    {lb[`eps_${phase}_a`] !== undefined && (
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-muted-foreground">Current</span>
+                                        <span className="font-medium">{lb[`eps_${phase}_a`].toFixed(2)} A</span>
+                                      </div>
+                                    )}
+                                    {lb[`eps_${phase}_w`] !== undefined && (
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-muted-foreground">Power</span>
+                                        <span className="font-medium">{(lb[`eps_${phase}_w`] / 1000).toFixed(2)} kW</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Current Telemetry Readings</CardTitle>

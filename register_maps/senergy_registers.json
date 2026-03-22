@@ -32,7 +32,6 @@
     "size": 1,
     "comment": "Ex.: 1=1 MPPT"
   },
-
   {
     "id": "rated_power_w",
     "name": "Rated Power",
@@ -451,7 +450,6 @@
     "unit": "W",
     "scale": 0.1
   },
-
   {
     "id": "accumulated_energy_of_load",
     "name": "Accumulated energy of load",
@@ -487,7 +485,30 @@
     "scale": 0.01,
     "comment": "0x1326 — L1 load output port current"
   },
-
+  {
+    "id": "phase_s_current_of_load",
+    "name": "L2 current of load",
+    "addr": 4904,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "A",
+    "scale": 0.01,
+    "comment": "0x1328 — L2 load output port current"
+  },
+  {
+    "id": "phase_t_current_of_load",
+    "name": "L3 current of load",
+    "addr": 4906,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "A",
+    "scale": 0.01,
+    "comment": "0x132A — L3 load output port current"
+  },
   {
     "id": "grid_frequency_hz",
     "name": "Grid Frequency",
@@ -614,6 +635,90 @@
     "unit": "W",
     "scale": 0.1,
     "comment": "Alias for phase_r_watt_of_eps — used by Redis cache to add to total load"
+  },
+  {
+    "id": "frequency_of_eps",
+    "name": "Frequency of EPS",
+    "addr": 4949,
+    "type": "U16",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 1,
+    "unit": "Hz",
+    "scale": 0.01,
+    "comment": "0x1355 — EPS port output frequency"
+  },
+  {
+    "id": "phase_s_voltage_of_eps",
+    "name": "Phase S voltage of EPS",
+    "addr": 4950,
+    "type": "U16",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 1,
+    "unit": "V",
+    "scale": 0.1,
+    "comment": "0x1356 — EPS Phase S voltage"
+  },
+  {
+    "id": "phase_s_current_of_eps",
+    "name": "Phase S current of EPS",
+    "addr": 4951,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "A",
+    "scale": 0.01,
+    "comment": "0x1357 — EPS Phase S current"
+  },
+  {
+    "id": "phase_s_watt_of_eps",
+    "name": "Phase S watt of EPS",
+    "addr": 4953,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1,
+    "comment": "0x1359 — EPS Phase S power"
+  },
+  {
+    "id": "phase_t_voltage_of_eps",
+    "name": "Phase T voltage of EPS",
+    "addr": 4955,
+    "type": "U16",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 1,
+    "unit": "V",
+    "scale": 0.1,
+    "comment": "0x135B — EPS Phase T voltage"
+  },
+  {
+    "id": "phase_t_current_of_eps",
+    "name": "Phase T current of EPS",
+    "addr": 4956,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "A",
+    "scale": 0.01,
+    "comment": "0x135C — EPS Phase T current"
+  },
+  {
+    "id": "phase_t_watt_of_eps",
+    "name": "Phase T watt of EPS",
+    "addr": 4958,
+    "type": "S32",
+    "rw": "RO",
+    "kind": "holding",
+    "size": 2,
+    "unit": "W",
+    "scale": 0.1,
+    "comment": "0x135E — EPS Phase T power"
   },
   {
     "id": "daily_energy_to_eps",
@@ -1199,7 +1304,7 @@
     "step": 1,
     "suggested_display_precision": 0,
     "mode": "slider"
-  },  
+  },
   {
     "id": "battery_type_selection",
     "name": "Battery type selection",
