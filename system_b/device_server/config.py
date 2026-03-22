@@ -181,6 +181,13 @@ class DeviceServerSettings(BaseSettings):
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
 
+    # Multi-process pipeline (Phase 4)
+    # When True, the main process skips direct TimescaleDB writes and lets the
+    # StorageWorker (solarhub-storage-worker.service) handle them via the Redis Stream.
+    # Redis cache writes always remain in the main process as a safety net.
+    # Set STORAGE_WORKER_ENABLED=true in .env to activate after starting the service.
+    storage_worker_enabled: bool = Field(default=False, description="Enable StorageWorker cutover")
+
     # Paths
     config_dir: Path = Field(
         default=Path(__file__).parent.parent / "config",

@@ -131,10 +131,18 @@ class DeviceServer:
         await self.system_a_client.connect()
         await self.redis_cache.connect()
 
-        # Phase 2: Stream publisher — shares the redis_cache connection (no extra socket).
-        # Publishes raw telemetry as a dual-write after existing DB+Redis writes.
+        # Stream publisher — shares the redis_cache connection (no extra socket).
         self.stream_publisher = StreamPublisher(self.redis_cache._client)
-        logger.info("StreamPublisher initialized (telemetry:raw stream)")
+        if self.settings.storage_worker_enabled:
+            logger.info(
+                "[PIPELINE] StorageWorker mode ACTIVE — "
+                "TimescaleDB writes delegated to solarhub-storage-worker.service"
+            )
+        else:
+            logger.info(
+                "[PIPELINE] StorageWorker mode INACTIVE — "
+                "TimescaleDB writes handled locally (set STORAGE_WORKER_ENABLED=true to activate)"
+            )
 
         try:
             await self.device_registry_client.connect()
@@ -440,9 +448,16 @@ class DeviceServer:
                     f"using inverter device_id {device_id} for storage"
                 )
 
-        # Write to TimescaleDB for historical storage
-        if self.timescale_writer:
+        # Write to TimescaleDB for historical storage.
+        # When STORAGE_WORKER_ENABLED=true the StorageWorker process handles this
+        # via the Redis Stream — skip here to avoid double-writing to TimescaleDB.
+        if self.timescale_writer and not self.settings.storage_worker_enabled:
             await self.timescale_writer.write(storage_device_id, telemetry.copy())
+        elif self.settings.storage_worker_enabled:
+            logger.debug(
+                "[PIPELINE] TimescaleDB write skipped for %s — storage worker mode active",
+                cache_serial,
+            )
 
         # Write to Redis cache for real-time access by System A
         # Use data_logger_serial (the serial printed on the device that users see)
@@ -460,15 +475,21 @@ class DeviceServer:
         if self.redis_cache and cache_serial:
             await self.redis_cache.write_telemetry(cache_serial, telemetry.copy())
 
-        # Phase 2: Dual-write to Redis Stream for future StorageWorker consumption.
-        # Runs after existing storage — any failure here is logged and ignored.
+        # Publish to Redis Stream — StorageWorker consumes and writes TimescaleDB.
+        # Failure is caught inside publish() and logged; never raises.
         if self.stream_publisher and cache_serial and device_state:
-            await self.stream_publisher.publish(
+            msg_id = await self.stream_publisher.publish(
                 device_serial=cache_serial,
                 device_type=device_state.device_type or "",
                 raw_telemetry=telemetry,
                 inverter_serial=device_state.serial_number,
             )
+            if msg_id:
+                logger.debug(
+                    "[PIPELINE] Published to stream: device=%s msg_id=%s",
+                    cache_serial,
+                    msg_id,
+                )
 
     async def _on_poll_device_offline(
         self,
