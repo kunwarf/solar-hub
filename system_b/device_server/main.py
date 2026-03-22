@@ -31,6 +31,7 @@ from .storage.device_registry_client import DeviceRegistryClient
 from .storage.command_db_client import CommandDatabaseClient
 from .commands.command_executor import ModbusCommandExecutor
 from .workers.command_worker import CommandWorker
+from .messaging import StreamPublisher
 
 # Configure logging
 logging.basicConfig(
@@ -78,6 +79,7 @@ class DeviceServer:
         self.command_db_client: Optional[CommandDatabaseClient] = None
         self.command_executor: Optional[ModbusCommandExecutor] = None
         self.command_worker: Optional[CommandWorker] = None
+        self.stream_publisher: Optional[StreamPublisher] = None
 
         # State
         self._running = False
@@ -128,6 +130,12 @@ class DeviceServer:
         await self.timescale_writer.connect()
         await self.system_a_client.connect()
         await self.redis_cache.connect()
+
+        # Phase 2: Stream publisher — shares the redis_cache connection (no extra socket).
+        # Publishes raw telemetry as a dual-write after existing DB+Redis writes.
+        self.stream_publisher = StreamPublisher(self.redis_cache._client)
+        logger.info("StreamPublisher initialized (telemetry:raw stream)")
+
         try:
             await self.device_registry_client.connect()
         except Exception as e:
@@ -451,6 +459,16 @@ class DeviceServer:
 
         if self.redis_cache and cache_serial:
             await self.redis_cache.write_telemetry(cache_serial, telemetry.copy())
+
+        # Phase 2: Dual-write to Redis Stream for future StorageWorker consumption.
+        # Runs after existing storage — any failure here is logged and ignored.
+        if self.stream_publisher and cache_serial and device_state:
+            await self.stream_publisher.publish(
+                device_serial=cache_serial,
+                device_type=device_state.device_type or "",
+                raw_telemetry=telemetry,
+                inverter_serial=device_state.serial_number,
+            )
 
     async def _on_poll_device_offline(
         self,
