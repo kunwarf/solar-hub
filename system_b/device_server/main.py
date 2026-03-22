@@ -453,11 +453,6 @@ class DeviceServer:
         # via the Redis Stream — skip here to avoid double-writing to TimescaleDB.
         if self.timescale_writer and not self.settings.storage_worker_enabled:
             await self.timescale_writer.write(storage_device_id, telemetry.copy())
-        elif self.settings.storage_worker_enabled:
-            logger.debug(
-                "[PIPELINE] TimescaleDB write skipped for %s — storage worker mode active",
-                cache_serial,
-            )
 
         # Write to Redis cache for real-time access by System A
         # Use data_logger_serial (the serial printed on the device that users see)
