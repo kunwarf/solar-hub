@@ -426,7 +426,8 @@
     "size": 2,
     "unit": "W",
     "scale": 0.1,
-    "comment": "Alias for phase_r_watt_of_load — used by Redis cache mapping"
+    "comment": "Alias for phase_r_watt_of_load — used by Redis cache mapping",
+    "ha_key": "load_power_w"
   },
   {
     "id": "phase_s_watt_of_load",
@@ -483,7 +484,8 @@
     "size": 2,
     "unit": "A",
     "scale": 0.01,
-    "comment": "0x1326 — L1 load output port current"
+    "comment": "0x1326 — L1 load output port current",
+    "ha_key": "phase_r_current_of_load"
   },
   {
     "id": "phase_s_current_of_load",
@@ -495,7 +497,8 @@
     "size": 2,
     "unit": "A",
     "scale": 0.01,
-    "comment": "0x1328 — L2 load output port current"
+    "comment": "0x1328 — L2 load output port current",
+    "ha_key": "phase_s_current_of_load"
   },
   {
     "id": "phase_t_current_of_load",
@@ -507,7 +510,8 @@
     "size": 2,
     "unit": "A",
     "scale": 0.01,
-    "comment": "0x132A — L3 load output port current"
+    "comment": "0x132A — L3 load output port current",
+    "ha_key": "phase_t_current_of_load"
   },
   {
     "id": "grid_frequency_hz",
@@ -622,7 +626,8 @@
     "size": 2,
     "unit": "W",
     "scale": 0.1,
-    "comment": "EPS / Smart Load port power — must be added to load_power_w for total load"
+    "comment": "EPS / Smart Load port power — must be added to load_power_w for total load",
+    "ha_key": "phase_r_watt_of_eps"
   },
   {
     "id": "smart_load_power_w",
@@ -634,7 +639,8 @@
     "size": 2,
     "unit": "W",
     "scale": 0.1,
-    "comment": "Alias for phase_r_watt_of_eps — used by Redis cache to add to total load"
+    "comment": "Alias for phase_r_watt_of_eps — used by Redis cache to add to total load",
+    "ha_key": "smart_load_power_w"
   },
   {
     "id": "frequency_of_eps",
