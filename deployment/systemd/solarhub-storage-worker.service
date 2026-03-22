@@ -11,11 +11,12 @@ BindsTo=solarhub-telemetry.service
 Type=exec
 User=solarhub
 Group=solarhub
-WorkingDirectory=/opt/solarhub/app/system_b
+WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
 Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
 Environment="STORAGE_WORKER_NAME=worker-0"
 EnvironmentFile=/opt/solarhub/app/.env
+ExecStartPre=/bin/mkdir -p /opt/solarhub/logs
 ExecStart=/opt/solarhub/venv/bin/python -m app.device_server.storage_worker
 Restart=always
 RestartSec=10
