@@ -17,7 +17,7 @@ Environment="PYTHONUNBUFFERED=1"
 Environment="STORAGE_WORKER_NAME=worker-0"
 EnvironmentFile=/opt/solarhub/app/.env
 ExecStartPre=/bin/mkdir -p /opt/solarhub/logs
-ExecStart=/opt/solarhub/venv/bin/python -m app.device_server.storage_worker
+ExecStart=/opt/solarhub/venv/bin/python -m device_server.storage_worker
 Restart=always
 RestartSec=10
 StandardOutput=append:/opt/solarhub/logs/storage-worker.log
