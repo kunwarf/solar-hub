@@ -10,6 +10,7 @@ User=solarhub
 Group=solarhub
 WorkingDirectory=/opt/solarhub/app/system_b
 Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
 EnvironmentFile=/opt/solarhub/app/.env
 ExecStart=/opt/solarhub/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 4 --loop uvloop --http httptools
 ExecReload=/bin/kill -HUP $MAINPID
