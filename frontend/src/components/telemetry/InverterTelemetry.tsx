@@ -116,12 +116,27 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
   const isGridExporting = gridPower < 0;
 
   // Load port breakdown (Senergy: main output port + EPS/Smart Load port)
+  // Phase R
   const mainLoadW: number | null = telemetry?.raw?.load_power_w ?? null;
   const mainLoadV: number | null = telemetry?.raw?.phase_r_voltage_of_load ?? null;
   const mainLoadA: number | null = telemetry?.raw?.phase_r_current_of_load ?? null;
   const epsLoadW: number | null = telemetry?.raw?.phase_r_watt_of_eps ?? telemetry?.raw?.smart_load_power_w ?? null;
   const epsLoadV: number | null = telemetry?.raw?.phase_r_voltage_of_eps ?? null;
   const epsLoadA: number | null = telemetry?.raw?.phase_r_current_of_eps ?? null;
+  // Phase S
+  const mainLoadSW: number | null = telemetry?.raw?.phase_s_watt_of_load ?? null;
+  const mainLoadSA: number | null = telemetry?.raw?.phase_s_current_of_load ?? null;
+  const epsLoadSW: number | null = telemetry?.raw?.phase_s_watt_of_eps ?? null;
+  const epsLoadSV: number | null = telemetry?.raw?.phase_s_voltage_of_eps ?? null;
+  const epsLoadSA: number | null = telemetry?.raw?.phase_s_current_of_eps ?? null;
+  // Phase T
+  const mainLoadTW: number | null = telemetry?.raw?.phase_t_watt_of_load ?? null;
+  const mainLoadTA: number | null = telemetry?.raw?.phase_t_current_of_load ?? null;
+  const epsLoadTW: number | null = telemetry?.raw?.phase_t_watt_of_eps ?? null;
+  const epsLoadTV: number | null = telemetry?.raw?.phase_t_voltage_of_eps ?? null;
+  const epsLoadTA: number | null = telemetry?.raw?.phase_t_current_of_eps ?? null;
+  // EPS frequency
+  const epsFreqHz: number | null = telemetry?.raw?.frequency_of_eps ?? null;
   const hasLoadBreakdown = mainLoadW !== null || epsLoadW !== null;
 
   // Power flow data from real telemetry
@@ -133,10 +148,16 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
     gridPower: Math.abs(gridPower),
     isGridExporting: isGridExporting,
     isCharging: isCharging,
-    // Use extended metrics from API
+    // Use extended metrics from API; fall back to raw register values for
+    // Senergy (no grid AC voltage register — use EPS/load output port voltage)
     dcVoltage: extendedMetrics?.dc_voltage_v || 0,
-    acVoltage: extendedMetrics?.ac_voltage_v || 0,
-    frequency: extendedMetrics?.ac_frequency_hz || 0,
+    acVoltage: extendedMetrics?.ac_voltage_v
+      || (telemetry?.raw?.phase_r_voltage_of_eps as number | null)
+      || (telemetry?.raw?.phase_r_voltage_of_load as number | null)
+      || 0,
+    frequency: extendedMetrics?.ac_frequency_hz
+      || (telemetry?.raw?.grid_frequency_hz as number | null)
+      || 0,
     efficiency: extendedMetrics?.efficiency_pct || 0,
     temperature: extendedMetrics?.temperature_c || 0,
   };
@@ -339,62 +360,70 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
           transition={{ delay: 0.25 }}
           className="glass-card p-3 sm:p-5"
         >
-          <div className="mb-3 sm:mb-4">
-            <h3 className="text-base sm:text-lg font-semibold text-foreground">Load Breakdown</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground">Output port power split</p>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold text-foreground">Load Breakdown</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground">Output port power split</p>
+            </div>
+            <div className="text-xs sm:text-sm text-muted-foreground">
+              Total: <span className="font-mono font-bold text-consumption">{loadPower.toFixed(2)} kW</span>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
-            <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Home className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-consumption" />
-                <span className="text-[10px] sm:text-xs text-muted-foreground">Main Port</span>
-              </div>
-              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
-                {mainLoadW !== null ? (mainLoadW / 1000).toFixed(2) : "--"}
-                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
-              </p>
-              <div className="flex gap-2 mt-1.5">
-                <span className="text-[10px] sm:text-xs text-muted-foreground">
-                  {mainLoadV !== null ? `${mainLoadV.toFixed(1)} V` : "-- V"}
-                </span>
-                <span className="text-[10px] sm:text-xs text-muted-foreground">·</span>
-                <span className="text-[10px] sm:text-xs text-muted-foreground">
-                  {mainLoadA !== null ? `${mainLoadA.toFixed(2)} A` : "-- A"}
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground/50 mt-0.5">addr 4874 / 4899 / 4902</p>
+
+          {/* Main Load Port — per-phase */}
+          <div className="mb-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Home className="w-3.5 h-3.5 text-consumption" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Main Load Port</span>
             </div>
-            <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-solar" />
-                <span className="text-[10px] sm:text-xs text-muted-foreground">EPS / Smart Load</span>
-              </div>
-              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
-                {epsLoadW !== null ? (epsLoadW / 1000).toFixed(2) : "--"}
-                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
-              </p>
-              <div className="flex gap-2 mt-1.5">
-                <span className="text-[10px] sm:text-xs text-muted-foreground">
-                  {epsLoadV !== null ? `${epsLoadV.toFixed(1)} V` : "-- V"}
-                </span>
-                <span className="text-[10px] sm:text-xs text-muted-foreground">·</span>
-                <span className="text-[10px] sm:text-xs text-muted-foreground">
-                  {epsLoadA !== null ? `${epsLoadA.toFixed(2)} A` : "-- A"}
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground/50 mt-0.5">addr 4947 / 4944 / 4945</p>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {([
+                { label: "Phase R", w: mainLoadW,  v: mainLoadV,  a: mainLoadA  },
+                { label: "Phase S", w: mainLoadSW, v: null,       a: mainLoadSA },
+                { label: "Phase T", w: mainLoadTW, v: null,       a: mainLoadTA },
+              ] as { label: string; w: number | null; v: number | null; a: number | null }[]).map(({ label, w, v, a }) => (
+                <div key={label} className="bg-secondary/30 rounded-lg p-2 sm:p-3">
+                  <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1.5">{label}</p>
+                  <p className="text-sm sm:text-base font-mono font-bold text-foreground">
+                    {w !== null ? (w / 1000).toFixed(2) : "--"}
+                    <span className="text-[10px] text-muted-foreground ml-0.5">kW</span>
+                  </p>
+                  <div className="mt-1 space-y-0.5">
+                    {v !== null && <p className="text-[10px] text-muted-foreground">{v.toFixed(1)} V</p>}
+                    {a !== null && <p className="text-[10px] text-muted-foreground">{a.toFixed(2)} A</p>}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="bg-secondary/30 rounded-lg p-3 sm:p-4">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                <span className="text-[10px] sm:text-xs text-muted-foreground">Total Load</span>
-              </div>
-              <p className="text-lg sm:text-2xl font-mono font-bold text-consumption">
-                {loadPower.toFixed(2)}
-                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
-              </p>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1.5">combined output</p>
-              <p className="text-[10px] sm:text-xs text-muted-foreground/50 mt-0.5">Main + EPS</p>
+          </div>
+
+          {/* EPS / Smart Load Port — per-phase */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Zap className="w-3.5 h-3.5 text-solar" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">EPS / Smart Load Port</span>
+              {epsFreqHz !== null && (
+                <span className="text-[10px] text-muted-foreground ml-auto">{epsFreqHz.toFixed(2)} Hz</span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {([
+                { label: "Phase R", w: epsLoadW,  v: epsLoadV,  a: epsLoadA  },
+                { label: "Phase S", w: epsLoadSW, v: epsLoadSV, a: epsLoadSA },
+                { label: "Phase T", w: epsLoadTW, v: epsLoadTV, a: epsLoadTA },
+              ] as { label: string; w: number | null; v: number | null; a: number | null }[]).map(({ label, w, v, a }) => (
+                <div key={label} className="bg-secondary/30 rounded-lg p-2 sm:p-3">
+                  <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1.5">{label}</p>
+                  <p className="text-sm sm:text-base font-mono font-bold text-foreground">
+                    {w !== null ? (w / 1000).toFixed(2) : "--"}
+                    <span className="text-[10px] text-muted-foreground ml-0.5">kW</span>
+                  </p>
+                  <div className="mt-1 space-y-0.5">
+                    {v !== null && <p className="text-[10px] text-muted-foreground">{v.toFixed(1)} V</p>}
+                    {a !== null && <p className="text-[10px] text-muted-foreground">{a.toFixed(2)} A</p>}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </motion.div>

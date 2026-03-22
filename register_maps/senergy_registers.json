@@ -523,7 +523,8 @@
     "size": 1,
     "unit": "Hz",
     "scale": 0.01,
-    "comment": "0x1338"
+    "comment": "0x1338",
+    "ha_key": "grid_frequency_hz"
   },
   {
     "id": "today_import_energy",
