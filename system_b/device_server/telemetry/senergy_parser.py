@@ -4,10 +4,9 @@ Senergy Hybrid Inverter telemetry parser.
 Extracts normalized metrics from Senergy inverter telemetry.
 
 Key differences from Powdrive:
-- battery_current_a is S32 with NEGATIVE = charging convention.
-  We normalize to positive = charging for TimescaleDB consistency.
+- battery_current_a is S32 with POSITIVE = charging convention (same as DB).
 - battery_power_w is S32 (signed): positive=charging, negative=discharging.
-  We take abs() and re-derive sign from battery_current_a for consistency.
+  Used directly — no sign inversion needed.
 - Energy field names differ (today_pv_kwh, today_import_kwh, etc.)
 - Has a Smart Load / EPS port (smart_load_power_w / phase_r_watt_of_eps)
 """
@@ -25,8 +24,8 @@ class SenergyParser(TelemetryParser):
     """
     Parser for Senergy hybrid inverter telemetry.
 
-    Normalizes all battery values to positive = charging convention before
-    writing to telemetry_raw (same convention used by Powdrive/Deye parsers).
+    Senergy uses positive = charging for both battery_power_w and
+    battery_current_a — no sign inversion needed (unlike Powdrive).
     """
 
     # Metric mappings: json_field -> (metric_name, unit, category)
@@ -112,32 +111,20 @@ class SenergyParser(TelemetryParser):
             except (ValueError, TypeError):
                 logger.warning(f"SenergyParser: could not convert {json_field}={raw!r} to float")
 
-        # ── Battery current: Senergy negative = charging → normalize to positive = charging ──
-        raw_current: Optional[float] = None
+        # ── Battery current: Senergy positive = charging (same convention as our DB) ──
         for field in ('battery_current_a', 'battery_current'):
             if field in telemetry_data and telemetry_data[field] is not None:
                 try:
-                    raw_current = float(telemetry_data[field])
+                    metrics.append(_metric('battery_current_a', float(telemetry_data[field]), 'A', 'battery'))
                     break
                 except (ValueError, TypeError):
                     pass
 
-        normalized_current: Optional[float] = None
-        if raw_current is not None:
-            normalized_current = -raw_current  # flip: negative charging → positive charging
-            metrics.append(_metric('battery_current_a', normalized_current, 'A', 'battery'))
-
-        # ── Battery power: S32 (signed) → take abs magnitude, re-derive sign from normalized current ──
+        # ── Battery power: S32, positive=charging, negative=discharging (per register map) ──
         raw_power_w = telemetry_data.get('battery_power_w') or telemetry_data.get('battery_power')
         if raw_power_w is not None:
             try:
-                power_magnitude = abs(float(raw_power_w))
-                if normalized_current is not None:
-                    # positive normalized_current = charging → positive power
-                    signed_power = power_magnitude if normalized_current >= 0 else -power_magnitude
-                else:
-                    signed_power = power_magnitude  # unknown direction, keep unsigned
-                metrics.append(_metric('battery_w', signed_power, 'W', 'power'))
+                metrics.append(_metric('battery_w', float(raw_power_w), 'W', 'power'))
             except (ValueError, TypeError):
                 logger.warning(f"SenergyParser: could not convert battery_power_w={raw_power_w!r}")
 
