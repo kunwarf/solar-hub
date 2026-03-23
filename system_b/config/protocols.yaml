@@ -91,12 +91,13 @@ protocols:
       retries: 3
 
     telemetry:
-      # Senergy battery_power_w is U32 (unsigned) — no sign info from power register.
-      # battery_current_a (S32) uses conventional current direction:
-      #   positive = current OUT of battery = discharging
-      #   negative = current INTO battery   = charging
-      battery_power_sign_convention: "positive_charging"
-      battery_current_sign_convention: "negative_charging"
+      # Senergy battery_power_w (S32) actual device convention confirmed from live data:
+      #   positive = discharging (current OUT of battery)
+      #   negative = charging   (current INTO battery)
+      # redis_cache.py normalizes to positive=charging by negating battery_power_w.
+      # battery_current_a is magnitude-only (always positive) — NOT used for direction.
+      battery_power_sign_convention: "negative_charging"
+      battery_current_sign_convention: "magnitude_only"
 
   # ============================================
   # ENERGY METERS
