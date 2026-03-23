@@ -91,13 +91,13 @@ protocols:
       retries: 3
 
     telemetry:
-      # Senergy battery_power_w (S32) actual device convention confirmed from live data:
-      #   positive = discharging (current OUT of battery)
-      #   negative = charging   (current INTO battery)
-      # redis_cache.py normalizes to positive=charging by negating battery_power_w.
-      # battery_current_a is magnitude-only (always positive) — NOT used for direction.
-      battery_power_sign_convention: "negative_charging"
-      battery_current_sign_convention: "magnitude_only"
+      # Senergy battery_power_w (S32) confirmed convention from live device data:
+      #   negative = discharging (current OUT of battery → power flows to load)
+      #   positive = charging   (current INTO battery ← power flows from PV/grid)
+      # Already matches dashboard convention — no sign flip needed in redis_cache.py.
+      # battery_current_a is also S32 with the same convention (negative=discharging).
+      battery_power_sign_convention: "negative_discharging"
+      battery_current_sign_convention: "negative_discharging"
 
   # ============================================
   # ENERGY METERS

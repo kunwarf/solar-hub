@@ -269,24 +269,21 @@ class TelemetryCacheWriter:
             )
 
         # For Senergy inverters: if load registers still read 0, derive load from power balance.
-        # Senergy battery_power_w device convention: positive=discharging, negative=charging.
-        # Energy balance: load = pv_total + battery_power_w + grid_power_w
-        #   (bat>0 means battery discharging → contributing to load, grid>0 means import)
+        # Senergy battery_power_w (S32) device convention: negative=discharging, positive=charging.
+        # Energy balance: load = pv - battery_power_w + grid
+        #   When discharging: bat<0 → pv - bat = pv + |bat| → battery adds to load ✓
+        #   When charging:    bat>0 → pv - bat = pv - |bat| → battery takes from PV ✓
+        #   grid>0 = import (adds to load), grid<0 = export (subtracts from load) ✓
         if _is_senergy and not power_data.get("load_w"):
             pv = power_data.get("pv_total_w") or 0
             bat = float(telemetry.get("battery_power_w") or 0)
             grid = float(telemetry.get("grid_power_w") or 0)
-            derived = pv + bat + grid
+            derived = pv - bat + grid
             if derived > 0:
                 power_data["load_w"] = round(derived, 1)
 
-        # Senergy battery_power_w device convention: positive=discharging, negative=charging.
-        # Normalize battery_w to positive=charging so the dashboard uses a consistent
-        # convention (positive=charging) across all protocols.
-        if _is_senergy and "battery_w" in power_data:
-            val = power_data["battery_w"]
-            if val is not None:
-                power_data["battery_w"] = -val
+        # Senergy battery_power_w is already in dashboard convention (negative=discharging,
+        # positive=charging). No sign normalization needed — battery_w is used as-is.
 
         if power_data:
             cache_data["power"] = power_data
@@ -307,14 +304,14 @@ class TelemetryCacheWriter:
                     battery_data[target_key] = telemetry[src]
                     break
         # Determine if charging.
-        # Senergy: battery_current_a is magnitude-only (always positive regardless of
-        # direction) and cannot be used for direction detection. Use battery_power_w
-        # instead: device convention is positive=discharging, negative=charging.
+        # Senergy battery_power_w (S32): negative=discharging, positive=charging.
+        # Use battery_power_w as the primary direction indicator for Senergy since
+        # battery_current_a may also be present but in the same signed convention.
         # All other protocols: positive current = charging.
         if _is_senergy and "battery_power_w" in telemetry:
-            battery_data["charging"] = float(telemetry["battery_power_w"]) < 0
+            battery_data["charging"] = float(telemetry["battery_power_w"]) > 0
         elif _is_senergy and "battery_power" in telemetry:
-            battery_data["charging"] = float(telemetry["battery_power"]) < 0
+            battery_data["charging"] = float(telemetry["battery_power"]) > 0
         elif "battery_current_a" in telemetry:
             battery_data["charging"] = float(telemetry["battery_current_a"]) > 0
         elif "battery_current" in telemetry:
