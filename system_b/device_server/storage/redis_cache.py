@@ -261,21 +261,12 @@ class TelemetryCacheWriter:
         protocol_id_for_load = (telemetry.get("_protocol_id") or "").lower()
         if "senergy" in protocol_id_for_load and not power_data.get("load_w"):
             pv = power_data.get("pv_total_w") or 0
-            # Senergy raw battery_power_w: negative = charging, positive = discharging.
-            # Formula needs positive = charging convention → negate to match.
-            bat = -float(telemetry.get("battery_power_w") or 0)  # normalized: positive=charging
+            # battery_power_w S32: positive=charging, negative=discharging (per register map).
+            bat = float(telemetry.get("battery_power_w") or 0)
             grid = float(telemetry.get("grid_power_w") or 0)     # S32: positive=import
             derived = pv - bat + grid
             if derived > 0:
                 power_data["load_w"] = round(derived, 1)
-
-        # Senergy: raw battery_power_w is negative when charging (V × I, where I < 0 charging).
-        # Normalize to positive = charging convention so power-flow visualizations and
-        # aggregation totals work the same way as Powdrive and all other protocols.
-        if "senergy" in protocol_id_for_load and "battery_w" in power_data:
-            val = power_data["battery_w"]
-            if val is not None:
-                power_data["battery_w"] = -val
 
         if power_data:
             cache_data["power"] = power_data
@@ -296,17 +287,11 @@ class TelemetryCacheWriter:
                     battery_data[target_key] = telemetry[src]
                     break
         # Determine if charging — prefer signed current (reliable direction indicator)
-        # over battery power which may be U32 (unsigned) on some inverters (e.g. Senergy).
-        #
-        # Sign conventions differ by protocol:
-        #   positive_charging (default): positive current = charging (current INTO battery)
-        #   negative_charging (Senergy):  negative current = charging (conventional current
-        #       flows OUT of battery during discharge → positive when discharging)
+        # over battery power. All protocols use positive = charging convention.
         protocol_id = (telemetry.get("_protocol_id") or "").lower()
-        negative_current_charging = "senergy" in protocol_id
 
         def _current_charging(current: float) -> bool:
-            return current < 0 if negative_current_charging else current > 0
+            return current > 0
 
         if "battery_current_a" in telemetry:
             battery_data["charging"] = _current_charging(telemetry["battery_current_a"])
