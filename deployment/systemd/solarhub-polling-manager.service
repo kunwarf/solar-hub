@@ -13,7 +13,7 @@ Group=solarhub
 WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
 Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
-Environment="POLLING_WORKERS=4"
+Environment="POLLING_WORKERS=8"
 Environment="STORAGE_WORKER_ENABLED=true"
 EnvironmentFile=/opt/solarhub/app/.env
 ExecStartPre=/bin/mkdir -p /opt/solarhub/logs

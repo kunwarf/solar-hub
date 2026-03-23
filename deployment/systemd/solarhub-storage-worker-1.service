@@ -1,0 +1,36 @@
+[Unit]
+Description=Solar Hub Storage Worker 1 (Redis Stream → TimescaleDB, redundant instance)
+Documentation=https://github.com/YOUR_USERNAME/solar-hub
+After=network.target postgresql.service redis-server.service solarhub-telemetry.service
+Wants=postgresql.service redis-server.service
+BindsTo=solarhub-telemetry.service
+
+[Service]
+Type=exec
+User=solarhub
+Group=solarhub
+WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
+Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="STORAGE_WORKER_NAME=worker-1"
+EnvironmentFile=/opt/solarhub/app/.env
+ExecStartPre=/bin/mkdir -p /opt/solarhub/logs
+ExecStart=/opt/solarhub/venv/bin/python -m device_server.storage_worker
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/solarhub/logs/storage-worker-1.log
+StandardError=append:/opt/solarhub/logs/storage-worker-1-error.log
+
+# Security hardening (same as other services)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/solarhub/logs /opt/solarhub/data
+
+# Resource Limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
