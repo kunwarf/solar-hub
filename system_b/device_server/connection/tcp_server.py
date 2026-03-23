@@ -87,10 +87,25 @@ class TCPServer:
 
         logger.info(f"Starting TCP server on {host}:{port}")
 
+        # Build a socket manually so we can enable SO_REUSEPORT.
+        # SO_REUSEPORT lets multiple independent processes bind to the same port;
+        # the Linux kernel distributes incoming connections across all of them.
+        # This is the foundation for multi-process polling (Phase 5).
+        import socket as _socket
+        family = _socket.AF_INET6 if ":" in host else _socket.AF_INET
+        sock = _socket.socket(family, _socket.SOCK_STREAM)
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+        try:
+            sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEPORT, 1)
+            logger.info("SO_REUSEPORT enabled — multi-process polling ready")
+        except (AttributeError, OSError):
+            logger.warning("SO_REUSEPORT not available — single-process mode only")
+        sock.bind((host, port))
+        sock.setblocking(False)
+
         self._server = await asyncio.start_server(
             self._handle_connection,
-            host=host,
-            port=port,
+            sock=sock,
             backlog=self.settings.server.backlog,
         )
 

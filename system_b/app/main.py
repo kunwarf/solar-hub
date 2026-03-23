@@ -72,6 +72,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         raise  # Redis is critical for System B
 
     # Start Device Server (TCP server for Modbus device connections)
+    # Skip when DEVICE_SERVER_EXTERNAL=true — solarhub-polling-manager.service
+    # runs N independent Device Server processes via SO_REUSEPORT instead.
+    import os
+    if os.environ.get("DEVICE_SERVER_EXTERNAL", "").lower() in ("true", "1", "yes"):
+        logger.info(
+            "DEVICE_SERVER_EXTERNAL=true — embedded Device Server disabled. "
+            "Polling handled by solarhub-polling-manager.service."
+        )
+        yield
+        logger.info("Shutting down application...")
+        await TimescaleDBManager.close()
+        await RedisStreamManager.close()
+        logger.info("Shutdown complete")
+        return
+
     # Only start in one worker - use a lock file to coordinate
     import socket
     import tempfile

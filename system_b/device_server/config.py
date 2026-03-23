@@ -188,6 +188,18 @@ class DeviceServerSettings(BaseSettings):
     # Set STORAGE_WORKER_ENABLED=true in .env to activate after starting the service.
     storage_worker_enabled: bool = Field(default=False, description="Enable StorageWorker cutover")
 
+    # Multi-process polling (Phase 5)
+    # When True, the embedded Device Server inside uvicorn is disabled — the
+    # solarhub-polling-manager.service runs N independent Device Server processes
+    # instead, each bound to port 8502 via SO_REUSEPORT.
+    # Set DEVICE_SERVER_EXTERNAL=true in .env after starting the polling manager.
+    device_server_external: bool = Field(default=False, description="Disable embedded Device Server (polling manager runs it)")
+
+    # Number of polling worker processes spawned by solarhub-polling-manager.service.
+    # Each process gets ~1/N device connections and runs on its own CPU core.
+    # Recommended: number of inverters / 2, capped at physical core count.
+    polling_workers: int = Field(default=4, description="Number of polling worker processes")
+
     # Paths
     config_dir: Path = Field(
         default=Path(__file__).parent.parent / "config",

@@ -1,0 +1,38 @@
+[Unit]
+Description=Solar Hub Polling Manager (Multi-Process Device Server)
+Documentation=https://github.com/YOUR_USERNAME/solar-hub
+# Must start after storage worker (which consumes the Redis Stream)
+After=network.target postgresql.service redis-server.service solarhub-storage-worker.service
+Wants=postgresql.service redis-server.service
+BindsTo=solarhub-storage-worker.service
+
+[Service]
+Type=exec
+User=solarhub
+Group=solarhub
+WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
+Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="POLLING_WORKERS=4"
+Environment="STORAGE_WORKER_ENABLED=true"
+EnvironmentFile=/opt/solarhub/app/.env
+ExecStartPre=/bin/mkdir -p /opt/solarhub/logs
+ExecStart=/opt/solarhub/venv/bin/python -m device_server.process_manager
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/solarhub/logs/polling-manager.log
+StandardError=append:/opt/solarhub/logs/polling-manager-error.log
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/solarhub/logs /opt/solarhub/data
+
+# Resource Limits — each worker process gets its own file descriptors
+LimitNOFILE=65536
+LimitNPROC=8192
+
+[Install]
+WantedBy=multi-user.target
