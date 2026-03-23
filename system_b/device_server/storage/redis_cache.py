@@ -261,12 +261,21 @@ class TelemetryCacheWriter:
         protocol_id_for_load = (telemetry.get("_protocol_id") or "").lower()
         if "senergy" in protocol_id_for_load and not power_data.get("load_w"):
             pv = power_data.get("pv_total_w") or 0
-            # battery_power_w S32: positive=charging, negative=discharging (per register map).
+            # Senergy battery_power_w: positive=discharging, negative=charging (device convention).
+            # Energy balance: load = pv + battery_power_w + grid_w
             bat = float(telemetry.get("battery_power_w") or 0)
             grid = float(telemetry.get("grid_power_w") or 0)     # S32: positive=import
-            derived = pv - bat + grid
+            derived = pv + bat + grid
             if derived > 0:
                 power_data["load_w"] = round(derived, 1)
+
+        # Senergy battery_power_w convention: positive=discharging, negative=charging.
+        # Normalize battery_w to positive=charging so the dashboard totals and power-flow
+        # chart use a consistent convention across all protocols.
+        if "senergy" in protocol_id_for_load and "battery_w" in power_data:
+            val = power_data["battery_w"]
+            if val is not None:
+                power_data["battery_w"] = -val
 
         if power_data:
             cache_data["power"] = power_data
@@ -300,9 +309,10 @@ class TelemetryCacheWriter:
         elif "current" in telemetry:
             # JK BMS: negative current = discharging, positive = charging
             battery_data["charging"] = telemetry["current"] > 0
-        elif "battery_power_w" in telemetry and not negative_current_charging:
-            # Only use unsigned power as a fallback when we know the protocol
-            # does NOT use unsigned U32 for battery_power_w (e.g. Powdrive uses S16)
+        elif "battery_power_w" in telemetry:
+            # Fallback: use power sign. Senergy sends negative=charging so this
+            # will show discharging — but battery_current_a should always be present
+            # for Senergy and take the earlier branch instead.
             battery_data["charging"] = telemetry["battery_power_w"] > 0
         elif "battery_power" in telemetry:
             battery_data["charging"] = telemetry["battery_power"] > 0
