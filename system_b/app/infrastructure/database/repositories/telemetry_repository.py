@@ -538,14 +538,14 @@ class TelemetryRepository:
         # Auto-select best table and bucket interval
         if bucket_interval == "auto":
             table_name, bucket_interval = self._select_aggregate_table(start_time, end_time)
-            logger.info(
+            logger.debug(
                 f"✓ Auto-selected {table_name} with {bucket_interval} bucket "
                 f"for range {start_time} to {end_time}"
             )
         else:
             # Use specified interval with raw table
             table_name = "telemetry_raw"
-            logger.info(
+            logger.debug(
                 f"Using telemetry_raw with {bucket_interval} bucket "
                 f"(explicit interval, not auto-selected)"
             )
@@ -569,7 +569,7 @@ class TelemetryRepository:
         # Build query based on table type
         if table_name != "telemetry_raw":
             # Using aggregate table (hourly, daily, monthly, yearly)
-            logger.info(
+            logger.debug(
                 f"[AGGREGATE DEBUG] Using table={table_name}, interval={bucket_interval}, "
                 f"range={start_time} to {end_time}"
             )
@@ -773,7 +773,7 @@ class TelemetryRepository:
             total_export = sum(dp["grid_export_kwh"] for dp in data_points)
             total_import = sum(dp["grid_import_kwh"] for dp in data_points)
             total_pv = sum(dp["pv_kwh"] for dp in data_points)
-            logger.info(
+            logger.debug(
                 f"[AGGREGATE DEBUG] Returning {len(data_points)} data points: "
                 f"total_pv={total_pv:.2f}kWh, total_import={total_import:.2f}kWh, "
                 f"total_export={total_export:.2f}kWh"

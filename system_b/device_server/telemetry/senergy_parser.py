@@ -160,7 +160,7 @@ class SenergyParser(TelemetryParser):
         if pv_total > 0:
             metrics.append(_metric('pv_total_w', pv_total, 'W', 'power'))
 
-        logger.info(
+        logger.debug(
             f"Parsed {len(metrics)} metrics from Senergy telemetry "
             f"(device {device_id})"
         )
