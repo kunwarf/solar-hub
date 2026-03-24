@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import usersService from "@/api/services/users.service";
-import type { UserPreferences } from "@/api/types";
+import { devicesService } from "@/api/services/devices.service";
+import { sitesService } from "@/api/services/sites.service";
+import type { UserPreferences, Device } from "@/api/types";
+import { useCurrentSite } from "@/hooks/useSites";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
@@ -75,9 +78,19 @@ interface BatteryArray {
 const SettingsPage = () => {
   const navigate = useNavigate();
   const { mode, toggleMode, isAdvanced } = useUserMode();
+  const { currentSite } = useCurrentSite();
   const [settings, setSettings] = useState(settingsData);
   const [isSaving, setIsSaving] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+
+  // Real devices from API
+  const [availableInverters, setAvailableInverters] = useState<Device[]>([]);
+  const [availableBatteries, setAvailableBatteries] = useState<Device[]>([]);
+
+  // Map serial_number -> display label for badges
+  const deviceLabel = useCallback((device: Device) =>
+    device.name || `${device.manufacturer} ${device.model}`.trim() || device.serial_number
+  , []);
 
   // Load user preferences on mount
   const loadPreferences = useCallback(async () => {
@@ -112,39 +125,94 @@ const SettingsPage = () => {
     timezone: "Asia/Karachi",
   });
 
-  // Home Configuration
+  // Home Configuration — seeded from currentSite
   const [homeConfig, setHomeConfig] = useState({
-    id: "home",
-    name: "My Solar Home",
-    description: "Main residential solar system",
+    id: currentSite?.id ?? "",
+    name: currentSite?.name ?? "",
+    description: currentSite?.description ?? "",
   });
 
-  // Available inverters and batteries for selection
-  const availableInverters = ["Powdrive", "Senergy", "Powdrive"];
-  const availableBatteries = ["Pylontech Battery Bank", "EVE Battery Bank"];
+  // Sync homeConfig when site loads
+  useEffect(() => {
+    if (currentSite) {
+      setHomeConfig({
+        id: currentSite.id,
+        name: currentSite.name,
+        description: currentSite.description ?? "",
+      });
+    }
+  }, [currentSite]);
 
-  // Inverter Arrays
-  const [inverterArrays, setInverterArrays] = useState<InverterArray[]>([
-    { id: "array1", name: "Ground Floor", inverters: ["Senergy", "Powdrive"] },
-    { id: "array2", name: "First Floor", inverters: ["Powdrive"] },
-  ]);
+  // Load devices from API
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [inv, bat] = await Promise.all([
+          devicesService.listDevices({ device_type: "inverter" }, { page: 1, page_size: 100 }),
+          devicesService.listDevices({ device_type: "battery" }, { page: 1, page_size: 100 }),
+        ]);
+        if (!cancelled) {
+          setAvailableInverters(inv.items);
+          setAvailableBatteries(bat.items);
+        }
+      } catch {
+        // Keep empty arrays on error
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
-  // Battery Arrays
-  const [batteryArrays, setBatteryArrays] = useState<BatteryArray[]>([
-    { id: "battery_array1", name: "Ground Floor Battery Array", batteries: ["EVE Battery Bank"], attachedTo: "array1" },
-    { id: "battery_array2", name: "First Floor Battery Array", batteries: ["Pylontech Battery Bank"], attachedTo: "array2" },
-  ]);
+  // Inverter Arrays — loaded from localStorage keyed by site
+  const lsInvKey = currentSite ? `hierarchy:${currentSite.id}:inverterArrays` : null;
+  const lsBatKey = currentSite ? `hierarchy:${currentSite.id}:batteryArrays` : null;
+
+  const [inverterArrays, setInverterArrays] = useState<InverterArray[]>([]);
+  const [batteryArrays, setBatteryArrays] = useState<BatteryArray[]>([]);
+
+  // Load persisted arrays from localStorage when site is known
+  useEffect(() => {
+    if (!lsInvKey || !lsBatKey) return;
+    try {
+      const inv = localStorage.getItem(lsInvKey);
+      const bat = localStorage.getItem(lsBatKey);
+      if (inv) setInverterArrays(JSON.parse(inv));
+      if (bat) setBatteryArrays(JSON.parse(bat));
+    } catch {
+      // Ignore parse errors
+    }
+  }, [lsInvKey, lsBatKey]);
+
+  // Persist arrays to localStorage on change
+  useEffect(() => {
+    if (lsInvKey) localStorage.setItem(lsInvKey, JSON.stringify(inverterArrays));
+  }, [inverterArrays, lsInvKey]);
+
+  useEffect(() => {
+    if (lsBatKey) localStorage.setItem(lsBatKey, JSON.stringify(batteryArrays));
+  }, [batteryArrays, lsBatKey]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Save notification preferences to API
-      const prefsToSave: Partial<UserPreferences> = {
-        email_notifications: settings.notifications.email,
-        sms_notifications: settings.notifications.sms,
-        notifications_enabled: settings.notifications.push,
-      };
-      await usersService.updatePreferences(prefsToSave);
+      const saves: Promise<unknown>[] = [
+        usersService.updatePreferences({
+          email_notifications: settings.notifications.email,
+          sms_notifications: settings.notifications.sms,
+          notifications_enabled: settings.notifications.push,
+        } as Partial<UserPreferences>),
+      ];
+
+      // Persist site name/description if site is loaded
+      if (currentSite && (homeConfig.name !== currentSite.name || homeConfig.description !== (currentSite.description ?? ""))) {
+        saves.push(sitesService.updateSite(currentSite.id, {
+          name: homeConfig.name,
+          description: homeConfig.description,
+        }));
+      }
+
+      await Promise.all(saves);
       toast({
         title: "Settings Saved",
         description: "Your configuration has been updated successfully.",
@@ -170,18 +238,14 @@ const SettingsPage = () => {
       timezone: "Asia/Karachi",
     });
     setHomeConfig({
-      id: "home",
-      name: "My Solar Home",
-      description: "Main residential solar system",
+      id: currentSite?.id ?? "",
+      name: currentSite?.name ?? "",
+      description: currentSite?.description ?? "",
     });
-    setInverterArrays([
-      { id: "array1", name: "Ground Floor", inverters: ["Senergy", "Powdrive"] },
-      { id: "array2", name: "First Floor", inverters: ["Powdrive"] },
-    ]);
-    setBatteryArrays([
-      { id: "battery_array1", name: "Ground Floor Battery Array", batteries: ["EVE Battery Bank"], attachedTo: "array1" },
-      { id: "battery_array2", name: "First Floor Battery Array", batteries: ["Pylontech Battery Bank"], attachedTo: "array2" },
-    ]);
+    setInverterArrays([]);
+    setBatteryArrays([]);
+    if (lsInvKey) localStorage.removeItem(lsInvKey);
+    if (lsBatKey) localStorage.removeItem(lsBatKey);
     toast({
       title: "Settings Reset",
       description: "All settings have been restored to defaults.",
@@ -721,14 +785,17 @@ const SettingsPage = () => {
                             <div>
                               <Label className="text-sm text-muted-foreground">Select Inverters:</Label>
                               <div className="flex flex-wrap gap-2 mt-2">
-                                {availableInverters.map((inverter, idx) => (
+                                {availableInverters.length === 0 && (
+                                  <span className="text-xs text-muted-foreground">No inverters found</span>
+                                )}
+                                {availableInverters.map((device) => (
                                   <Badge
-                                    key={`${inverter}-${idx}`}
-                                    variant={array.inverters.includes(inverter) ? "default" : "outline"}
+                                    key={device.serial_number}
+                                    variant={array.inverters.includes(device.serial_number) ? "default" : "outline"}
                                     className="cursor-pointer"
-                                    onClick={() => toggleInverterInArray(array.id, inverter)}
+                                    onClick={() => toggleInverterInArray(array.id, device.serial_number)}
                                   >
-                                    {inverter}
+                                    {deviceLabel(device)}
                                   </Badge>
                                 ))}
                               </div>
@@ -800,14 +867,17 @@ const SettingsPage = () => {
                             <div>
                               <Label className="text-sm text-muted-foreground">Select Battery Banks:</Label>
                               <div className="flex flex-wrap gap-2 mt-2">
-                                {availableBatteries.map((battery, idx) => (
+                                {availableBatteries.length === 0 && (
+                                  <span className="text-xs text-muted-foreground">No batteries found</span>
+                                )}
+                                {availableBatteries.map((device) => (
                                   <Badge
-                                    key={`${battery}-${idx}`}
-                                    variant={array.batteries.includes(battery) ? "default" : "outline"}
+                                    key={device.serial_number}
+                                    variant={array.batteries.includes(device.serial_number) ? "default" : "outline"}
                                     className="cursor-pointer"
-                                    onClick={() => toggleBatteryInArray(array.id, battery)}
+                                    onClick={() => toggleBatteryInArray(array.id, device.serial_number)}
                                   >
-                                    {battery}
+                                    {deviceLabel(device)}
                                   </Badge>
                                 ))}
                               </div>

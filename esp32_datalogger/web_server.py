@@ -572,9 +572,80 @@ class WebServer:
         """Serial port + serial bridge server configuration page."""
         config = get_config()
         serial_cfg = config.get("serial", {})
+        rtu_cfg = config.get("rtu", {})
         bridge_cfg = config.get("serial_bridge", {})
 
-        html = '<div class="card"><h2>Serial Port — RS232 / RS485</h2>'
+        # ── Modbus RTU card ──────────────────────────────────────────────────
+        html = '<div class="card"><h2>Modbus RTU</h2>'
+        html += '<p style="color:#888;font-size:0.85em;">RS485 UART settings used in <strong>modbus_bridge</strong> mode '
+        html += '(ESP32 polls inverter/meter via Modbus RTU and forwards to System B).</p>'
+        html += '<form method="POST" action="/serial">'
+        html += '<input type="hidden" name="section" value="rtu">'
+
+        html += '<label>UART ID</label>'
+        html += '<select name="rtu_uart_id">'
+        for i in [0, 1, 2]:
+            sel = "selected" if rtu_cfg.get("uart_id", 1) == i else ""
+            html += '<option value="{}" {}>{}</option>'.format(i, sel, i)
+        html += '</select>'
+
+        html += '<label>TX Pin</label>'
+        html += '<input type="number" name="rtu_tx_pin" value="{}" min="0" max="48">'.format(
+            rtu_cfg.get("tx_pin", 17))
+
+        html += '<label>RX Pin</label>'
+        html += '<input type="number" name="rtu_rx_pin" value="{}" min="0" max="48">'.format(
+            rtu_cfg.get("rx_pin", 18))
+
+        html += '<label>DE Pin (Driver Enable, active-HIGH; 0 = not used)</label>'
+        html += '<input type="number" name="rtu_de_pin" value="{}" min="0" max="48">'.format(
+            rtu_cfg.get("de_pin", 4))
+
+        html += '<label>RE Pin (Receiver Enable, active-LOW; 0 = not used)</label>'
+        html += '<input type="number" name="rtu_re_pin" value="{}" min="0" max="48">'.format(
+            rtu_cfg.get("re_pin", 5))
+
+        html += '<label>Unit ID (Modbus slave ID, 1–247; 0 = pass-through from server)</label>'
+        html += '<input type="number" name="rtu_unit_id" value="{}" min="0" max="247">'.format(
+            rtu_cfg.get("unit_id", 1))
+
+        html += '<label>Baud Rate</label>'
+        html += '<select name="rtu_baudrate">'
+        for baud in [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]:
+            sel = "selected" if rtu_cfg.get("baudrate", 9600) == baud else ""
+            html += '<option value="{}" {}>{}</option>'.format(baud, sel, baud)
+        html += '</select>'
+
+        html += '<label>Parity</label>'
+        html += '<select name="rtu_parity">'
+        for p, pname in [("N", "None"), ("E", "Even"), ("O", "Odd")]:
+            sel = "selected" if rtu_cfg.get("parity", "N") == p else ""
+            html += '<option value="{}" {}>{}</option>'.format(p, sel, pname)
+        html += '</select>'
+
+        html += '<label>Stop Bits</label>'
+        html += '<select name="rtu_stop_bits">'
+        for s in [1, 2]:
+            sel = "selected" if rtu_cfg.get("stop_bits", 1) == s else ""
+            html += '<option value="{}" {}>{}</option>'.format(s, sel, s)
+        html += '</select>'
+
+        html += '<label>Data Bits</label>'
+        html += '<select name="rtu_data_bits">'
+        for d in [7, 8]:
+            sel = "selected" if rtu_cfg.get("data_bits", 8) == d else ""
+            html += '<option value="{}" {}>{}</option>'.format(d, sel, d)
+        html += '</select>'
+
+        html += '<label>Timeout (ms)</label>'
+        html += '<input type="number" name="rtu_timeout_ms" value="{}" min="100" max="10000">'.format(
+            rtu_cfg.get("timeout_ms", 1000))
+
+        html += '<button type="submit">Save Modbus RTU Settings</button>'
+        html += '</form></div>'
+
+        # ── Serial Port (RS232/RS485 serial_bridge) card ─────────────────────
+        html += '<div class="card"><h2>Serial Port — RS232 / RS485</h2>'
         html += '<p style="color:#888;font-size:0.85em;">UART settings for serial device communication. '
         html += 'Use MAX3232 for RS232 (Pylontech/Pytes), or MAX485 for RS485 (JK BMS broadcast).</p>'
         html += '<form method="POST" action="/serial">'
@@ -703,6 +774,20 @@ class WebServer:
             config["serial_bridge"]["server_port"] = int(body.get("server_port", 8502))
             config["serial_bridge"]["reconnect_delay"] = int(body.get("reconnect_delay", 5))
             config["serial_bridge"]["keepalive_interval"] = int(body.get("keepalive_interval", 30))
+        elif section == "rtu":
+            if "rtu" not in config:
+                config["rtu"] = {}
+            config["rtu"]["uart_id"]   = int(body.get("rtu_uart_id", 1))
+            config["rtu"]["tx_pin"]    = int(body.get("rtu_tx_pin", 17))
+            config["rtu"]["rx_pin"]    = int(body.get("rtu_rx_pin", 18))
+            config["rtu"]["de_pin"]    = int(body.get("rtu_de_pin", 4))
+            config["rtu"]["re_pin"]    = int(body.get("rtu_re_pin", 5))
+            config["rtu"]["unit_id"]   = int(body.get("rtu_unit_id", 1))
+            config["rtu"]["baudrate"]  = int(body.get("rtu_baudrate", 9600))
+            config["rtu"]["parity"]    = body.get("rtu_parity", "N")
+            config["rtu"]["stop_bits"] = int(body.get("rtu_stop_bits", 1))
+            config["rtu"]["data_bits"] = int(body.get("rtu_data_bits", 8))
+            config["rtu"]["timeout_ms"] = int(body.get("rtu_timeout_ms", 1000))
         else:
             if "serial" not in config:
                 config["serial"] = {}

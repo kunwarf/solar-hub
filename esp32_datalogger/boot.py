@@ -11,6 +11,7 @@ esp.osdebug(None)
 
 # Run garbage collection
 gc.collect()
-
+print("Free:", gc.mem_free())
+print("Alloc:", gc.mem_alloc())
 print("Boot complete, starting main...")
 

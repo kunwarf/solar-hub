@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,17 @@ import {
   XCircle,
   AlertTriangle,
   Unlink,
+  Pencil,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import devicesService from "@/api/services/devices.service";
@@ -58,6 +68,7 @@ export default function DeviceDetails() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [telemetryHistory, setTelemetryHistory] = useState<TelemetryPoint[]>([]);
+  const queryClient = useQueryClient();
 
   // Fetch device info
   const {
@@ -139,6 +150,35 @@ export default function DeviceDetails() {
     },
     onError: () => {
       toast.error("Failed to unclaim device");
+    },
+  });
+
+  // Edit device info
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", manufacturer: "", model: "" });
+
+  const openEdit = () => {
+    setEditForm({
+      name: device?.name ?? "",
+      manufacturer: device?.manufacturer ?? "",
+      model: device?.model ?? "",
+    });
+    setEditOpen(true);
+  };
+
+  const editMutation = useMutation({
+    mutationFn: () => devicesService.updateDevice(deviceId!, {
+      name: editForm.name.trim(),
+      manufacturer: editForm.manufacturer.trim(),
+      model: editForm.model.trim(),
+    }),
+    onSuccess: () => {
+      toast.success("Device updated successfully");
+      setEditOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["device", deviceId] });
+    },
+    onError: () => {
+      toast.error("Failed to update device");
     },
   });
 
@@ -267,6 +307,9 @@ export default function DeviceDetails() {
               <h1 className="text-2xl font-bold flex items-center gap-2">
                 <Cpu className="h-6 w-6" />
                 {device.name}
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={openEdit}>
+                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                </Button>
               </h1>
               <p className="text-sm text-muted-foreground">
                 {device.serial_number}
@@ -755,6 +798,47 @@ export default function DeviceDetails() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Edit device dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Device Info</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label>Name</Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Device name"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Manufacturer</Label>
+              <Input
+                value={editForm.manufacturer}
+                onChange={(e) => setEditForm((f) => ({ ...f, manufacturer: e.target.value }))}
+                placeholder="e.g. Senergy"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Model</Label>
+              <Input
+                value={editForm.model}
+                onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))}
+                placeholder="e.g. PV9000"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={() => editMutation.mutate()} disabled={editMutation.isPending}>
+              {editMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
