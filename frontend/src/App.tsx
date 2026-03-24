@@ -14,6 +14,7 @@ import { TariffProvider } from "@/contexts/TariffContext";
 import { UserRoleProvider } from "@/contexts/UserRoleContext";
 import { DashboardLayoutProvider } from "@/contexts/DashboardLayoutContext";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
+import { SiteProvider } from "@/hooks/useSites";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/components/admin/AdminGuard";
@@ -65,6 +66,7 @@ const App = () => (
               <UserRoleProvider>
                 <AdminAuthProvider>
                   <SetupWizardProvider>
+                    <SiteProvider>
                     <TelemetryProvider>
                       <TariffProvider>
                         <DashboardLayoutProvider>
@@ -120,6 +122,7 @@ const App = () => (
                         </DashboardLayoutProvider>
                       </TariffProvider>
                     </TelemetryProvider>
+                    </SiteProvider>
                   </SetupWizardProvider>
                 </AdminAuthProvider>
               </UserRoleProvider>
