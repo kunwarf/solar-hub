@@ -28,11 +28,14 @@ from .infrastructure.cache.redis_cache import RedisManager
 settings = get_settings()
 
 # Configure logging
+# force=True is required when running under uvicorn --workers: uvicorn pre-configures
+# the root logger before the app module is imported, making a plain basicConfig() a no-op.
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
     format='%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     stream=sys.stdout,
+    force=True,
 )
 logger = logging.getLogger("system_a")
 
