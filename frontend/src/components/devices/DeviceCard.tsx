@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Cpu, Gauge, Settings, Activity, Sun, Home, Grid3X3, ArrowDown, ArrowUp, Unlink, Trash2 } from "lucide-react";
+import { Cpu, Gauge, Settings, Activity, Sun, Home, Grid3X3, ArrowDown, ArrowUp, Unlink, Trash2, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +37,7 @@ interface DeviceCardProps {
     unit: string;
   }[];
   telemetry?: DeviceTelemetry;  // Real-time telemetry from power-flow API
+  onViewDetails?: () => void;
   onConfigure?: () => void;
   onViewTelemetry?: () => void;
   onUnclaim?: () => void;
@@ -174,6 +175,7 @@ export function DeviceCard({
   model,
   serialNumber,
   telemetry,
+  onViewDetails,
   onConfigure,
   onViewTelemetry,
   onUnclaim,
@@ -253,6 +255,15 @@ export function DeviceCard({
 
       {/* Actions */}
       <div className="flex gap-1.5 sm:gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+          onClick={onViewDetails}
+        >
+          <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+          <span>Details</span>
+        </Button>
         <Button
           variant="outline"
           size="sm"

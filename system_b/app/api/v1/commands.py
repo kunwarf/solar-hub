@@ -57,6 +57,7 @@ async def create_command(
             site_id=request.site_id,
             command_type=request.command_type,
             command_params=request.command_params,
+            device_serial=request.device_serial,
             scheduled_at=request.scheduled_at,
             expires_in_minutes=request.expires_in_minutes,
             priority=request.priority,

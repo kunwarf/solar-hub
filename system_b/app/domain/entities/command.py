@@ -49,6 +49,7 @@ class DeviceCommand(Entity):
     """
     device_id: UUID
     site_id: UUID
+    device_serial: Optional[str] = None  # Device serial for direct lookup in device server
     command_type: str  # Using str to allow custom command types
     command_params: Optional[Dict[str, Any]] = None
 

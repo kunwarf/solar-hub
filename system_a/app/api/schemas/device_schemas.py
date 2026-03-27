@@ -80,6 +80,8 @@ class DeviceUpdate(BaseModel):
     """Request to update a device."""
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = Field(None, max_length=1000)
+    manufacturer: Optional[str] = Field(None, max_length=255)
+    model: Optional[str] = Field(None, max_length=255)
     connection_config: Optional[ConnectionConfigSchema] = None
     metadata: Optional[Dict[str, Any]] = None
 

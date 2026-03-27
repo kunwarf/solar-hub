@@ -228,6 +228,7 @@ class DeviceCommandsModel(Base):
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     device_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
     site_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    device_serial: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # Command details
     command_type: Mapped[str] = mapped_column(String(100), nullable=False)

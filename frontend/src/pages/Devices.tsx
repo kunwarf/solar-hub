@@ -88,6 +88,10 @@ const DevicesPage = () => {
   // For backward compatibility, filteredDevices is now just devices from API
   const filteredDevices = devices;
 
+  const handleViewDetails = (deviceId: string) => {
+    navigate(`/devices/${deviceId}`);
+  };
+
   const handleConfigure = (deviceId: string) => {
     navigate(`/devices/${deviceId}/settings`);
   };
@@ -220,6 +224,7 @@ const DevicesPage = () => {
                 {...device}
                 telemetry={deviceTelemetry}
                 delay={index * 0.1}
+                onViewDetails={() => handleViewDetails(device.id)}
                 onConfigure={() => handleConfigure(device.id)}
                 onViewTelemetry={() => handleViewTelemetry(device.id)}
                 onUnclaim={() => unclaimMutation.mutate(device.id)}

@@ -26,7 +26,7 @@
     "register_endpoint": "/api/v1/devices/self-register"
   },
   "device": {
-    "serial": "SH01GWAT9Q7YDV90",
+    "serial": "SH01GWAT9Q7YDV91",
     "name": "Solar Hut Logger",
     "type": "inverter",
     "manufacturer": "Senergy",

@@ -532,6 +532,10 @@ async def update_device(
     # Update fields
     if request.name is not None:
         device.name = request.name
+    if request.manufacturer is not None:
+        device.manufacturer = request.manufacturer
+    if request.model is not None:
+        device.model = request.model
     # Note: description field removed from Device entity
     if request.metadata is not None:
         device.metadata = request.metadata
