@@ -399,3 +399,88 @@ class SerialBridge:
             "errors": 0,
             "reconnects": 0,
         }
+
+    # ── Web config page (called by WebServer /config route) ──────────────────
+
+    def get_config_page(self):
+        from config import get_config as _gc
+        cfg = _gc()
+        sc = cfg.get("serial", {})
+        bc = cfg.get("serial_bridge", {})
+
+        def s(cur, val):
+            return " selected" if cur == val else ""
+
+        p = []
+        p.append('<div class="c"><h2>Serial Port (RS232 / RS485)</h2>')
+        p.append('<form method="POST" action="/config">')
+        p.append('<input type="hidden" name="section" value="port">')
+        p.append('<label>DE Pin (-1=none)</label><input type="number" name="de_pin" value="{}" min="-1" max="16">'.format(sc.get("de_pin", -1)))
+        p.append('<label>RE Pin (-1=none)</label><input type="number" name="re_pin" value="{}" min="-1" max="16">'.format(sc.get("re_pin", -1)))
+        p.append('<label>Baud Rate</label><select name="baudrate">')
+        for b in [9600, 19200, 38400, 57600, 115200]:
+            p.append('<option value="{}"{}>{}</option>'.format(b, s(sc.get("baudrate", 115200), b), b))
+        p.append('</select><label>Parity</label><select name="parity">')
+        for pv, pn in [("N", "None"), ("E", "Even"), ("O", "Odd")]:
+            p.append('<option value="{}"{}>{}</option>'.format(pv, s(sc.get("parity", "N"), pv), pn))
+        p.append('</select><label>Stop Bits</label><select name="stop_bits">')
+        for sv in [1, 2]:
+            p.append('<option value="{}"{}>{}</option>'.format(sv, s(sc.get("stop_bits", 1), sv), sv))
+        passive = "checked" if sc.get("passive", False) else ""
+        p.append('</select><label>RS485 Passive (JK BMS) <input type="checkbox" name="passive" value="1" {}></label>'.format(passive))
+        p.append('<label>Max Frame (bytes)</label><input type="number" name="max_frame_len" value="{}" min="64" max="2048">'.format(sc.get("max_frame_len", 512)))
+        fh = sc.get("frame_header", [0x55, 0xAA, 0xEB, 0x90])
+        p.append('<label>Frame Header (decimal, JK BMS=85,170,235,144)</label><input name="frame_header" value="{}">'.format(
+            ",".join(str(b) for b in fh)))
+        p.append('<label>Prompt</label><select name="prompt">')
+        for pv in ["pylon>", "pytes>", ">"]:
+            p.append('<option value="{}"{}>{}</option>'.format(pv, s(sc.get("prompt", "pylon>"), pv), pv))
+        p.append('</select><label>Response Timeout (ms)</label><input type="number" name="response_timeout_ms" value="{}" min="1000" max="30000">'.format(sc.get("response_timeout_ms", 5000)))
+        p.append('<label>Line Ending</label><select name="line_ending">')
+        stored = sc.get("line_ending", "\r\n").replace("\r\n", "\\r\\n").replace("\n", "\\n").replace("\r", "\\r")
+        for val, lbl in [("\\r\\n", "CR+LF"), ("\\n", "LF"), ("\\r", "CR")]:
+            p.append('<option value="{}"{}>{}</option>'.format(val, s(stored, val), lbl))
+        p.append('</select><button type="submit">Save Port</button></form></div>')
+
+        p.append('<div class="c"><h2>Serial Bridge Server</h2>')
+        p.append('<form method="POST" action="/config">')
+        p.append('<input type="hidden" name="section" value="bridge">')
+        p.append('<label>Host</label><input name="host" value="{}">'.format(bc.get("server_host", "")))
+        p.append('<label>Port</label><input type="number" name="port" value="{}">'.format(bc.get("server_port", 8502)))
+        p.append('<label>Reconnect Delay (s)</label><input type="number" name="reconnect_delay" value="{}">'.format(bc.get("reconnect_delay", 5)))
+        p.append('<label>Keepalive (s)</label><input type="number" name="keepalive_interval" value="{}">'.format(bc.get("keepalive_interval", 1)))
+        p.append('<button type="submit">Save Bridge</button></form></div>')
+        return ''.join(p)
+
+    def save_config(self, body):
+        from config import load_config as _lc, save_config as _sc
+        config = _lc()
+        section = body.get("section", "bridge")
+        if section == "port":
+            sc = config.setdefault("serial", {})
+            sc["uart_id"] = 0
+            sc["de_pin"] = int(body.get("de_pin", -1))
+            sc["re_pin"] = int(body.get("re_pin", -1))
+            sc["baudrate"] = int(body.get("baudrate", 115200))
+            sc["parity"] = body.get("parity", "N")
+            sc["stop_bits"] = int(body.get("stop_bits", 1))
+            sc["passive"] = body.get("passive") == "1"
+            sc["max_frame_len"] = int(body.get("max_frame_len", 512))
+            try:
+                fh = [int(x.strip()) for x in
+                      body.get("frame_header", "85,170,235,144").split(",") if x.strip()]
+                sc["frame_header"] = fh if fh else [0x55, 0xAA, 0xEB, 0x90]
+            except Exception:
+                sc["frame_header"] = [0x55, 0xAA, 0xEB, 0x90]
+            sc["prompt"] = body.get("prompt", "pylon>")
+            sc["response_timeout_ms"] = int(body.get("response_timeout_ms", 5000))
+            le = body.get("line_ending", "\\r\\n")
+            sc["line_ending"] = le.replace("\\r\\n", "\r\n").replace("\\n", "\n").replace("\\r", "\r")
+        else:
+            sb = config.setdefault("serial_bridge", {})
+            sb["server_host"] = body.get("host", "").strip()
+            sb["server_port"] = int(body.get("port", 8502))
+            sb["reconnect_delay"] = int(body.get("reconnect_delay", 5))
+            sb["keepalive_interval"] = int(body.get("keepalive_interval", 1))
+        _sc(config)
+        return '<p class="ok">Saved. Reboot to apply.</p>' + self.get_config_page()

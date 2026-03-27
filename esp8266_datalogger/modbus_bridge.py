@@ -340,3 +340,67 @@ class ModbusBridge:
             "errors": 0,
             "reconnects": 0,
         }
+
+    # ── Web config page (called by WebServer /config route) ──────────────────
+
+    def get_config_page(self):
+        from config import get_config as _gc
+        cfg = _gc()
+        rc = cfg.get("rtu", {})
+        bc = cfg.get("modbus_bridge", {})
+
+        def s(cur, val):
+            return " selected" if cur == val else ""
+
+        p = []
+        p.append('<div class="c"><h2>Modbus RTU (RS485)</h2>')
+        p.append('<form method="POST" action="/config">')
+        p.append('<input type="hidden" name="section" value="rtu">')
+        p.append('<label>DE Pin</label><input type="number" name="de_pin" value="{}" min="0" max="16">'.format(rc.get("de_pin", 4)))
+        p.append('<label>RE Pin</label><input type="number" name="re_pin" value="{}" min="0" max="16">'.format(rc.get("re_pin", 5)))
+        p.append('<label>Unit ID (0=pass-through)</label><input type="number" name="unit_id" value="{}" min="0" max="247">'.format(rc.get("unit_id", 1)))
+        p.append('<label>Baud Rate</label><select name="baudrate">')
+        for b in [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]:
+            p.append('<option value="{}"{}>{}</option>'.format(b, s(rc.get("baudrate", 9600), b), b))
+        p.append('</select><label>Parity</label><select name="parity">')
+        for pv, pn in [("N", "None"), ("E", "Even"), ("O", "Odd")]:
+            p.append('<option value="{}"{}>{}</option>'.format(pv, s(rc.get("parity", "N"), pv), pn))
+        p.append('</select><label>Stop Bits</label><select name="stop_bits">')
+        for sv in [1, 2]:
+            p.append('<option value="{}"{}>{}</option>'.format(sv, s(rc.get("stop_bits", 1), sv), sv))
+        p.append('</select><label>Timeout (ms)</label><input type="number" name="timeout_ms" value="{}" min="100" max="10000">'.format(rc.get("timeout_ms", 1000)))
+        p.append('<button type="submit">Save RTU</button></form></div>')
+
+        p.append('<div class="c"><h2>Bridge Server</h2>')
+        p.append('<form method="POST" action="/config">')
+        p.append('<input type="hidden" name="section" value="server">')
+        p.append('<label>Host</label><input name="host" value="{}">'.format(bc.get("server_host", "")))
+        p.append('<label>Port</label><input type="number" name="port" value="{}">'.format(bc.get("server_port", 8502)))
+        p.append('<label>Reconnect Delay (s)</label><input type="number" name="reconnect_delay" value="{}">'.format(bc.get("reconnect_delay", 5)))
+        p.append('<label>Keepalive (s)</label><input type="number" name="keepalive_interval" value="{}">'.format(bc.get("keepalive_interval", 1)))
+        p.append('<button type="submit">Save Server</button></form></div>')
+        return ''.join(p)
+
+    def save_config(self, body):
+        from config import load_config as _lc, save_config as _sc
+        config = _lc()
+        section = body.get("section", "server")
+        if section == "rtu":
+            rc = config.setdefault("rtu", {})
+            rc["uart_id"] = 0
+            rc["de_pin"] = int(body.get("de_pin", 4))
+            rc["re_pin"] = int(body.get("re_pin", 5))
+            rc["unit_id"] = int(body.get("unit_id", 1))
+            rc["baudrate"] = int(body.get("baudrate", 9600))
+            rc["parity"] = body.get("parity", "N")
+            rc["stop_bits"] = int(body.get("stop_bits", 1))
+            rc["data_bits"] = 8
+            rc["timeout_ms"] = int(body.get("timeout_ms", 1000))
+        else:
+            mb = config.setdefault("modbus_bridge", {})
+            mb["server_host"] = body.get("host", "").strip()
+            mb["server_port"] = int(body.get("port", 8502))
+            mb["reconnect_delay"] = int(body.get("reconnect_delay", 5))
+            mb["keepalive_interval"] = int(body.get("keepalive_interval", 1))
+        _sc(config)
+        return '<p class="ok">Saved. Reboot to apply.</p>' + self.get_config_page()
