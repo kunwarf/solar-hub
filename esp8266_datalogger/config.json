@@ -1,0 +1,33 @@
+{
+  "mode": "modbus_bridge",
+  "rtu": {
+    "uart_id": 0,
+    "de_pin": 4,
+    "re_pin": 5,
+    "unit_id": 1,
+    "baudrate": 9600,
+    "parity": "N",
+    "stop_bits": 1,
+    "data_bits": 8,
+    "timeout_ms": 1000
+  },
+  "modbus_bridge": {
+    "server_host": "182.180.150.107",
+    "server_port": 8502,
+    "reconnect_delay": 5,
+    "keepalive_interval": 1
+  },
+  "api": {
+    "base_url": "http://182.180.150.107:8001",
+    "register_endpoint": "/api/v1/devices/self-register"
+  },
+  "device": {
+    "serial": "124",
+    "name": "Solar Logger (ESP8266)",
+    "type": "inverter",
+    "manufacturer": "SolarHub",
+    "firmware_version": "1.0.0",
+    "protocol": "modbus_rtu",
+    "model": ""
+  }
+}
