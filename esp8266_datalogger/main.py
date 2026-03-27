@@ -58,23 +58,12 @@ def main():
 
     gc.collect()
 
-    # Initialize WiFi manager
-    # NOTE: get_device_id() must NOT be called before this — it calls
-    # network.WLAN().active(True) which can leave the driver in a broken
-    # state for the real init.
-    wifi = WiFiManager()
-    print("Device ID:", get_device_id())
-
-    # Try to connect to saved WiFi
-    connected = wifi.connect_sta(timeout_s=15)
-
-    if not connected:
-        print("[Main] Starting configuration AP...")
-        ap_ssid = wifi.start_ap()
-        print("[Main] Connect to WiFi: {} (password: {})".format(ap_ssid, AP_PASSWORD))
-        print("[Main] Then open http://192.168.4.1/")
-
-    # Deferred imports — gc.collect() between each to free compilation buffers
+    # Import modules BEFORE WiFi connects.
+    # WiFi association fragments the heap with many small allocs/frees so that
+    # even gc.collect() cannot satisfy a modest contiguous request.  Loading
+    # modules first compiles them on a clean heap and avoids that problem.
+    # NOTE: get_device_id() must NOT be called before WiFiManager() — it calls
+    # network.WLAN().active(True) which can leave the driver in a broken state.
     gc.collect()
     if mode == "serial_bridge":
         from serial_port import SerialPort
@@ -83,10 +72,6 @@ def main():
         gc.collect()
         from web_server import WebServer
         gc.collect()
-
-        serial = SerialPort(config["serial"])
-        bridge = SerialBridge(serial, config)
-        web = WebServer(wifi, serial_bridge=bridge)
     else:
         from modbus_rtu import ModbusRTU
         gc.collect()
@@ -95,6 +80,24 @@ def main():
         from web_server import WebServer
         gc.collect()
 
+    # Now initialise WiFi (heap is in good shape after the imports above)
+    wifi = WiFiManager()
+    print("Device ID:", get_device_id())
+
+    connected = wifi.connect_sta(timeout_s=15)
+
+    if not connected:
+        print("[Main] Starting configuration AP...")
+        ap_ssid = wifi.start_ap()
+        print("[Main] Connect to WiFi: {} (password: {})".format(ap_ssid, AP_PASSWORD))
+        print("[Main] Then open http://192.168.4.1/")
+
+    gc.collect()
+    if mode == "serial_bridge":
+        serial = SerialPort(config["serial"])
+        bridge = SerialBridge(serial, config)
+        web = WebServer(wifi, serial_bridge=bridge)
+    else:
         rtu = ModbusRTU(config["rtu"])
         bridge = ModbusBridge(rtu, config)
         web = WebServer(wifi, bridge, rtu)
