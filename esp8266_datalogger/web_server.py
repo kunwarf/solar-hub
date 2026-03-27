@@ -136,8 +136,6 @@ class WebServer:
                     content = ab.save_config(body) if method == "POST" else ab.get_config_page()
             elif path == "/reboot":
                 content = self._handle_reboot()
-            elif path == "/api/status":
-                return self._json_response(self._get_status_json())
             else:
                 return self._response(404, "Not Found")
             return self._response(200, content)
@@ -172,9 +170,6 @@ class WebServer:
 
     def _response(self, code, body="", content_type="text/html"):
         return (code, content_type, body)
-
-    def _json_response(self, data, status=200):
-        return (status, "application/json", json.dumps(data))
 
     def _send_result(self, client, result):
         code, ct, body = result
@@ -285,26 +280,15 @@ class WebServer:
 
         p.append('<div class="c"><h2>Identity</h2><form method="POST" action="/device">')
         p.append('<input type="hidden" name="section" value="identity">')
-        p.append('<label>Serial Number</label><input name="serial" value="{}" placeholder="SH01XXXXXXXX">'.format(
-            dc.get("serial", "")))
-        p.append('<label>Name</label><input name="name" value="{}" placeholder="Solar Logger 1">'.format(
-            dc.get("name", "")))
+        p.append('<label>Serial</label><input name="serial" value="{}" placeholder="SH01XXXXXXXX">'.format(dc.get("serial", "")))
         p.append('<label>Type</label><select name="type">')
         for val in ["inverter", "battery", "meter", "gateway"]:
             p.append('<option value="{}"{}>{}</option>'.format(val, s(dc.get("type", "inverter"), val), val.capitalize()))
-        p.append('</select>')
-        p.append('<label>Manufacturer</label><input name="manufacturer" value="{}" placeholder="SolarHub">'.format(
-            dc.get("manufacturer", "SolarHub")))
-        p.append('<label>Model</label><input name="model" value="{}" placeholder="e.g. US5000">'.format(
-            dc.get("model", "")))
-        p.append('<label>Protocol</label><select name="protocol">')
-        for val, lbl in [("modbus_tcp", "Modbus TCP"), ("command", "Command (Pylontech/Pytes)"),
+        p.append('</select><label>Protocol</label><select name="protocol">')
+        for val, lbl in [("modbus_tcp", "Modbus TCP"), ("command", "Command"),
                          ("jkbms_serial", "JK BMS Serial"), ("jkbms_modbus", "JK BMS Modbus")]:
             p.append('<option value="{}"{}>{}</option>'.format(val, s(dc.get("protocol", "modbus_tcp"), val), lbl))
-        p.append('</select>')
-        p.append('<label>Firmware</label><input name="firmware_version" value="{}">'.format(
-            dc.get("firmware_version", "1.0.0")))
-        p.append('<button type="submit">Save Identity</button></form></div>')
+        p.append('</select><button type="submit">Save Identity</button></form></div>')
         return ''.join(p)
 
     def _handle_device_save(self, body):
@@ -319,11 +303,7 @@ class WebServer:
             serial = body.get("serial", "").strip()
             if serial:
                 dc["serial"] = serial
-            dc["name"] = body.get("name", "").strip()
             dc["type"] = body.get("type", "inverter")
-            dc["manufacturer"] = body.get("manufacturer", "SolarHub").strip()
-            dc["model"] = body.get("model", "").strip()
-            dc["firmware_version"] = body.get("firmware_version", "1.0.0").strip()
             proto = body.get("protocol", "modbus_tcp")
             if proto in ("modbus_tcp", "command", "jkbms_serial", "jkbms_modbus"):
                 dc["protocol"] = proto
@@ -335,17 +315,4 @@ class WebServer:
         return ('<div class="c"><p class="ok">Rebooting...</p>'
                 '<script>setTimeout(function(){location.href="/";},5000);</script></div>')
 
-    def _get_status_json(self):
-        ws = self.wifi.get_status()
-        ab = self.bridge or self.serial_bridge
-        bs = ab.get_stats() if ab else {}
-        return {
-            "device_id": get_device_id(),
-            "platform": "ESP8266",
-            "wifi": ws,
-            "bridge": {
-                "connected": ab.is_connected() if ab else False,
-                "type": "serial" if self.serial_bridge and not self.bridge else "modbus",
-                "stats": bs,
-            }
-        }
+

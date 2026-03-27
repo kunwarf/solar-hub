@@ -51,36 +51,46 @@ def main():
     print("Solar Data Logger (ESP8266)")
     print("=" * 50 + "\n")
 
-    # Load configuration
-    config = get_config()
-    mode = config.get("mode", "modbus_bridge")
-    print("[Main] Mode:", mode)
-
+    # Read mode from raw JSON first — avoids building the full merged config dict
+    # (~2KB) during the critical import window when heap space is tightest.
+    try:
+        import ujson
+        with open("config.json") as _f:
+            mode = ujson.load(_f).get("mode", "modbus_bridge")
+        del ujson, _f
+    except Exception:
+        mode = "modbus_bridge"
     gc.collect()
 
-    # Import modules BEFORE WiFi connects.
-    # WiFi association fragments the heap with many small allocs/frees so that
-    # even gc.collect() cannot satisfy a modest contiguous request.  Loading
-    # modules first compiles them on a clean heap and avoids that problem.
+    print("[Main] Mode:", mode)
+
+    # Import modules BEFORE WiFi connects and before get_config().
+    # get_config() builds a ~2KB merged dict — deferring it to after all
+    # imports keeps that memory free during the critical compilation window.
+    # Import order: largest file first (most free heap available).
     # NOTE: get_device_id() must NOT be called before WiFiManager() — it calls
     # network.WLAN().active(True) which can leave the driver in a broken state.
     gc.collect()
     if mode == "serial_bridge":
-        from serial_port import SerialPort
-        gc.collect()
         from serial_bridge import SerialBridge
+        gc.collect()
+        from serial_port import SerialPort
         gc.collect()
         from web_server import WebServer
         gc.collect()
     else:
-        from modbus_rtu import ModbusRTU
-        gc.collect()
         from modbus_bridge import ModbusBridge
+        gc.collect()
+        from modbus_rtu import ModbusRTU
         gc.collect()
         from web_server import WebServer
         gc.collect()
 
-    # Now initialise WiFi (heap is in good shape after the imports above)
+    # Now load full config — heap is in good shape after all imports
+    config = get_config()
+    gc.collect()
+
+    # Now initialise WiFi
     wifi = WiFiManager()
     print("Device ID:", get_device_id())
 
