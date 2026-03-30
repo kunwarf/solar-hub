@@ -17,7 +17,7 @@ def register_billing_jobs(scheduler: AsyncIOScheduler) -> None:
     # Daily billing job at 00:30 Asia/Karachi
     scheduler.add_job(
         daily_billing_job,
-        CronTrigger(hour=0, minute=30),
+        CronTrigger(hour=0, minute=30, timezone="Asia/Karachi"),
         id="daily_billing",
         name="Daily billing computation",
         replace_existing=True,
@@ -27,7 +27,7 @@ def register_billing_jobs(scheduler: AsyncIOScheduler) -> None:
     # This is a safety net to ensure cycle settlements happen
     scheduler.add_job(
         cycle_settlement_check_job,
-        CronTrigger(day=15, hour=1, minute=0),
+        CronTrigger(day=15, hour=1, minute=0, timezone="Asia/Karachi"),
         id="cycle_settlement_check",
         name="Billing cycle settlement check",
         replace_existing=True,
