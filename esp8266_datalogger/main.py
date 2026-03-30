@@ -35,6 +35,7 @@ def main():
     # config.py and wifi_manager.py are deliberately NOT imported yet —
     # their compilation cycles would fragment the heap before this point.
     gc.collect()
+    print("Free:", gc.mem_free(), "Alloc:", gc.mem_alloc())
     if mode == "serial_bridge":
         from serial_bridge import SerialBridge
         gc.collect()
