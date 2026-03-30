@@ -189,10 +189,13 @@ async def get_running_bill(
     snapshot = await nm_repo.get_daily_snapshot(site_id, target_date)
 
     if not snapshot:
-        # Try yesterday if today's not ready yet (still within current billing period)
-        yesterday = target_date - timedelta(days=1)
-        if yesterday >= month_start:
-            snapshot = await nm_repo.get_daily_snapshot(site_id, yesterday)
+        # Today's snapshot isn't ready yet — find the most recent one in the
+        # billing period. This handles gaps of more than one day (e.g. scheduler
+        # didn't run, user skipped a day, or device was offline).
+        recent = await nm_repo.get_daily_snapshots_for_period(
+            site_id, month_start, target_date - timedelta(days=1)
+        )
+        snapshot = recent[-1] if recent else None
 
     # If no snapshot found for current billing period, return zeros
     # This happens when billing data is being regenerated after recalculation

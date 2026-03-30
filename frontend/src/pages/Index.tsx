@@ -36,6 +36,7 @@ import { devicesService } from "@/api/services/devices.service";
 import { sitesService } from "@/api/services/sites.service";
 import { dashboardService } from "@/api/services/dashboard.service";
 import { useNetMetering } from "@/hooks/use-net-metering";
+import { useBillingConfig } from "@/hooks/use-billing-config";
 
 // Default billing data (used when API data is not yet loaded)
 const defaultBillingSummaryData = {
@@ -107,6 +108,8 @@ const Index = () => {
     const interval = setInterval(fetchWeeklyData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const { getCurrencySymbol } = useBillingConfig();
 
   // Use net metering hook for real billing data
   const {
@@ -235,7 +238,7 @@ const Index = () => {
     {
       title: "Monthly Bill Estimate",
       value: Math.round(billingSummaryData.currentMonthEstimate || stats.monthlyBillAmount).toString(),
-      unit: "$",
+      unit: getCurrencySymbol(),
       icon: Receipt,
       variant: "financial" as const,
       tooltip: "Estimated electricity bill for current billing period (month-to-date)",
@@ -244,7 +247,7 @@ const Index = () => {
     {
       title: "This Month Savings",
       value: Math.round(billingSummaryData.monthlySavings || stats.moneySaved).toString(),
-      unit: "$",
+      unit: getCurrencySymbol(),
       icon: DollarSign,
       variant: "savings" as const,
       trend: { value: 8, isPositive: true },
