@@ -12,5 +12,12 @@ from .jkbms_parser import JKBMSParser
 from .jkbms_modbus_parser import JKBMSModbusParser
 from .jkbms_parser import parse_jkbms_bus_dump
 from .senergy_parser import SenergyParser
+from .voltronic_parser import VoltronicPI30Parser, VoltronicPI18Parser
 
-__all__ = ['TelemetryParser', 'TelemetryMetric', 'DeyeHybridParser', 'PowdriveParser', 'PylontechParser', 'JKBMSParser', 'JKBMSModbusParser', 'SenergyParser', 'parse_jkbms_bus_dump']
+__all__ = [
+    'TelemetryParser', 'TelemetryMetric',
+    'DeyeHybridParser', 'PowdriveParser', 'PylontechParser',
+    'JKBMSParser', 'JKBMSModbusParser', 'SenergyParser',
+    'VoltronicPI30Parser', 'VoltronicPI18Parser',
+    'parse_jkbms_bus_dump',
+]

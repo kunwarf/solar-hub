@@ -100,6 +100,90 @@ protocols:
       battery_current_sign_convention: "positive_discharging"
 
   # ============================================
+  # VOLTRONIC INVERTERS (serial command protocol)
+  # ============================================
+
+  - id: voltronic_pi30
+    name: "Voltronic Inverter (PI30)"
+    description: >
+      Voltronic Power Axpert / PIP / MKS hybrid inverters using the PI30 serial protocol.
+      Communicates via RS232 through an ESP8266/ESP32 serial bridge.
+      QPIGS returns 21 fields; single MPPT string; separate charge/discharge currents.
+    device_type: inverter
+    protocol_type: command
+    priority: 15
+    manufacturer: "Voltronic Power"
+
+    identification:
+      # QPI command with CRC-XMODEM: bytes 51 50 49 BE AC 0D
+      # Pre-computed CRC verified against spec (QPIGS CRC=B7A9, QPI CRC=BEAC).
+      # The prober sends this as raw bytes and checks the stripped response
+      # contains 'PI30'.
+      command: "\\x51\\x50\\x49\\xbe\\xac\\x0d"
+      expected_response: "PI30"
+      timeout: 5.0
+
+    serial_number:
+      # QID returns (SERIAL_NUMBER + CRC + CR.  Regex extracts alphanumeric string.
+      command: "\\x51\\x49\\x44\\xd6\\xea\\x0d"
+      parse_regex: "\\(([A-Z0-9]{8,})"
+
+    polling:
+      default_interval: 10
+      min_interval: 5
+      max_interval: 60
+      timeout: 10.0
+      max_consecutive_failures: 5
+      retry_delay: 2.0
+
+    command:
+      # Voltronic serial: CR-only terminator (0x0D), no LF.
+      line_ending: "\r"
+      response_timeout: 8.0
+      command_delay: 0.1
+
+    telemetry:
+      # Positive = discharging, negative = charging.
+      # Adapter derives battery_power_w = (discharge_A - charge_A) × voltage.
+      battery_power_sign_convention: "positive_discharging"
+
+  - id: voltronic_pi18
+    name: "Voltronic Inverter (PI18)"
+    description: >
+      Voltronic Power Axpert Max / InfiniSolar inverters using the PI18 serial protocol.
+      PI18 is a newer, longer protocol: GS query returns 28 fields, dual MPPT strings,
+      integer×10 encoding for V/Hz, and discrete battery-direction status codes.
+    device_type: inverter
+    protocol_type: command
+    priority: 14
+    manufacturer: "Voltronic Power"
+
+    identification:
+      command: "\\x51\\x50\\x49\\xbe\\xac\\x0d"
+      expected_response: "PI18"
+      timeout: 5.0
+
+    serial_number:
+      command: "\\x51\\x49\\x44\\xd6\\xea\\x0d"
+      parse_regex: "\\(([A-Z0-9]{8,})"
+
+    polling:
+      default_interval: 10
+      min_interval: 5
+      max_interval: 60
+      timeout: 10.0
+      max_consecutive_failures: 5
+      retry_delay: 2.0
+
+    command:
+      line_ending: "\r"
+      response_timeout: 8.0
+      command_delay: 0.1
+
+    telemetry:
+      battery_power_sign_convention: "positive_discharging"
+
+  # ============================================
   # ENERGY METERS
   # ============================================
 

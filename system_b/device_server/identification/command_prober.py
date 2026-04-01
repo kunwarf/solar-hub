@@ -276,6 +276,94 @@ class CommandProber:
             extra_data={"response_header": response[:10].hex()},
         )
 
+    async def probe_voltronic(
+        self,
+        connection: TCPConnection,
+        protocol: ProtocolDefinition,
+    ) -> Optional[IdentifiedDevice]:
+        """
+        Probe for a Voltronic inverter using the QPI protocol-detection command.
+
+        Voltronic uses binary framing: ASCII command + CRC-XMODEM (2 bytes) + CR.
+        QPI frame bytes: 51 50 49 BE AC 0D  (pre-computed, verified against spec).
+
+        Responses start with '(' and end with 2 CRC bytes + CR.  We check that
+        the stripped response contains the expected protocol family string
+        ('PI30' for voltronic_pi30, 'PI18' for voltronic_pi18).
+
+        Serial number is read via QID (51 49 44 + CRC + CR).
+        """
+        # QPI frame: command 'QPI' + CRC 0xBEAC + CR — hardcoded for speed,
+        # but we also import the helper if available for future commands.
+        QPI_FRAME = b"QPI\xbe\xac\r"
+        QID_FRAME = b"QID\xd6\xea\r"
+
+        ident_config = protocol.identification
+        expected_family = ident_config.expected_response or ""  # e.g. "PI30"
+
+        # Send QPI
+        response = await self.send_binary_command(
+            connection,
+            QPI_FRAME,
+            response_timeout=ident_config.timeout,
+        )
+
+        if not response or not response.startswith(b"("):
+            logger.debug(
+                "Voltronic probe: no valid QPI response from %s",
+                connection.remote_addr,
+            )
+            return None
+
+        # Strip framing: skip '(', drop last 3 bytes (CRC×2 + CR)
+        cr_pos = response.rfind(b"\r")
+        if cr_pos < 3:
+            return None
+        data_str = response[1 : cr_pos - 2].decode("ascii", errors="replace").strip()
+
+        if expected_family and expected_family.upper() not in data_str.upper():
+            logger.debug(
+                "Voltronic probe: expected '%s' not found in QPI response '%s'",
+                expected_family,
+                data_str,
+            )
+            return None
+
+        logger.info(
+            "Identified Voltronic %s inverter on %s (QPI=%r)",
+            data_str,
+            connection.remote_addr,
+            data_str,
+        )
+
+        # Read serial number via QID
+        serial_number: Optional[str] = None
+        sn_response = await self.send_binary_command(
+            connection,
+            QID_FRAME,
+            response_timeout=self.timeout,
+        )
+        if sn_response and sn_response.startswith(b"("):
+            cr_pos2 = sn_response.rfind(b"\r")
+            if cr_pos2 >= 3:
+                sn_str = sn_response[1 : cr_pos2 - 2].decode("ascii", errors="replace").strip()
+                if sn_str:
+                    serial_number = sn_str
+
+        if not serial_number:
+            serial_number = (
+                f"voltronic_{connection.remote_ip}_{connection.remote_port}"
+            )
+
+        return IdentifiedDevice(
+            protocol_id=protocol.protocol_id,
+            serial_number=serial_number,
+            device_type=protocol.device_type.value,
+            model=data_str,          # e.g. "PI30"
+            manufacturer="Voltronic Power",
+            extra_data={"qpi_response": data_str},
+        )
+
     async def probe(
         self,
         connection: TCPConnection,
@@ -301,6 +389,8 @@ class CommandProber:
             return await self.probe_pytes(connection, protocol)
         elif "jkbms" in protocol.protocol_id.lower():
             return await self.probe_jkbms(connection, protocol)
+        elif "voltronic" in protocol.protocol_id.lower():
+            return await self.probe_voltronic(connection, protocol)
         else:
             # Generic command probe
             return await self._generic_probe(connection, protocol)

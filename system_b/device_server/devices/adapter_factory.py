@@ -468,6 +468,11 @@ class TCPCommandAdapter:
         # via Modbus request frames, returns latest per-unit telemetry.
         self._jkbms_stream: Optional[Any] = None
 
+        # Voltronic: detected protocol family (PI30 / PI18), set on first poll.
+        self._voltronic_pid: Optional[str] = None
+        # Counter used to poll QPIWS/QPIRI at reduced frequency.
+        self._voltronic_poll_count: int = 0
+
     async def _keepalive_loop(self) -> None:
         """
         Respond to PING frames from the ESP32 during idle periods between polls.
@@ -754,6 +759,12 @@ class TCPCommandAdapter:
                 f"{len(all_cells)} cells total"
             )
 
+        # Voltronic inverters (PI30 / PI18) — serial bridge path only.
+        # Protocol family is detected via QPI on first poll; subsequent polls
+        # use QPIGS (PI30) or GS (PI18), QMOD, and QPIWS.
+        elif "voltronic" in pid:
+            values = await self._poll_voltronic()
+
         # For JK BMS serial bridge: reference approach — ESP32 is a dumb byte
         # pipe returning a burst of raw RS485 bytes per poll.  The stateful
         # JKBMSStreamParser accumulates these across polls, tracks
@@ -777,6 +788,82 @@ class TCPCommandAdapter:
             if result:
                 values.update(result)
 
+        return values
+
+    async def _voltronic_detect_protocol(self) -> Optional[str]:
+        """
+        Send QPI and return the protocol family string ('PI30', 'PI18', …).
+
+        Returns None if QPI fails or the response is unrecognised.
+        The result is cached in self._voltronic_pid by the caller.
+        """
+        raw = await self.send_command_bytes(_build_voltronic_cmd("QPI"))
+        data = _strip_voltronic_frame(raw)
+        if not data:
+            return None
+        data = data.upper()
+        for family in ("PI30", "PI18", "PI16", "PI41"):
+            if family in data:
+                logger.info("Voltronic: detected protocol %s", family)
+                return family
+        logger.warning("Voltronic: unrecognised QPI response %r, defaulting to PI30", data)
+        return "PI30"
+
+    async def _poll_voltronic(self) -> Dict[str, Any]:
+        """
+        Poll a Voltronic inverter via the ESP8266/ESP32 serial bridge.
+
+        Step 1  — Detect protocol family (QPI) on first poll only.
+        Step 2  — Query general status: QPIGS (PI30) or GS (PI18).
+        Step 3  — Query working mode (QMOD) every poll.
+        Step 4  — Query warning status (QPIWS) every 5th poll.
+        Step 5  — Derive battery_power_w and grid_power_w.
+        """
+        # Step 1: protocol detection (once)
+        if self._voltronic_pid is None:
+            self._voltronic_pid = await self._voltronic_detect_protocol() or "PI30"
+
+        pid = self._voltronic_pid
+        values: Dict[str, Any] = {"voltronic_protocol_id": pid}
+
+        # Step 2: general status
+        if pid == "PI18":
+            raw = await self.send_command_bytes(_build_voltronic_cmd("GS"))
+            data = _strip_voltronic_frame(raw)
+            if data:
+                values.update(_parse_voltronic_fields(data, _PI18_GS_FIELDS))
+        else:
+            # PI30 (and PI16/PI41 as best-effort)
+            raw = await self.send_command_bytes(_build_voltronic_cmd("QPIGS"))
+            data = _strip_voltronic_frame(raw)
+            if data:
+                values.update(_parse_voltronic_fields(data, _PI30_QPIGS_FIELDS))
+
+        # Step 3: working mode
+        raw = await self.send_command_bytes(_build_voltronic_cmd("QMOD"))
+        mode_data = _strip_voltronic_frame(raw)
+        if mode_data:
+            values["working_mode_raw"] = mode_data[:1]
+
+        # Step 4: warning/fault status (every 5th poll to reduce bus load)
+        self._voltronic_poll_count += 1
+        if self._voltronic_poll_count % 5 == 1:
+            raw = await self.send_command_bytes(_build_voltronic_cmd("QPIWS"))
+            ws_data = _strip_voltronic_frame(raw)
+            if ws_data:
+                values["warning_status_raw"] = ws_data
+
+        # Step 5: derived quantities
+        _compute_voltronic_battery_power(values)
+        _compute_voltronic_grid_power(values)
+
+        logger.debug(
+            "Voltronic %s poll: %d fields, bat_pwr=%.0fW, grid_pwr=%.0fW",
+            pid,
+            len(values),
+            values.get("battery_power_w", 0),
+            values.get("grid_power_w", 0),
+        )
         return values
 
 
@@ -895,6 +982,166 @@ def _parse_pylontech_bat_cells(
             "voltage_v": volt_mv / 1000.0,
         })
     return cells
+
+
+# =============================================================================
+# Voltronic serial protocol helpers (module-level, used by TCPCommandAdapter)
+# =============================================================================
+
+def _voltronic_crc(data: bytes) -> bytes:
+    """
+    CRC-XMODEM over command bytes (poly 0x1021, init 0, no reflection).
+
+    Returns two bytes with reserved values escaped:
+      0x28 → 0x29  (avoids collision with response leader '(')
+      0x0D → 0x0E  (avoids collision with frame terminator CR)
+      0x0A → 0x0B  (avoids collision with LF)
+    """
+    crc = 0
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) if (crc & 0x8000) else (crc << 1)
+        crc &= 0xFFFF
+
+    def _esc(b: int) -> int:
+        return b + 1 if b in (0x28, 0x0D, 0x0A) else b
+
+    return bytes([_esc((crc >> 8) & 0xFF), _esc(crc & 0xFF)])
+
+
+def _build_voltronic_cmd(cmd: str) -> bytes:
+    """Build a Voltronic command frame: ASCII command + CRC(2) + CR."""
+    data = cmd.encode("ascii")
+    return data + _voltronic_crc(data) + b"\r"
+
+
+def _strip_voltronic_frame(raw: Optional[bytes]) -> Optional[str]:
+    """
+    Strip Voltronic response framing and return the bare data string.
+
+    Frame: ( <data> <CRC_H> <CRC_L> CR
+    Returns None if the response is absent or malformed.
+    """
+    if not raw or not raw.startswith(b"("):
+        return None
+    cr_pos = raw.rfind(b"\r")
+    if cr_pos < 3:  # need at least '(' + 1 byte + 2 CRC + CR
+        return None
+    # Slice: skip leading '(', drop 2 CRC bytes before CR
+    return raw[1 : cr_pos - 2].decode("ascii", errors="replace").strip()
+
+
+# QPIGS PI30 — 21 space-separated fields (indices 0-20)
+_PI30_QPIGS_FIELDS = [
+    ("grid_voltage_v",              float),
+    ("grid_frequency_hz",           float),
+    ("ac_output_voltage_v",         float),
+    ("ac_output_frequency_hz",      float),
+    ("ac_output_apparent_va",       int),
+    ("ac_output_active_w",          int),
+    ("output_load_pct",             int),
+    ("bus_voltage_v",               int),
+    ("battery_voltage_v",           float),
+    ("battery_charging_current_a",  int),
+    ("battery_capacity_pct",        int),
+    ("heatsink_temp_c",             int),
+    ("pv_input_current_a",          float),
+    ("pv_input_voltage_v",          float),
+    ("battery_scc_voltage_v",       float),
+    ("battery_discharge_current_a", int),
+    ("device_status_raw",           str),   # 8-bit flag string
+    ("rsv_battery_offset",          int),
+    ("eeprom_version",              int),
+    ("pv_input_power_w",            int),
+    ("device_status2_raw",          str),   # 3-bit flag string
+]
+
+# GS PI18 — 28 space-separated fields (indices 0-27)
+# Fields 0-3, 7-9, 18-19 are integer×10 (divide by 10 for actual value).
+_PI18_GS_FIELDS = [
+    ("grid_voltage_v",              lambda x: int(x) / 10),
+    ("grid_frequency_hz",           lambda x: int(x) / 10),
+    ("ac_output_voltage_v",         lambda x: int(x) / 10),
+    ("ac_output_frequency_hz",      lambda x: int(x) / 10),
+    ("ac_output_apparent_va",       int),
+    ("ac_output_active_w",          int),
+    ("output_load_pct",             int),
+    ("battery_voltage_v",           lambda x: int(x) / 10),
+    ("battery_scc1_voltage_v",      lambda x: int(x) / 10),
+    ("battery_scc2_voltage_v",      lambda x: int(x) / 10),
+    ("battery_discharge_current_a", int),
+    ("battery_charging_current_a",  int),
+    ("battery_capacity_pct",        int),
+    ("heatsink_temp_c",             int),
+    ("mppt1_temp_c",                int),
+    ("mppt2_temp_c",                int),
+    ("pv1_input_power_w",           int),
+    ("pv2_input_power_w",           int),
+    ("pv1_input_voltage_v",         lambda x: int(x) / 10),
+    ("pv2_input_voltage_v",         lambda x: int(x) / 10),
+    ("config_status",               int),   # option code
+    ("mppt1_charger_status",        int),   # option code
+    ("mppt2_charger_status",        int),   # option code
+    ("load_connection",             int),   # option code
+    ("battery_power_direction",     int),   # 0=idle, 1=charging, 2=discharging
+    ("dc_ac_power_direction",       int),   # option code
+    ("line_power_direction",        int),   # 0=idle, 1=input, 2=output
+    ("parallel_id",                 int),
+]
+
+
+def _parse_voltronic_fields(
+    data: str,
+    field_defs: list,
+) -> Dict[str, Any]:
+    """Parse space-separated Voltronic response data into a dict."""
+    parts = data.split()
+    result: Dict[str, Any] = {}
+    for i, (name, conv) in enumerate(field_defs):
+        if i >= len(parts):
+            break
+        try:
+            result[name] = conv(parts[i])
+        except (ValueError, TypeError):
+            logger.debug("Voltronic: could not parse field %s=%r", name, parts[i])
+    return result
+
+
+def _compute_voltronic_battery_power(values: Dict[str, Any]) -> None:
+    """
+    Derive battery_power_w from separate charge/discharge current fields.
+
+    Convention (positive_discharging):
+      positive → battery supplying load (discharging)
+      negative → battery absorbing power (charging)
+    """
+    bat_v = values.get("battery_voltage_v")
+    chg_a = values.get("battery_charging_current_a")
+    dis_a = values.get("battery_discharge_current_a")
+    if bat_v is None:
+        return
+    chg = float(chg_a or 0)
+    dis = float(dis_a or 0)
+    # net: positive = discharging
+    values["battery_power_w"] = round((dis - chg) * float(bat_v), 1)
+
+
+def _compute_voltronic_grid_power(values: Dict[str, Any]) -> None:
+    """
+    Derive grid_power_w via energy balance:
+      grid = load - pv - battery_net
+    Negative result = exporting to grid.
+    """
+    load = values.get("ac_output_active_w") or values.get("load_power_w")
+    pv = (
+        values.get("pv_input_power_w")
+        or (values.get("pv1_input_power_w", 0) + values.get("pv2_input_power_w", 0))
+    )
+    bat = values.get("battery_power_w", 0)
+    if load is None:
+        return
+    values["grid_power_w"] = round(float(load) - float(pv or 0) - float(bat), 1)
 
 
 class AdapterFactory:

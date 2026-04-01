@@ -21,7 +21,12 @@ except ImportError:
     asyncpg = None
 
 from ..config import DeviceServerSettings, get_device_server_settings
-from ..telemetry import DeyeHybridParser, JKBMSModbusParser, JKBMSParser, PowdriveParser, PylontechParser, SenergyParser, TelemetryMetric, TelemetryParser
+from ..telemetry import (
+    DeyeHybridParser, JKBMSModbusParser, JKBMSParser,
+    PowdriveParser, PylontechParser, SenergyParser,
+    VoltronicPI30Parser, VoltronicPI18Parser,
+    TelemetryMetric, TelemetryParser,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +61,15 @@ class TimescaleWriter:
 
         # Telemetry parsers for normalized storage
         self.parsers = {
-            'deye_hybrid': DeyeHybridParser(),
-            'powdrive': PowdriveParser(),
-            'pylontech': PylontechParser(),
-            'pytes': PylontechParser(),
-            'jkbms': JKBMSParser(),
-            'jkbms_modbus': JKBMSModbusParser(),
-            'senergy': SenergyParser(),
+            'deye_hybrid':    DeyeHybridParser(),
+            'powdrive':       PowdriveParser(),
+            'pylontech':      PylontechParser(),
+            'pytes':          PylontechParser(),
+            'jkbms':          JKBMSParser(),
+            'jkbms_modbus':   JKBMSModbusParser(),
+            'senergy':        SenergyParser(),
+            'voltronic_pi30': VoltronicPI30Parser(),
+            'voltronic_pi18': VoltronicPI18Parser(),
         }
         # Default parser for backwards compatibility
         self.default_parser = self.parsers['powdrive']
@@ -258,11 +265,22 @@ class TimescaleWriter:
             return self.parsers['jkbms_modbus']
         elif "senergy" in protocol_id:
             return self.parsers['senergy']
+        elif "voltronic_pi18" in protocol_id:
+            return self.parsers['voltronic_pi18']
+        elif "voltronic" in protocol_id:
+            return self.parsers['voltronic_pi30']
         elif "powdrive" in protocol_id:
             return self.parsers['powdrive']
 
         # Method 2: Auto-detect based on JSON structure
         telemetry_data = record.get("data", {})
+
+        # Voltronic: adapter always sets 'voltronic_protocol_id' in the data dict
+        voltronic_pid = telemetry_data.get("voltronic_protocol_id", "")
+        if voltronic_pid == "PI18":
+            return self.parsers['voltronic_pi18']
+        elif voltronic_pid:
+            return self.parsers['voltronic_pi30']
 
         # Deye format has nested sections (power, battery, energy_today, etc.)
         deye_sections = {'power', 'battery', 'energy_today', 'temperatures', 'grid'}
