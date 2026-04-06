@@ -231,6 +231,35 @@ class ModbusCommandExecutor:
                     error=error_msg,
                 )
 
+            # ---------------------------------------------------------------
+            # Voltronic serial-command path
+            # ---------------------------------------------------------------
+            # Voltronic inverters use ASCII serial commands (POP01, MCHGC040 …)
+            # not Modbus register writes.  Detect by adapter class + protocol_id.
+            from ..devices.adapter_factory import TCPCommandAdapter
+            protocol_id = getattr(device_state, "protocol_id", "") or ""
+            if isinstance(adapter, TCPCommandAdapter) and "voltronic" in protocol_id.lower():
+                logger.info(
+                    "[COMMAND_EXECUTOR] Routing to Voltronic serial command handler "
+                    "(protocol=%s)", protocol_id
+                )
+                result = await adapter.execute_voltronic_command(command_type, params)
+                if result["success"]:
+                    return CommandResult(
+                        success=True,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        settings={"command_sent": result.get("command"),
+                                  "response": result.get("response")},
+                    )
+                else:
+                    return CommandResult(
+                        success=False,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=result.get("error"),
+                    )
+
             # Get device type
             device_type = device_state.device_type
             if hasattr(device_type, 'value'):

@@ -25,6 +25,7 @@ from ..telemetry import (
     DeyeHybridParser, JKBMSModbusParser, JKBMSParser,
     PowdriveParser, PylontechParser, SenergyParser,
     VoltronicPI30Parser, VoltronicPI18Parser,
+    VoltronicPI16Parser, VoltronicPI17Parser, VoltronicPI34Parser,
     TelemetryMetric, TelemetryParser,
 )
 
@@ -70,6 +71,9 @@ class TimescaleWriter:
             'senergy':        SenergyParser(),
             'voltronic_pi30': VoltronicPI30Parser(),
             'voltronic_pi18': VoltronicPI18Parser(),
+            'voltronic_pi16': VoltronicPI16Parser(),
+            'voltronic_pi17': VoltronicPI17Parser(),
+            'voltronic_pi34': VoltronicPI34Parser(),
         }
         # Default parser for backwards compatibility
         self.default_parser = self.parsers['powdrive']
@@ -267,6 +271,12 @@ class TimescaleWriter:
             return self.parsers['senergy']
         elif "voltronic_pi18" in protocol_id:
             return self.parsers['voltronic_pi18']
+        elif "voltronic_pi17" in protocol_id:
+            return self.parsers['voltronic_pi17']
+        elif "voltronic_pi16" in protocol_id:
+            return self.parsers['voltronic_pi16']
+        elif "voltronic_pi34" in protocol_id:
+            return self.parsers['voltronic_pi34']
         elif "voltronic" in protocol_id:
             return self.parsers['voltronic_pi30']
         elif "powdrive" in protocol_id:
@@ -276,9 +286,15 @@ class TimescaleWriter:
         telemetry_data = record.get("data", {})
 
         # Voltronic: adapter always sets 'voltronic_protocol_id' in the data dict
-        voltronic_pid = telemetry_data.get("voltronic_protocol_id", "")
+        voltronic_pid = telemetry_data.get("voltronic_protocol_id", "").upper()
         if voltronic_pid == "PI18":
             return self.parsers['voltronic_pi18']
+        elif voltronic_pid == "PI17":
+            return self.parsers['voltronic_pi17']
+        elif voltronic_pid == "PI16":
+            return self.parsers['voltronic_pi16']
+        elif voltronic_pid == "PI34":
+            return self.parsers['voltronic_pi34']
         elif voltronic_pid:
             return self.parsers['voltronic_pi30']
 

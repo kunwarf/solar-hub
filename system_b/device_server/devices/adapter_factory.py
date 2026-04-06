@@ -704,6 +704,125 @@ class TCPCommandAdapter:
             logger.debug(f"Raw command error: {e}")
             return None
 
+    async def execute_voltronic_command(
+        self,
+        command_type: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute a Voltronic serial command and return success/failure.
+
+        Builds the command string from the definition template, appends the
+        CRC-XMODEM frame, sends it via the serial bridge, and checks whether
+        the response contains '(ACK' (success) or '(NAK' (device rejected).
+
+        Args:
+            command_type: High-level command name (from VOLTRONIC_COMMANDS).
+            params:       Dict of parameter values (e.g., {"priority": 1}).
+
+        Returns:
+            Dict with keys:
+              success   – bool
+              command   – the raw command string sent (e.g. "POP01")
+              response  – stripped response data string
+              error     – error message on failure (absent on success)
+        """
+        # Import here to avoid circular import; command_definitions is in commands/
+        from ..commands.command_definitions import VOLTRONIC_COMMANDS
+
+        params = params or {}
+
+        cmd_def = VOLTRONIC_COMMANDS.get(command_type)
+        if not cmd_def:
+            available = list(VOLTRONIC_COMMANDS.keys())
+            return {
+                "success": False,
+                "command": command_type,
+                "error": f"Unknown Voltronic command '{command_type}'. "
+                         f"Available: {available}",
+            }
+
+        # Resolve named string values to their integer codes
+        # e.g. priority="solar" → 1 for set_output_priority
+        named_values = cmd_def.get("values", {})
+        resolved_params: Dict[str, Any] = {}
+        for k, v in params.items():
+            if isinstance(v, str) and v in named_values:
+                resolved_params[k] = named_values[v]
+            else:
+                resolved_params[k] = v
+
+        # Map the canonical param name to 'value' for simple single-param templates
+        canonical_param = cmd_def.get("param")
+        if canonical_param and canonical_param in resolved_params:
+            resolved_params["value"] = resolved_params[canonical_param]
+        elif canonical_param and canonical_param in params:
+            resolved_params["value"] = params[canonical_param]
+
+        # Validate numeric range
+        raw_value = resolved_params.get("value")
+        if raw_value is not None and cmd_def.get("param_type") in ("int", "float"):
+            conv = int if cmd_def["param_type"] == "int" else float
+            try:
+                raw_value = conv(raw_value)
+                resolved_params["value"] = raw_value
+            except (ValueError, TypeError) as e:
+                return {"success": False, "command": command_type, "error": str(e)}
+
+            min_v = cmd_def.get("min_value")
+            max_v = cmd_def.get("max_value")
+            if min_v is not None and raw_value < min_v:
+                return {
+                    "success": False,
+                    "command": command_type,
+                    "error": f"{canonical_param} {raw_value} is below minimum {min_v}",
+                }
+            if max_v is not None and raw_value > max_v:
+                return {
+                    "success": False,
+                    "command": command_type,
+                    "error": f"{canonical_param} {raw_value} exceeds maximum {max_v}",
+                }
+
+        # Build the command string from template
+        try:
+            cmd_str = cmd_def["cmd_template"].format(**resolved_params)
+        except KeyError as e:
+            return {
+                "success": False,
+                "command": command_type,
+                "error": f"Missing parameter {e} for command '{command_type}'",
+            }
+
+        # Send the framed command and read response
+        logger.info(
+            "Voltronic command: sending %r to device %s",
+            cmd_str, self.protocol.protocol_id
+        )
+        raw_resp = await self.send_command_bytes(_build_voltronic_cmd(cmd_str))
+        response_str = _strip_voltronic_frame(raw_resp) if raw_resp else None
+
+        if response_str is not None and response_str.upper().startswith("ACK"):
+            logger.info("Voltronic command %r: ACK received", cmd_str)
+            return {
+                "success": True,
+                "command": cmd_str,
+                "response": "(ACK",
+            }
+        else:
+            reason = f"(NAK" if response_str and "NAK" in response_str.upper() else \
+                     f"no response" if not raw_resp else \
+                     f"unexpected response: {response_str!r}"
+            logger.warning(
+                "Voltronic command %r failed: %s (device %s)",
+                cmd_str, reason, self.protocol.protocol_id
+            )
+            return {
+                "success": False,
+                "command": cmd_str,
+                "error": reason,
+            }
+
     async def poll(self) -> Dict[str, Any]:
         """
         Poll device using command-based protocol.
@@ -792,70 +911,159 @@ class TCPCommandAdapter:
 
     async def _voltronic_detect_protocol(self) -> Optional[str]:
         """
-        Send QPI and return the protocol family string ('PI30', 'PI18', …).
+        Detect Voltronic protocol family.
 
-        Returns None if QPI fails or the response is unrecognised.
-        The result is cached in self._voltronic_pid by the caller.
+        Step 1 — Seed from registered protocol_id (fastest, most reliable).
+                 If the device was registered as 'voltronic_pi17', return 'PI17'.
+        Step 2 — Send QPI and parse standard '(' frame response.
+        Step 3 — If QPI returns a SEC '^D' frame, parse it as SEC format.
+        Returns None on complete failure (caller defaults to 'PI30').
         """
-        raw = await self.send_command_bytes(_build_voltronic_cmd("QPI"))
-        data = _strip_voltronic_frame(raw)
-        if not data:
-            return None
-        data = data.upper()
-        for family in ("PI30", "PI18", "PI16", "PI41"):
-            if family in data:
-                logger.info("Voltronic: detected protocol %s", family)
+        # Step 1: use registered protocol_id if it contains a known family tag
+        pid_reg = self.protocol.protocol_id.upper()
+        for family in ("PI34", "PI18", "PI17", "PI16", "PI41", "PI30"):
+            if family in pid_reg:
+                logger.info("Voltronic: protocol family %s from registry", family)
                 return family
-        logger.warning("Voltronic: unrecognised QPI response %r, defaulting to PI30", data)
+
+        # Step 2: query device via QPI (standard frame format)
+        raw = await self.send_command_bytes(_build_voltronic_cmd("QPI"))
+        if raw:
+            # Standard frame response starts with '('
+            data = _strip_voltronic_frame(raw)
+            if data:
+                data_upper = data.upper()
+                for family in ("PI34", "PI18", "PI17", "PI16", "PI41", "PI30"):
+                    if family in data_upper:
+                        logger.info("Voltronic: detected protocol %s via QPI", family)
+                        return family
+
+            # SEC frame response starts with '^D' — device is PI17 or PI18-InfiniSolar
+            if raw.startswith(b"^D"):
+                sec_data = _strip_sec_frame(raw)
+                if sec_data:
+                    sec_upper = sec_data.upper()
+                    for family in ("PI18", "PI17", "PI16"):
+                        if family in sec_upper:
+                            logger.info(
+                                "Voltronic: detected SEC protocol %s via QPI", family
+                            )
+                            return family
+                # SEC device but couldn't parse family — try the SEC PI command
+                sec_raw = await self.send_command_bytes(_build_sec_cmd("PI"))
+                sec_resp = _strip_sec_frame(sec_raw)
+                if sec_resp:
+                    for family in ("PI18", "PI17"):
+                        if family in sec_resp.upper():
+                            logger.info(
+                                "Voltronic: identified SEC protocol %s", family
+                            )
+                            return family
+                logger.warning(
+                    "Voltronic: SEC device but unrecognised protocol, defaulting to PI17"
+                )
+                return "PI17"
+
+        logger.warning("Voltronic: QPI failed or unrecognised response, defaulting to PI30")
         return "PI30"
 
     async def _poll_voltronic(self) -> Dict[str, Any]:
         """
-        Poll a Voltronic inverter via the ESP8266/ESP32 serial bridge.
+        Poll a Voltronic inverter/charger via the ESP8266/ESP32 serial bridge.
 
-        Step 1  — Detect protocol family (QPI) on first poll only.
-        Step 2  — Query general status: QPIGS (PI30) or GS (PI18).
-        Step 3  — Query working mode (QMOD) every poll.
-        Step 4  — Query warning status (QPIWS) every 5th poll.
+        Step 1  — Detect protocol family on first poll only (registry → QPI → SEC PI).
+        Step 2  — Query general status (command depends on family):
+                    PI30 / PI16 / PI41 → QPIGS (standard frame, space-separated)
+                    PI18               → GS     (standard frame, space-separated, ×10)
+                    PI17               → ^P003GS (SEC frame, comma-separated)
+                    PI34               → QPIGS (standard frame, 11 fields)
+        Step 3  — Query working mode (QMOD) every poll (PI30/PI16/PI34).
+        Step 4  — Query warning status (QPIWS) every 5th poll (PI30/PI16/PI34).
         Step 5  — Derive battery_power_w and grid_power_w.
         """
-        # Step 1: protocol detection (once)
+        # Step 1: protocol detection (once per connection)
         if self._voltronic_pid is None:
             self._voltronic_pid = await self._voltronic_detect_protocol() or "PI30"
 
         pid = self._voltronic_pid
         values: Dict[str, Any] = {"voltronic_protocol_id": pid}
 
-        # Step 2: general status
+        # Step 2: general status query
         if pid == "PI18":
+            # Axpert MAX — standard frame, 28 space-separated fields, int×10 encoding
             raw = await self.send_command_bytes(_build_voltronic_cmd("GS"))
             data = _strip_voltronic_frame(raw)
             if data:
                 values.update(_parse_voltronic_fields(data, _PI18_GS_FIELDS))
+
+        elif pid == "PI17":
+            # InfiniSolar 5KW — SEC frame, 28 comma-separated fields
+            raw = await self.send_command_bytes(_build_sec_cmd("GS"))
+            data = _strip_sec_frame(raw)
+            if data:
+                values.update(_parse_sec_fields(data, _PI17_SEC_GS_FIELDS))
+            # PI17 grid_power_w is a direct field from the SEC response; skip computed
+            # battery power: signed current field (battery_current_a, +=charging)
+            bat_v = values.get("battery_voltage_v")
+            bat_a = values.get("battery_current_a")
+            if bat_v is not None and bat_a is not None:
+                # PI17 convention: positive current = charging → negate to positive_discharging
+                values["battery_power_w"] = round(-float(bat_a) * float(bat_v), 1)
+
+        elif pid == "PI16":
+            # SUNNY protocol — standard frame, 22 space-separated fields, 3 MPPT
+            raw = await self.send_command_bytes(_build_voltronic_cmd("QPIGS"))
+            data = _strip_voltronic_frame(raw)
+            if data:
+                values.update(_parse_voltronic_fields(data, _PI16_QPIGS_FIELDS))
+            # PI16 has no battery current field; battery_power_w stays None/absent
+            # grid_power_w will be computed in Step 5 if output power is available
+
+        elif pid == "PI34":
+            # MPPT-3000 charge controller — standard frame, 11 fields, no AC data
+            raw = await self.send_command_bytes(_build_voltronic_cmd("QPIGS"))
+            data = _strip_voltronic_frame(raw)
+            if data:
+                values.update(_parse_voltronic_fields(data, _PI34_QPIGS_FIELDS))
+
         else:
-            # PI30 (and PI16/PI41 as best-effort)
+            # PI30, PI41, PI30MAX, PI30REVO, PI30_HS/MS/MSX — standard frame, QPIGS
+            # All use identical first 16 fields; shorter variants (17 vs 21) are handled
+            # gracefully — parser silently ignores fields beyond the response length.
             raw = await self.send_command_bytes(_build_voltronic_cmd("QPIGS"))
             data = _strip_voltronic_frame(raw)
             if data:
                 values.update(_parse_voltronic_fields(data, _PI30_QPIGS_FIELDS))
 
-        # Step 3: working mode
-        raw = await self.send_command_bytes(_build_voltronic_cmd("QMOD"))
-        mode_data = _strip_voltronic_frame(raw)
-        if mode_data:
-            values["working_mode_raw"] = mode_data[:1]
+        # Step 3: working mode (not applicable to PI17 which has inverter_mode field,
+        # and PI34 which is a charge controller without operating modes)
+        if pid not in ("PI17", "PI34"):
+            raw = await self.send_command_bytes(_build_voltronic_cmd("QMOD"))
+            mode_data = _strip_voltronic_frame(raw)
+            if mode_data:
+                values["working_mode_raw"] = mode_data[:1]
 
-        # Step 4: warning/fault status (every 5th poll to reduce bus load)
+        # Step 4: less-frequent commands (5th-poll and 30th-poll cadences)
         self._voltronic_poll_count += 1
-        if self._voltronic_poll_count % 5 == 1:
+
+        # Warning/fault status every 5th poll; PI17 exposes fault_code in GS response
+        if self._voltronic_poll_count % 5 == 1 and pid != "PI17":
             raw = await self.send_command_bytes(_build_voltronic_cmd("QPIWS"))
             ws_data = _strip_voltronic_frame(raw)
             if ws_data:
                 values["warning_status_raw"] = ws_data
 
-        # Step 5: derived quantities
-        _compute_voltronic_battery_power(values)
-        _compute_voltronic_grid_power(values)
+        # Rated settings (QPIRI / PIRI) every 30th poll (~5 min at 10 s interval)
+        # Settings rarely change — no need to read every poll.
+        if self._voltronic_poll_count % 30 == 1:
+            settings = await self._poll_voltronic_settings(pid)
+            values.update(settings)
+
+        # Step 5: derived quantities (battery_power_w already set for PI17/PI18 direction)
+        if pid not in ("PI17", "PI34"):
+            _compute_voltronic_battery_power(values)
+        if pid not in ("PI17", "PI34"):
+            _compute_voltronic_grid_power(values)
 
         logger.debug(
             "Voltronic %s poll: %d fields, bat_pwr=%.0fW, grid_pwr=%.0fW",
@@ -864,6 +1072,93 @@ class TCPCommandAdapter:
             values.get("battery_power_w", 0),
             values.get("grid_power_w", 0),
         )
+        return values
+
+    async def _poll_voltronic_settings(self, pid: str) -> Dict[str, Any]:
+        """
+        Query inverter rated settings via QPIRI (standard families) or PIRI (PI17 SEC).
+
+        Returns a dict of configuration fields to merge into the telemetry record.
+        Returns an empty dict on any communication failure (non-critical).
+
+        Settings covered:
+          - Rated output voltage/frequency/current/power
+          - Battery type, nominal/bulk/float/recharge/under voltages
+          - Max AC charging current, total charging current
+          - Output source priority (utility / solar / SBU)
+          - Charger source priority (utility / solar / solar+utility / solar-only)
+          - Machine type (grid-tie / off-grid / hybrid)
+          - Topology (transformerless / transformer)
+        """
+        values: Dict[str, Any] = {}
+
+        try:
+            if pid == "PI17":
+                # SEC format: ^P004PIRI\r
+                raw = await self.send_command_bytes(_build_sec_cmd("PIRI"))
+                data = _strip_sec_frame(raw)
+                if data:
+                    values.update(_parse_sec_fields(data, _PI17_SEC_PIRI_FIELDS))
+
+            elif pid == "PI34":
+                # PI34 (charge controller) uses QPIRI with different field meanings
+                # but same frame format; field layout matches PI30 subset
+                raw = await self.send_command_bytes(_build_voltronic_cmd("QPIRI"))
+                data = _strip_voltronic_frame(raw)
+                if data:
+                    # PI34 QPIRI: battery nominal, bulk, float, type, max charging current
+                    pi34_piri = [
+                        ("battery_nominal_voltage_v",   float),
+                        ("battery_bulk_voltage_v",      float),
+                        ("battery_float_voltage_v",     float),
+                        ("battery_type_code",           int),
+                        ("charging_current_a",          int),
+                    ]
+                    values.update(_parse_voltronic_fields(data, pi34_piri))
+
+            elif pid == "PI18":
+                raw = await self.send_command_bytes(_build_voltronic_cmd("QPIRI"))
+                data = _strip_voltronic_frame(raw)
+                if data:
+                    values.update(_parse_voltronic_fields(data, _PI18_QPIRI_FIELDS))
+
+            else:
+                # PI30, PI16, PI41, PI30MAX and all other standard families
+                raw = await self.send_command_bytes(_build_voltronic_cmd("QPIRI"))
+                data = _strip_voltronic_frame(raw)
+                if data:
+                    values.update(_parse_voltronic_fields(data, _PI30_QPIRI_FIELDS))
+
+        except Exception as e:
+            logger.warning("Voltronic QPIRI failed for %s: %s", pid, e)
+            return {}
+
+        # Annotate numeric codes with human-readable strings
+        bat_type = values.get("battery_type_code")
+        if bat_type is not None:
+            values["battery_type"] = _BATTERY_TYPES.get(int(bat_type), f"unknown_{bat_type}")
+
+        out_prio = values.get("output_source_priority")
+        if out_prio is not None:
+            values["output_source_priority_str"] = _OUTPUT_PRIORITY.get(
+                int(out_prio), f"unknown_{out_prio}"
+            )
+
+        chg_prio = values.get("charger_source_priority")
+        if chg_prio is not None:
+            values["charger_source_priority_str"] = _CHARGER_PRIORITY.get(
+                int(chg_prio), f"unknown_{chg_prio}"
+            )
+
+        if values:
+            logger.debug(
+                "Voltronic %s QPIRI: bat_type=%s, out_prio=%s, chg_prio=%s",
+                pid,
+                values.get("battery_type"),
+                values.get("output_source_priority_str"),
+                values.get("charger_source_priority_str"),
+            )
+
         return values
 
 
@@ -1091,6 +1386,185 @@ _PI18_GS_FIELDS = [
 ]
 
 
+def _safe_voltronic_float(x: str) -> Optional[float]:
+    """
+    Convert a Voltronic field to float, returning None for placeholder values.
+
+    PI16 QPIGS uses '---.-' and '-----' for unavailable PV strings.
+    """
+    s = x.strip()
+    if not s or all(c in "-. " for c in s):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+# QPIGS PI16 — 22 space-separated fields (SUNNY / PI15 / PI16 protocol)
+# Fields with placeholder '---.-' or '-----' (unused PV strings) are parsed
+# via _safe_voltronic_float which returns None; the adapter drops None values.
+_PI16_QPIGS_FIELDS = [
+    ("grid_voltage_v",          float),                # AAA.A
+    ("ac_output_active_w",      int),                  # BBBBBB (output power W)
+    ("grid_frequency_hz",       float),                # CC.C
+    ("ac_output_current_a",     float),                # DDDD.D
+    ("ac_output_voltage_v",     float),                # EEE.E (output voltage R)
+    ("ac_output_power_r_w",     _safe_voltronic_float),# FFFFF (output power R)
+    ("ac_output_frequency_hz",  float),                # GG.G
+    ("ac_output_current_r_a",   _safe_voltronic_float),# HHH.H
+    ("output_load_pct",         int),                  # III
+    ("pbus_voltage_v",          float),                # JJJ.J
+    ("sbus_voltage_v",          float),                # KKK.K
+    ("battery_voltage_v",       float),                # LLL.L (positive battery V)
+    ("battery_neg_voltage_v",   _safe_voltronic_float),# MMM.M (negative; --- for single)
+    ("battery_capacity_pct",    int),                  # NNN
+    ("pv1_input_power_w",       _safe_voltronic_float),# OOOOO
+    ("pv2_input_power_w",       _safe_voltronic_float),# PPPPP
+    ("pv3_input_power_w",       _safe_voltronic_float),# QQQQQ (--- if not present)
+    ("pv1_input_voltage_v",     float),                # RRR.R
+    ("pv2_input_voltage_v",     _safe_voltronic_float),# SSS.S
+    ("pv3_input_voltage_v",     _safe_voltronic_float),# TTT.T
+    ("max_temp_c",              float),                # UUU.U
+    ("device_status_raw",       str),                  # VWWWWWWWWW (9-bit: V + WWWWWWWWW)
+]
+
+# QPIGS PI34 — 11 space-separated fields (MPPT-3000 charge controller)
+# Temperatures and some current fields are signed integers.
+_PI34_QPIGS_FIELDS = [
+    ("pv_input_voltage_v",          float),     # BBB.B
+    ("battery_voltage_v",           float),     # CC.CC
+    ("charging_current_a",          float),     # DD.DD (total charging current)
+    ("charging_current1_a",         float),     # EE.EE (charger 1)
+    ("charging_current2_a",         float),     # FF.FF (charger 2)
+    ("charging_power_w",            int),       # GGGG
+    ("unit_temp_c",                 int),       # ±HHH (signed)
+    ("remote_battery_voltage_v",    float),     # II.II
+    ("remote_battery_temp_c",       int),       # ±JJJ (signed)
+    ("reserved",                    str),       # KKKK
+    ("device_status_raw",           str),       # b7-b0
+]
+
+# GS PI17 — 28 comma-separated fields (InfiniSolar 5KW, SEC frame format)
+# Solar voltages/currents use 0.1-unit steps (divide by 10).
+# Battery current signed: positive = charging, negative = discharging.
+# Battery voltage uses 0.01V steps (divide by 100).
+_PI17_SEC_GS_FIELDS = [
+    ("pv1_input_voltage_v",         lambda x: int(x) / 10),    # 0001-9999 (0.1V)
+    ("pv1_input_current_a",         lambda x: int(x) / 10),    # 0001-9999 (0.1A)
+    ("pv1_input_power_w",           int),                       # 00001-99999 (W)
+    ("pv2_input_voltage_v",         lambda x: int(x) / 10),    # (0.1V)
+    ("pv2_input_current_a",         lambda x: int(x) / 10),    # (0.1A)
+    ("pv2_input_power_w",           int),                       # (W)
+    ("battery_voltage_v",           lambda x: int(x) / 100),   # 0001-9999 (0.01V)
+    ("battery_current_a",           lambda x: int(x) / 10),    # signed (0.1A, +chg)
+    ("battery_capacity_pct",        int),                       # 000-100 (%)
+    ("ac_output_voltage_v",         lambda x: int(x) / 10),    # (0.1V)
+    ("ac_output_frequency_hz",      lambda x: int(x) / 10),    # (0.1Hz)
+    ("ac_output_current_a",         lambda x: int(x) / 10),    # (0.1A)
+    ("ac_output_apparent_va",       int),                       # (VA)
+    ("ac_output_active_w",          int),                       # (W)
+    ("output_load_pct",             int),                       # (%)
+    ("heatsink_temp_c",             int),                       # (°C)
+    ("battery_temp_c",              int),                       # (°C)
+    ("remote_battery_voltage_v",    lambda x: int(x) / 100),   # (0.01V)
+    ("remote_battery_temp_c",       int),                       # (°C)
+    ("grid_voltage_v",              lambda x: int(x) / 10),    # (0.1V)
+    ("grid_frequency_hz",           lambda x: int(x) / 10),    # (0.1Hz)
+    ("grid_power_w",                int),                       # (W, signed)
+    ("inverter_mode",               int),                       # operating mode code
+    ("fault_code",                  int),                       # fault code
+    ("warning_code",                int),                       # warning code
+    ("fan1_speed_pct",              int),                       # fan 1 (%)
+    ("fan2_speed_pct",              int),                       # fan 2 (%)
+    ("reserved",                    str),                       # reserved
+]
+
+
+# QPIRI — Rated / settings information (PI30 family, 20 space-separated fields)
+# Polled at low frequency (every 30th poll ~= every 5 min at 10s interval).
+# Tells us: configured output voltage/frequency, battery type, charging limits,
+# source priority, machine type, topology, etc.
+_PI30_QPIRI_FIELDS = [
+    ("rated_output_voltage_v",      float),     # BBB.B
+    ("rated_output_frequency_hz",   float),     # CC.C
+    ("rated_ac_output_current_a",   float),     # DD.D
+    ("rated_ac_apparent_va",        int),       # EEEE
+    ("rated_ac_active_w",           int),       # FFFF
+    ("battery_nominal_voltage_v",   float),     # GGG.G
+    ("battery_recharge_voltage_v",  float),     # HHH.H
+    ("battery_under_voltage_v",     float),     # III.I
+    ("battery_bulk_voltage_v",      float),     # JJJ.J
+    ("battery_float_voltage_v",     float),     # KKK.K
+    ("battery_type_code",           int),       # LLL (0=AGM,1=Flooded,2=User,3=Pylon,5=Weco)
+    ("ac_charging_current_a",       int),       # MMM
+    ("charging_current_a",          int),       # NNN (total max charging current)
+    ("input_voltage_range",         int),       # O   (0=Appliance,1=UPS)
+    ("output_source_priority",      int),       # P   (0=Utility,1=Solar,2=SBU)
+    ("charger_source_priority",     int),       # Q   (0=Utility,1=Solar,2=Solar+Utility,3=Solar only)
+    ("parallel_max_num",            int),       # RR
+    ("machine_type_code",           str),       # SS  (00=Grid-tie,01=Off-grid,10=Hybrid)
+    ("topology_code",               int),       # T   (0=Transformerless,1=Transformer)
+    ("output_mode_code",            int),       # UU  (00=single,01=parallel,02-04=phase)
+]
+
+# QPIRI — PI18 Axpert MAX (20 space-separated fields, same semantics as PI30)
+# PI18 adds battery_recharge_when_soc and battery_recharge_to_soc as last two fields.
+_PI18_QPIRI_FIELDS = [
+    ("rated_output_voltage_v",      float),     # field 0
+    ("rated_output_frequency_hz",   float),
+    ("rated_ac_output_current_a",   float),
+    ("rated_ac_apparent_va",        int),
+    ("rated_ac_active_w",           int),
+    ("battery_nominal_voltage_v",   float),
+    ("battery_recharge_voltage_v",  float),
+    ("battery_under_voltage_v",     float),
+    ("battery_bulk_voltage_v",      float),
+    ("battery_float_voltage_v",     float),
+    ("battery_type_code",           int),
+    ("ac_charging_current_a",       int),
+    ("charging_current_a",          int),
+    ("input_voltage_range",         int),
+    ("output_source_priority",      int),
+    ("charger_source_priority",     int),
+    ("parallel_max_num",            int),
+    ("machine_type_code",           str),
+    ("topology_code",               int),
+    ("output_mode_code",            int),
+    ("battery_recharge_when_soc",   int),       # PI18 extra: recharge threshold (%)
+    ("battery_recharge_to_soc",     int),       # PI18 extra: recharge target (%)
+]
+
+# PIRI — PI17 SEC rated information (comma-separated, SEC frame)
+_PI17_SEC_PIRI_FIELDS = [
+    ("rated_output_voltage_v",      lambda x: int(x) / 10),
+    ("rated_output_frequency_hz",   lambda x: int(x) / 10),
+    ("rated_ac_output_current_a",   lambda x: int(x) / 10),
+    ("rated_ac_apparent_va",        int),
+    ("battery_nominal_voltage_v",   lambda x: int(x) / 10),
+    ("battery_recharge_voltage_v",  lambda x: int(x) / 10),
+    ("battery_under_voltage_v",     lambda x: int(x) / 10),
+    ("battery_bulk_voltage_v",      lambda x: int(x) / 10),
+    ("battery_float_voltage_v",     lambda x: int(x) / 10),
+    ("battery_type_code",           int),
+    ("ac_charging_current_a",       int),
+    ("charging_current_a",          int),
+    ("input_voltage_range",         int),
+    ("output_source_priority",      int),
+    ("charger_source_priority",     int),
+    ("machine_type_code",           int),
+    ("topology_code",               int),
+    ("output_mode_code",            int),
+]
+
+# Human-readable labels for settings codes
+_BATTERY_TYPES = {0: "AGM", 1: "Flooded", 2: "User", 3: "Pylontech",
+                  5: "Weco", 6: "Soltaro", 8: "Lib", 9: "Lic"}
+_OUTPUT_PRIORITY = {0: "utility_first", 1: "solar_first", 2: "sbu"}
+_CHARGER_PRIORITY = {0: "utility_first", 1: "solar_first",
+                     2: "solar_and_utility", 3: "solar_only"}
+
+
 def _parse_voltronic_fields(
     data: str,
     field_defs: list,
@@ -1102,7 +1576,9 @@ def _parse_voltronic_fields(
         if i >= len(parts):
             break
         try:
-            result[name] = conv(parts[i])
+            val = conv(parts[i])
+            if val is not None:
+                result[name] = val
         except (ValueError, TypeError):
             logger.debug("Voltronic: could not parse field %s=%r", name, parts[i])
     return result
@@ -1132,16 +1608,93 @@ def _compute_voltronic_grid_power(values: Dict[str, Any]) -> None:
     Derive grid_power_w via energy balance:
       grid = load - pv - battery_net
     Negative result = exporting to grid.
+
+    Falls back to voltage × current when pv_input_power_w is absent
+    (handles PI30REVO / PI30_HS_MS_MSX which lack the power field).
     """
     load = values.get("ac_output_active_w") or values.get("load_power_w")
-    pv = (
-        values.get("pv_input_power_w")
-        or (values.get("pv1_input_power_w", 0) + values.get("pv2_input_power_w", 0))
-    )
+    # Primary: explicit power field(s)
+    pv: Optional[float] = values.get("pv_input_power_w")
+    if pv is None:
+        pv1w = values.get("pv1_input_power_w")
+        pv2w = values.get("pv2_input_power_w")
+        pv3w = values.get("pv3_input_power_w")
+        if any(x is not None for x in (pv1w, pv2w, pv3w)):
+            pv = (pv1w or 0.0) + (pv2w or 0.0) + (pv3w or 0.0)
+    # Fallback: derive from V×I when the power register is absent (REVO/HS/MSX)
+    if pv is None:
+        pv_v = values.get("pv_input_voltage_v")
+        pv_a = values.get("pv_input_current_a")
+        if pv_v is not None and pv_a is not None:
+            pv = float(pv_v) * float(pv_a)
     bat = values.get("battery_power_w", 0)
     if load is None:
         return
     values["grid_power_w"] = round(float(load) - float(pv or 0) - float(bat), 1)
+
+
+# =============================================================================
+# SEC frame format helpers (PI17 InfiniSolar 5KW and PI18 InfiniSolar V)
+# =============================================================================
+# Frame: ^ T nnn PAYLOAD \r
+#   T   = P (command) or D (data response)
+#   nnn = 3-digit decimal length of PAYLOAD (not including \r)
+#   PAYLOAD for data responses includes 2 CRC bytes at the end
+# CRC: CRC-CCITT poly 0x1021, init 0xFFFF (differs from standard Voltronic 0x0000 init)
+
+def _sec_crc(data: bytes) -> bytes:
+    """CRC-CCITT for SEC frame format (poly 0x1021, init 0xFFFF, no reflection)."""
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) if (crc & 0x8000) else (crc << 1)
+        crc &= 0xFFFF
+    return bytes([(crc >> 8) & 0xFF, crc & 0xFF])
+
+
+def _build_sec_cmd(cmd: str) -> bytes:
+    """
+    Build a SEC-format command frame: ^Pnnn<cmd><CR>
+    nnn = len(cmd) + 1  (counts the trailing <CR> as part of payload length)
+    No CRC in commands for PI17; some firmware variants accept it — omitting is safe.
+    """
+    payload = cmd.encode("ascii")
+    nnn = len(payload) + 1  # +1 for the \r terminator
+    return b"^P" + f"{nnn:03d}".encode("ascii") + payload + b"\r"
+
+
+def _strip_sec_frame(raw: Optional[bytes]) -> Optional[str]:
+    """
+    Strip SEC response framing and return the bare comma-separated data string.
+
+    Frame: ^ D nnn DATA <CRC_H> <CRC_L> \r
+    Returns None if absent, wrong prefix, or too short.
+    """
+    if not raw or not raw.startswith(b"^D"):
+        return None
+    cr_pos = raw.rfind(b"\r")
+    # Minimum valid frame: ^D + 3-digit nnn + 1 data byte + 2 CRC = 9 bytes
+    if cr_pos < 8:
+        return None
+    # Skip "^D" (2) + nnn (3) = 5 bytes header; drop 2 CRC bytes before \r
+    return raw[5:cr_pos - 2].decode("ascii", errors="replace").strip()
+
+
+def _parse_sec_fields(data: str, field_defs: list) -> Dict[str, Any]:
+    """Parse comma-separated SEC response data into a dict."""
+    parts = [p.strip() for p in data.split(",")]
+    result: Dict[str, Any] = {}
+    for i, (name, conv) in enumerate(field_defs):
+        if i >= len(parts):
+            break
+        try:
+            val = conv(parts[i])
+            if val is not None:
+                result[name] = val
+        except (ValueError, TypeError):
+            logger.debug("Voltronic SEC: could not parse field %s=%r", name, parts[i])
+    return result
 
 
 class AdapterFactory:

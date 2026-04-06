@@ -180,6 +180,209 @@ METER_COMMANDS: Dict[str, Dict[str, Any]] = {
 }
 
 
+# =============================================================================
+# Voltronic serial command definitions
+# =============================================================================
+# These map high-level command names to Voltronic serial command templates.
+# The adapter sends the command as a CRC-framed serial string and checks the
+# response for '(ACK' (success) or '(NAK' (rejected by device).
+#
+# cmd_template: Python str.format() template.  Placeholders are filled from
+#               the validated 'params' dict before CRC and framing are applied.
+#
+# Applies to PI30, PI18, PI16, PI41, PI30MAX families (standard frame format).
+# PI17 (SEC format) commands follow the same semantics but use different
+# command names — handled by 'sec_cmd_template' override when present.
+#
+# Reference: Voltronic PI30 Communication Protocol 2015, PI30MAX 2021.
+# =============================================================================
+
+VOLTRONIC_COMMANDS: Dict[str, Dict[str, Any]] = {
+
+    # ------------------------------------------------------------------
+    # Source priorities
+    # ------------------------------------------------------------------
+    "set_output_priority": {
+        "cmd_template": "POP{value:02d}",
+        "param": "priority",
+        "param_type": "int",
+        "values": {"utility": 0, "solar": 1, "sbu": 2},
+        "min_value": 0,
+        "max_value": 2,
+        "description": (
+            "Set output source priority.  "
+            "priority: 0=utility_first, 1=solar_first, 2=SBU"
+        ),
+    },
+    "set_charger_priority": {
+        "cmd_template": "PCP{value:02d}",
+        "param": "priority",
+        "param_type": "int",
+        "values": {
+            "utility":       0,
+            "solar":         1,
+            "solar_utility": 2,
+            "solar_only":    3,
+        },
+        "min_value": 0,
+        "max_value": 3,
+        "description": (
+            "Set charger source priority.  "
+            "priority: 0=utility_first, 1=solar_first, 2=solar+utility, 3=solar_only"
+        ),
+    },
+
+    # ------------------------------------------------------------------
+    # Charging current limits
+    # ------------------------------------------------------------------
+    "set_max_charging_current": {
+        "cmd_template": "MCHGC{value:03d}",
+        "param": "current",
+        "param_type": "int",
+        "min_value": 10,
+        "max_value": 120,
+        "description": "Set maximum total charging current (A, 10–120).",
+    },
+    "set_max_ac_charging_current": {
+        "cmd_template": "MUCHGC{value:03d}",
+        "param": "current",
+        "param_type": "int",
+        "min_value": 2,
+        "max_value": 100,
+        "description": "Set maximum AC (grid) charging current (A, 2–100).",
+    },
+
+    # ------------------------------------------------------------------
+    # Battery configuration
+    # ------------------------------------------------------------------
+    "set_battery_type": {
+        "cmd_template": "PBATCD{value:02d}",
+        "param": "battery_type",
+        "param_type": "int",
+        "values": {"agm": 0, "flooded": 1, "user": 2},
+        "min_value": 0,
+        "max_value": 2,
+        "description": "Set battery type (0=AGM, 1=Flooded, 2=User-defined).",
+    },
+    "set_bulk_voltage": {
+        "cmd_template": "PBCV{value:.1f}",
+        "param": "voltage",
+        "param_type": "float",
+        "min_value": 20.0,
+        "max_value": 62.0,
+        "description": "Set battery bulk charge voltage (V, e.g. 56.4).",
+    },
+    "set_float_voltage": {
+        "cmd_template": "PBDV{value:.1f}",
+        "param": "voltage",
+        "param_type": "float",
+        "min_value": 20.0,
+        "max_value": 62.0,
+        "description": "Set battery float charge voltage (V, e.g. 54.0).",
+    },
+    "set_low_voltage_cutoff": {
+        "cmd_template": "PSDV{value:.1f}",
+        "param": "voltage",
+        "param_type": "float",
+        "min_value": 20.0,
+        "max_value": 50.0,
+        "description": "Set battery low-voltage shutdown cutoff (V, e.g. 42.0).",
+    },
+    "set_recharge_voltage": {
+        "cmd_template": "PBCVV{value:.1f}",
+        "param": "voltage",
+        "param_type": "float",
+        "min_value": 20.0,
+        "max_value": 58.0,
+        "description": "Set battery reconnect/recharge trigger voltage (V, e.g. 46.0).",
+    },
+
+    # ------------------------------------------------------------------
+    # Grid / input
+    # ------------------------------------------------------------------
+    "set_input_voltage_range": {
+        "cmd_template": "PGR{value:02d}",
+        "param": "range",
+        "param_type": "int",
+        "values": {"appliance": 0, "ups": 1},
+        "min_value": 0,
+        "max_value": 1,
+        "description": "Set AC input voltage range (0=Appliance wide range, 1=UPS narrow range).",
+    },
+    "set_grid_max_charging_current": {
+        "cmd_template": "MUCHGC{value:03d}",
+        "param": "current",
+        "param_type": "int",
+        "min_value": 2,
+        "max_value": 100,
+        "description": "Alias for set_max_ac_charging_current.",
+    },
+
+    # ------------------------------------------------------------------
+    # Feature flags (enable/disable via PE/PD prefix)
+    # ------------------------------------------------------------------
+    "enable_buzzer": {
+        "cmd_template": "PEa",
+        "description": "Enable audible alarm buzzer.",
+    },
+    "disable_buzzer": {
+        "cmd_template": "PDa",
+        "description": "Disable audible alarm buzzer.",
+    },
+    "enable_overload_bypass": {
+        "cmd_template": "PEb",
+        "description": "Enable overload bypass (load passes through when inverter overloaded).",
+    },
+    "disable_overload_bypass": {
+        "cmd_template": "PDb",
+        "description": "Disable overload bypass.",
+    },
+    "enable_solar_feed_to_grid": {
+        "cmd_template": "PEg",
+        "description": "Enable solar feed-to-grid (export surplus PV to utility).",
+    },
+    "disable_solar_feed_to_grid": {
+        "cmd_template": "PDg",
+        "description": "Disable solar feed-to-grid.",
+    },
+    "enable_lcd_backlight": {
+        "cmd_template": "PEn",
+        "description": "Keep LCD backlight on.",
+    },
+    "disable_lcd_backlight_timeout": {
+        "cmd_template": "PDn",
+        "description": "Let LCD backlight time out after inactivity.",
+    },
+
+    # ------------------------------------------------------------------
+    # Output mode (parallel/phase)
+    # ------------------------------------------------------------------
+    "set_output_mode": {
+        "cmd_template": "POPM{value:02d}",
+        "param": "mode",
+        "param_type": "int",
+        "values": {
+            "single":    0,
+            "parallel":  1,
+            "phase_1_3": 2,
+            "phase_2_3": 3,
+            "phase_3_3": 4,
+        },
+        "min_value": 0,
+        "max_value": 4,
+        "description": "Set output mode (0=single, 1=parallel, 2–4=3-phase splits).",
+    },
+
+    # ------------------------------------------------------------------
+    # Misc
+    # ------------------------------------------------------------------
+    "restore_factory_defaults": {
+        "cmd_template": "PF",
+        "description": "Restore all settings to factory defaults.  CAUTION: irreversible.",
+    },
+}
+
+
 DEVICE_COMMANDS: Dict[str, Dict[str, Dict[str, Any]]] = {
     "inverter": INVERTER_COMMANDS,
     "battery": BATTERY_COMMANDS,

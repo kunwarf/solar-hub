@@ -51,6 +51,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import devicesService from "@/api/services/devices.service";
@@ -224,6 +232,40 @@ export default function DeviceDetails() {
     URL.revokeObjectURL(url);
     toast.success("Telemetry data exported");
   }, [deviceId, telemetryHistory]);
+
+  // Voltronic command panel state
+  const [voltronicForm, setVoltronicForm] = useState({
+    outputPriority: "utility",
+    chargerPriority: "utility",
+    maxChargingCurrent: "60",
+    maxAcChargingCurrent: "30",
+    bulkVoltage: "56.4",
+    floatVoltage: "54.0",
+    lowVoltageCutoff: "42.0",
+  });
+  const [sendingCmd, setSendingCmd] = useState<string | null>(null);
+
+  const sendVoltronicCommand = useCallback(async (cmdType: string, params?: Record<string, unknown>) => {
+    setSendingCmd(cmdType);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await devicesService.sendCommand(deviceId!, { command: cmdType, parameters: params } as any);
+      if (result.success) {
+        toast.success(`Command "${cmdType}" sent successfully`);
+      } else {
+        toast.error(result.error || `Command "${cmdType}" failed`);
+      }
+    } catch {
+      toast.error(`Failed to send command "${cmdType}"`);
+    } finally {
+      setSendingCmd(null);
+    }
+  }, [deviceId]);
+
+  const isVoltronicDevice =
+    device?.device_type === "inverter" ||
+    device?.device_type === "charger" ||
+    (device?.connection_config as { protocol_definition_id?: string })?.protocol_definition_id?.includes("voltronic");
 
   const isLoading = deviceLoading;
 
@@ -423,6 +465,9 @@ export default function DeviceDetails() {
             <TabsTrigger value="telemetry">Telemetry</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
             <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+            {isVoltronicDevice && (
+              <TabsTrigger value="commands">Commands</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview">
@@ -796,6 +841,305 @@ export default function DeviceDetails() {
               </CardContent>
             </Card>
           </TabsContent>
+          {/* Voltronic Commands Tab */}
+          {isVoltronicDevice && (
+            <TabsContent value="commands">
+              <div className="space-y-4">
+
+                {/* Source Priorities */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Zap className="h-4 w-4" />
+                      Source Priorities
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Output Source Priority</Label>
+                        <div className="flex gap-2">
+                          <Select
+                            value={voltronicForm.outputPriority}
+                            onValueChange={(v) => setVoltronicForm((f) => ({ ...f, outputPriority: v }))}
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="utility">Utility First</SelectItem>
+                              <SelectItem value="solar">Solar First</SelectItem>
+                              <SelectItem value="sbu">SBU (Solar → Battery → Utility)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            disabled={sendingCmd === "set_output_priority"}
+                            onClick={() => sendVoltronicCommand("set_output_priority", { priority: voltronicForm.outputPriority })}
+                          >
+                            {sendingCmd === "set_output_priority" ? "Sending..." : "Set"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Charger Source Priority</Label>
+                        <div className="flex gap-2">
+                          <Select
+                            value={voltronicForm.chargerPriority}
+                            onValueChange={(v) => setVoltronicForm((f) => ({ ...f, chargerPriority: v }))}
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="utility">Utility First</SelectItem>
+                              <SelectItem value="solar">Solar First</SelectItem>
+                              <SelectItem value="solar_utility">Solar + Utility</SelectItem>
+                              <SelectItem value="solar_only">Solar Only</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            disabled={sendingCmd === "set_charger_priority"}
+                            onClick={() => sendVoltronicCommand("set_charger_priority", { priority: voltronicForm.chargerPriority })}
+                          >
+                            {sendingCmd === "set_charger_priority" ? "Sending..." : "Set"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Charging Current Limits */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Activity className="h-4 w-4" />
+                      Charging Current Limits
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Max Total Charging Current (A)</Label>
+                        <p className="text-xs text-muted-foreground">Range: 10–120 A</p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            min={10}
+                            max={120}
+                            value={voltronicForm.maxChargingCurrent}
+                            onChange={(e) => setVoltronicForm((f) => ({ ...f, maxChargingCurrent: e.target.value }))}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={sendingCmd === "set_max_charging_current"}
+                            onClick={() => sendVoltronicCommand("set_max_charging_current", { current: parseInt(voltronicForm.maxChargingCurrent, 10) })}
+                          >
+                            {sendingCmd === "set_max_charging_current" ? "Sending..." : "Set"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max AC (Grid) Charging Current (A)</Label>
+                        <p className="text-xs text-muted-foreground">Range: 2–100 A</p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            min={2}
+                            max={100}
+                            value={voltronicForm.maxAcChargingCurrent}
+                            onChange={(e) => setVoltronicForm((f) => ({ ...f, maxAcChargingCurrent: e.target.value }))}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={sendingCmd === "set_max_ac_charging_current"}
+                            onClick={() => sendVoltronicCommand("set_max_ac_charging_current", { current: parseInt(voltronicForm.maxAcChargingCurrent, 10) })}
+                          >
+                            {sendingCmd === "set_max_ac_charging_current" ? "Sending..." : "Set"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Battery Voltage Settings */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Battery className="h-4 w-4" />
+                      Battery Voltage Settings
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Bulk Charge Voltage (V)</Label>
+                        <p className="text-xs text-muted-foreground">Range: 20.0–62.0 V</p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            step={0.1}
+                            min={20}
+                            max={62}
+                            value={voltronicForm.bulkVoltage}
+                            onChange={(e) => setVoltronicForm((f) => ({ ...f, bulkVoltage: e.target.value }))}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={sendingCmd === "set_bulk_voltage"}
+                            onClick={() => sendVoltronicCommand("set_bulk_voltage", { voltage: parseFloat(voltronicForm.bulkVoltage) })}
+                          >
+                            {sendingCmd === "set_bulk_voltage" ? "..." : "Set"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Float Charge Voltage (V)</Label>
+                        <p className="text-xs text-muted-foreground">Range: 20.0–62.0 V</p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            step={0.1}
+                            min={20}
+                            max={62}
+                            value={voltronicForm.floatVoltage}
+                            onChange={(e) => setVoltronicForm((f) => ({ ...f, floatVoltage: e.target.value }))}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={sendingCmd === "set_float_voltage"}
+                            onClick={() => sendVoltronicCommand("set_float_voltage", { voltage: parseFloat(voltronicForm.floatVoltage) })}
+                          >
+                            {sendingCmd === "set_float_voltage" ? "..." : "Set"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Low Voltage Cutoff (V)</Label>
+                        <p className="text-xs text-muted-foreground">Range: 20.0–50.0 V</p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            step={0.1}
+                            min={20}
+                            max={50}
+                            value={voltronicForm.lowVoltageCutoff}
+                            onChange={(e) => setVoltronicForm((f) => ({ ...f, lowVoltageCutoff: e.target.value }))}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={sendingCmd === "set_low_voltage_cutoff"}
+                            onClick={() => sendVoltronicCommand("set_low_voltage_cutoff", { voltage: parseFloat(voltronicForm.lowVoltageCutoff) })}
+                          >
+                            {sendingCmd === "set_low_voltage_cutoff" ? "..." : "Set"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Feature Toggles */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Wrench className="h-4 w-4" />
+                      Feature Toggles
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {[
+                        { label: "Audible Buzzer", enable: "enable_buzzer", disable: "disable_buzzer" },
+                        { label: "Overload Bypass", enable: "enable_overload_bypass", disable: "disable_overload_bypass" },
+                        { label: "Solar Feed to Grid", enable: "enable_solar_feed_to_grid", disable: "disable_solar_feed_to_grid" },
+                        { label: "LCD Backlight On", enable: "enable_lcd_backlight", disable: "disable_lcd_backlight_timeout" },
+                      ].map(({ label, enable, disable }) => (
+                        <div key={label} className="p-3 rounded-md border space-y-2">
+                          <p className="text-sm font-medium">{label}</p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-green-600 border-green-200 hover:bg-green-50"
+                              disabled={sendingCmd === enable}
+                              onClick={() => sendVoltronicCommand(enable)}
+                            >
+                              {sendingCmd === enable ? "..." : "Enable"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                              disabled={sendingCmd === disable}
+                              onClick={() => sendVoltronicCommand(disable)}
+                            >
+                              {sendingCmd === disable ? "..." : "Disable"}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Danger Zone */}
+                <Card className="border-destructive/30">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      Danger Zone
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Separator className="mb-4" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm">Restore Factory Defaults</p>
+                        <p className="text-xs text-muted-foreground">Resets all settings to factory defaults. This cannot be undone.</p>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            Factory Reset
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Restore Factory Defaults?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will reset all inverter settings (priorities, voltages, current limits) to factory defaults.
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground"
+                              onClick={() => sendVoltronicCommand("restore_factory_defaults")}
+                              disabled={sendingCmd === "restore_factory_defaults"}
+                            >
+                              {sendingCmd === "restore_factory_defaults" ? "Sending..." : "Reset to Factory Defaults"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </CardContent>
+                </Card>
+
+              </div>
+            </TabsContent>
+          )}
+
         </Tabs>
       </div>
 

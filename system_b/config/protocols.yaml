@@ -183,6 +183,124 @@ protocols:
     telemetry:
       battery_power_sign_convention: "positive_discharging"
 
+  - id: voltronic_pi16
+    name: "Voltronic Inverter (PI16 SUNNY)"
+    description: >
+      Voltronic Power SUNNY / PI15 / PI16 series hybrid inverters.
+      QPIGS returns 22 space-separated fields with up to 3 MPPT strings (PV1/PV2/PV3).
+      Unused PV strings appear as '---.-' or '-----' placeholders.
+      No separate battery charge/discharge current — battery direction from 9-bit status.
+      Uses standard Voltronic frame format (same CRC as PI30).
+    device_type: inverter
+    protocol_type: command
+    priority: 13
+    manufacturer: "Voltronic Power"
+
+    identification:
+      command: "\\x51\\x50\\x49\\xbe\\xac\\x0d"
+      expected_response: "PI16"
+      timeout: 5.0
+
+    serial_number:
+      command: "\\x51\\x49\\x44\\xd6\\xea\\x0d"
+      parse_regex: "\\(([A-Z0-9]{8,})"
+
+    polling:
+      default_interval: 10
+      min_interval: 5
+      max_interval: 60
+      timeout: 10.0
+      max_consecutive_failures: 5
+      retry_delay: 2.0
+
+    command:
+      line_ending: "\r"
+      response_timeout: 8.0
+      command_delay: 0.1
+
+    telemetry:
+      # PI16 has no battery current register; direction derived from 9-bit status bits.
+      battery_power_sign_convention: "status_bits"
+
+  - id: voltronic_pi17
+    name: "Voltronic InfiniSolar 5KW (PI17)"
+    description: >
+      Voltronic InfiniSolar 5KW inverters using the PI17 SEC serial protocol.
+      SEC format uses '^Pnnn<cmd><cr>' commands and '^Dnnn<data><CRC><cr>' responses.
+      GS command returns 28 comma-separated fields with dual MPPT, signed battery
+      current (positive = charging), and a direct grid_power_w field.
+      CRC is CRC-CCITT (init=0xFFFF) instead of the standard init=0x0000.
+    device_type: inverter
+    protocol_type: command
+    priority: 12
+    manufacturer: "Voltronic Power"
+
+    identification:
+      # SEC devices respond to QPI with '^D00517' (SEC frame, not standard '(' frame).
+      command: "\\x51\\x50\\x49\\xbe\\xac\\x0d"
+      expected_response: "PI17"
+      timeout: 5.0
+
+    serial_number:
+      command: "\\x51\\x49\\x44\\xd6\\xea\\x0d"
+      parse_regex: "\\(([A-Z0-9]{8,})"
+
+    polling:
+      default_interval: 10
+      min_interval: 5
+      max_interval: 60
+      timeout: 10.0
+      max_consecutive_failures: 5
+      retry_delay: 2.0
+
+    command:
+      line_ending: "\r"
+      response_timeout: 10.0
+      command_delay: 0.1
+
+    telemetry:
+      # PI17 battery current positive = charging. Adapter negates to positive_discharging.
+      battery_power_sign_convention: "positive_discharging"
+
+  - id: voltronic_pi34
+    name: "Voltronic MPPT-3000 Solar Charger (PI34)"
+    description: >
+      Voltronic Power MPPT-3000 standalone solar charge controller.
+      NOT a hybrid inverter — no AC grid input or AC load output.
+      QPIGS returns 11 space-separated fields: PV voltage, battery voltage,
+      charging currents (total + 2 channels), charging power, temperatures.
+      Uses standard Voltronic frame format (same CRC as PI30).
+    device_type: charger
+    protocol_type: command
+    priority: 16
+    manufacturer: "Voltronic Power"
+
+    identification:
+      command: "\\x51\\x50\\x49\\xbe\\xac\\x0d"
+      expected_response: "PI34"
+      timeout: 5.0
+
+    serial_number:
+      command: "\\x51\\x49\\x44\\xd6\\xea\\x0d"
+      parse_regex: "\\(([A-Z0-9]{8,})"
+
+    polling:
+      default_interval: 10
+      min_interval: 5
+      max_interval: 60
+      timeout: 10.0
+      max_consecutive_failures: 5
+      retry_delay: 2.0
+
+    command:
+      line_ending: "\r"
+      response_timeout: 8.0
+      command_delay: 0.1
+
+    telemetry:
+      # PI34 only charges (positive current = charging).
+      battery_power_sign_convention: "positive_charging"
+
   # ============================================
   # ENERGY METERS
   # ============================================
