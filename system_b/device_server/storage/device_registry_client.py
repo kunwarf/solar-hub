@@ -92,9 +92,12 @@ class DeviceRegistryClient:
 
         try:
             async with self._session_factory() as session:
-                # Query for recently connected device of matching type
-                # Uses last_connected_at to match devices that just reconnected
-                # Does not filter by status - works for both orphan and claimed devices
+                # Query for recently connected device of matching type.
+                # Excludes:
+                # - Devices already linked to an inverter (inverter_serial set)
+                # - Serial-bridge devices (is_bridge=true in metadata) — these are
+                #   data loggers that talk to the server directly via HELLO framing
+                #   (e.g. JK BMS ESP32) and must never be claimed by a Modbus device.
                 result = await session.execute(
                     text("""
                     SELECT serial_number
@@ -102,6 +105,7 @@ class DeviceRegistryClient:
                     WHERE device_type = CAST(:device_type AS text)
                       AND last_connected_at >= CAST(:cutoff AS timestamptz)
                       AND (metadata IS NULL OR metadata->>'inverter_serial' IS NULL)
+                      AND (metadata IS NULL OR (metadata->>'is_bridge')::boolean IS NOT TRUE)
                     ORDER BY last_connected_at DESC
                     LIMIT 1
                     """),
@@ -120,6 +124,58 @@ class DeviceRegistryClient:
         except Exception as e:
             logger.error(f"Error querying device registry: {e}")
             return None
+
+    async def mark_as_serial_bridge(
+        self,
+        serial_number: str,
+    ) -> bool:
+        """
+        Mark a device registry entry as a serial-bridge data logger.
+
+        Serial-bridge devices (identified via HELLO frame, e.g. JK BMS ESP32)
+        ARE the data logger — they should never be claimed as the 'data logger'
+        for a separate Modbus device.  Setting is_bridge=true in metadata
+        causes get_recently_connected_serial() to exclude them.
+
+        Args:
+            serial_number: The data logger serial number.
+
+        Returns:
+            True if updated, False otherwise.
+        """
+        if not self._session_factory:
+            return False
+
+        try:
+            async with self._session_factory() as session:
+                result = await session.execute(
+                    text("""
+                    UPDATE device_registry
+                    SET metadata = CASE
+                            WHEN metadata IS NULL OR jsonb_typeof(metadata) != 'object'
+                            THEN jsonb_build_object('is_bridge', TRUE)
+                            ELSE metadata || jsonb_build_object('is_bridge', TRUE)
+                        END,
+                        updated_at = CAST(:now AS timestamptz)
+                    WHERE serial_number = CAST(:serial_number AS text)
+                    """),
+                    {
+                        "serial_number": serial_number,
+                        "now": datetime.now(timezone.utc),
+                    },
+                )
+                await session.commit()
+
+                if result.rowcount > 0:
+                    logger.info(f"Marked {serial_number} as serial-bridge data logger")
+                    return True
+
+                logger.warning(f"mark_as_serial_bridge: no row found for {serial_number}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error marking serial bridge for {serial_number}: {e}")
+            return False
 
     async def update_inverter_serial(
         self,

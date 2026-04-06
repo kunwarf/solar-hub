@@ -317,6 +317,15 @@ class DeviceServer:
                 f"Serial bridge device {device_state.serial_number}: "
                 f"data_logger_serial set from HELLO"
             )
+            # Protect this entry from being claimed by a Modbus device.
+            # get_recently_connected_serial() excludes rows with is_bridge=true,
+            # so this prevents JK BMS / Pylontech serial-bridge ESP32s from being
+            # wrongly linked to a different Modbus battery that happens to connect
+            # within the same 10-minute window.
+            if self.device_registry_client:
+                await self.device_registry_client.mark_as_serial_bridge(
+                    device_state.serial_number
+                )
         elif self.device_registry_client:
             # Link Modbus-identified inverter serial with data logger serial from
             # self-registration. This is critical for telemetry caching — we cache
