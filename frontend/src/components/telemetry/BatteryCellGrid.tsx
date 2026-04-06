@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Thermometer, Zap, Battery, Activity, AlertTriangle } from "lucide-react";
+import { Thermometer, Zap, Battery, Activity, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -434,24 +434,61 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
           <div className="space-y-3 sm:space-y-4">
             {cellsByUnit.map(({ unit: u, cells }) => (
               <div key={u.unit} className="border border-border/50 rounded-lg p-2 sm:p-3 bg-secondary/10">
+                {/* Unit header row */}
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <Battery className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-battery" />
+                  <Battery className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-battery shrink-0" />
                   <h4 className="font-medium text-xs sm:text-sm text-foreground">Unit {u.unit}</h4>
                   {cells.length > 0 && (
                     <span className="text-[10px] sm:text-xs text-muted-foreground">({cells.length} cells)</span>
                   )}
-                  {u.soc_pct != null && (
-                    <span className="text-[10px] sm:text-xs text-battery ml-auto">SOC {u.soc_pct}%</span>
-                  )}
-                  {u.soh_pct != null && (
-                    <span className="text-[10px] sm:text-xs text-muted-foreground">SOH {u.soh_pct.toFixed(1)}%</span>
-                  )}
-                  {u.cycle_count != null && (
-                    <span className="text-[10px] sm:text-xs text-muted-foreground">{u.cycle_count} cycles</span>
-                  )}
                   {u.has_alarm && (
                     <AlertTriangle className="w-3 h-3 text-destructive" />
                   )}
+
+                  {/* Right-side unit stats */}
+                  <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+                    {/* Charge / Discharge badge */}
+                    {u.current_a != null && (
+                      <span className={cn(
+                        "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold",
+                        u.current_a >= 0
+                          ? "bg-success/10 text-success border border-success/20"
+                          : "bg-warning/10 text-warning border border-warning/20"
+                      )}>
+                        {u.current_a >= 0
+                          ? <TrendingUp className="w-2.5 h-2.5" />
+                          : <TrendingDown className="w-2.5 h-2.5" />
+                        }
+                        {u.current_a >= 0 ? "Charging" : "Discharging"}
+                      </span>
+                    )}
+                    {/* Unit pack voltage */}
+                    {u.voltage_v != null && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-semibold bg-secondary/50 text-foreground border border-border/50">
+                        <Zap className="w-2.5 h-2.5 text-battery" />
+                        {u.voltage_v.toFixed(2)}V
+                      </span>
+                    )}
+                    {/* Unit power */}
+                    {u.power_w != null && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-semibold bg-secondary/50 text-solar border border-border/50">
+                        <Activity className="w-2.5 h-2.5" />
+                        {Math.abs(u.power_w) >= 1000
+                          ? `${(Math.abs(u.power_w) / 1000).toFixed(2)}kW`
+                          : `${Math.abs(u.power_w).toFixed(0)}W`}
+                      </span>
+                    )}
+                    {/* SOC / SOH / cycles */}
+                    {u.soc_pct != null && (
+                      <span className="text-[9px] sm:text-[10px] text-battery font-medium">SOC {u.soc_pct}%</span>
+                    )}
+                    {u.soh_pct != null && (
+                      <span className="text-[9px] sm:text-[10px] text-muted-foreground">SOH {u.soh_pct.toFixed(0)}%</span>
+                    )}
+                    {u.cycle_count != null && (
+                      <span className="text-[9px] sm:text-[10px] text-muted-foreground">{u.cycle_count} cyc</span>
+                    )}
+                  </div>
                 </div>
 
                 {cells.length > 0 ? (
