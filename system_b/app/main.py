@@ -79,6 +79,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     # Start HA Telemetry Publisher (if enabled)
     if settings.ha_mqtt.enabled:
         try:
+            import sys
+            from pathlib import Path as FilePath
+            _solar_hub_path = str(FilePath(__file__).parent.parent.parent)
+            if _solar_hub_path not in sys.path:
+                sys.path.insert(0, _solar_hub_path)
             from system_b.device_server.ha.publisher import HATelemetryPublisher
 
             redis_client = await RedisStreamManager.get_client()
