@@ -49,7 +49,9 @@ import {
   ChevronRight,
   Users,
   Loader2,
+  Plug,
 } from "lucide-react";
+import { MQTTIntegrationCard } from "@/components/settings/MQTTIntegrationCard";
 import { settingsData } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
 import { useUserMode } from "@/hooks/use-user-mode";
@@ -387,6 +389,10 @@ const SettingsPage = () => {
               <TabsTrigger value="notifications" className="gap-2">
                 <Bell className="w-4 h-4" />
                 <span className="hidden sm:inline">Notifications</span>
+              </TabsTrigger>
+              <TabsTrigger value="integrations" className="gap-2">
+                <Plug className="w-4 h-4" />
+                <span className="hidden sm:inline">Integrations</span>
               </TabsTrigger>
             </TabsList>
           </motion.div>
@@ -1041,6 +1047,17 @@ const SettingsPage = () => {
                   </div>
                 </div>
               </div>
+            </motion.div>
+          </TabsContent>
+
+          {/* Integrations tab */}
+          <TabsContent value="integrations">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              <MQTTIntegrationCard />
             </motion.div>
           </TabsContent>
         </Tabs>

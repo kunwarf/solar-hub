@@ -5,7 +5,7 @@ These interfaces define the contract for persistence operations
 without specifying the implementation details.
 """
 from abc import ABC, abstractmethod
-from typing import Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import UUID
 
 from ...domain.entities.user import User
@@ -15,6 +15,7 @@ from ...domain.entities.device import Device, DeviceType, ProtocolType
 from ...domain.entities.alert import Alert, AlertRule
 from ...domain.entities.protocol_definition import ProtocolDefinition
 from ...domain.entities.dashboard import DashboardPreferences, CustomPreset
+from ...domain.entities.mqtt_integration import MqttIntegration, MqttIntegrationDevice
 
 
 # Generic type for entities
@@ -544,5 +545,50 @@ class CustomPresetRepository(Repository[CustomPreset]):
 
         Returns:
             True if deleted, False if not found or not owned by user
+        """
+        pass
+
+
+class MqttIntegrationRepository(Repository[MqttIntegration]):
+    """Repository interface for MqttIntegration entities."""
+
+    @abstractmethod
+    async def get_by_user_id(self, user_id: UUID) -> Optional[MqttIntegration]:
+        """Get MQTT integration for a user (one per user)."""
+        pass
+
+    @abstractmethod
+    async def get_by_ha_username(self, ha_username: str) -> Optional[MqttIntegration]:
+        """Get MQTT integration by broker username."""
+        pass
+
+    @abstractmethod
+    async def get_all_enabled(self) -> List[MqttIntegration]:
+        """Get all enabled integrations (used by System B publisher refresh)."""
+        pass
+
+
+class MqttIntegrationDeviceRepository(Repository[MqttIntegrationDevice]):
+    """Repository interface for MqttIntegrationDevice entities."""
+
+    @abstractmethod
+    async def get_by_integration_id(self, integration_id: UUID) -> List[MqttIntegrationDevice]:
+        """Get all device enrollments for an integration."""
+        pass
+
+    @abstractmethod
+    async def get_by_integration_and_device(
+        self, integration_id: UUID, device_id: UUID
+    ) -> Optional[MqttIntegrationDevice]:
+        """Get a specific device enrollment."""
+        pass
+
+    @abstractmethod
+    async def get_all_enabled_enrollments(self) -> List[Dict[str, Any]]:
+        """
+        Return enriched list of all enabled enrollments for System B.
+
+        Each dict contains: ha_username, device_serial, device_name,
+        manufacturer, model, publish_interval_seconds.
         """
         pass

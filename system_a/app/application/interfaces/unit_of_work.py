@@ -7,7 +7,7 @@ concurrency problems.
 """
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import Optional, Type
+from typing import TYPE_CHECKING, Any, Optional, Type
 
 from .repositories import (
     UserRepository,
@@ -18,15 +18,23 @@ from .repositories import (
     AlertRuleRepository,
     DashboardPreferencesRepository,
     CustomPresetRepository,
+    MqttIntegrationRepository,
+    MqttIntegrationDeviceRepository,
 )
-from ...infrastructure.database.repositories.ai_repository import (
-    SQLAlchemyGridOutageRepository,
-    SQLAlchemyAIInsightsLogRepository,
-    SQLAlchemyAIPromptTemplateRepository,
-)
-from ...infrastructure.database.repositories.admin_repository import (
-    SQLAlchemyProviderBillingScheduleRepository,
-)
+
+if TYPE_CHECKING:
+    # These are concrete SQLAlchemy types — importing them at runtime creates
+    # a circular dependency (application layer → infrastructure layer →
+    # application layer).  Using TYPE_CHECKING keeps the type hints without
+    # causing a circular import at runtime.
+    from ...infrastructure.database.repositories.ai_repository import (
+        SQLAlchemyGridOutageRepository,
+        SQLAlchemyAIInsightsLogRepository,
+        SQLAlchemyAIPromptTemplateRepository,
+    )
+    from ...infrastructure.database.repositories.admin_repository import (
+        SQLAlchemyProviderBillingScheduleRepository,
+    )
 
 
 class UnitOfWork(ABC):
@@ -52,11 +60,14 @@ class UnitOfWork(ABC):
     dashboard_preferences: DashboardPreferencesRepository
     custom_presets: CustomPresetRepository
     # AI Intelligence layer
-    grid_outages: SQLAlchemyGridOutageRepository
-    ai_insights_log: SQLAlchemyAIInsightsLogRepository
-    ai_prompt_templates: SQLAlchemyAIPromptTemplateRepository
+    grid_outages: "SQLAlchemyGridOutageRepository"
+    ai_insights_log: "SQLAlchemyAIInsightsLogRepository"
+    ai_prompt_templates: "SQLAlchemyAIPromptTemplateRepository"
     # Provider billing schedules
-    provider_billing_schedules: SQLAlchemyProviderBillingScheduleRepository
+    provider_billing_schedules: "SQLAlchemyProviderBillingScheduleRepository"
+    # Home Assistant MQTT integrations
+    mqtt_integrations: MqttIntegrationRepository
+    mqtt_integration_devices: MqttIntegrationDeviceRepository
 
     async def __aenter__(self) -> 'UnitOfWork':
         """Enter the context manager."""

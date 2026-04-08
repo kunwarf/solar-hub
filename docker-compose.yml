@@ -69,6 +69,37 @@ services:
       timeout: 5s
       retries: 3
 
+  # HA MQTT Broker — dedicated Mosquitto instance for Home Assistant integration
+  # Users connect their HA instance to this broker (port 1884) with per-user credentials.
+  solarhub_ha_mqtt_init:
+    image: eclipse-mosquitto:2
+    container_name: solarhub_ha_mqtt_init
+    environment:
+      - HA_MQTT_ADMIN_PASSWORD=${HA_MQTT_ADMIN_PASSWORD:-admin_change_me_in_production}
+      - HA_MQTT_PUBLISHER_PASSWORD=${HA_MQTT_PUBLISHER_PASSWORD:-publisher_change_me_in_production}
+    volumes:
+      - mosquitto_ha_data:/mosquitto/data
+      - ./scripts/init_mosquitto_ha.sh:/init_mosquitto_ha.sh:ro
+    entrypoint: ["/bin/sh", "/init_mosquitto_ha.sh"]
+
+  solarhub_ha_mqtt:
+    image: eclipse-mosquitto:2
+    container_name: solarhub_ha_mqtt
+    ports:
+      - "1884:1884"
+    volumes:
+      - mosquitto_ha_data:/mosquitto/data
+      - mosquitto_ha_log:/mosquitto/log
+      - ./mosquitto_ha.conf:/mosquitto/config/mosquitto.conf:ro
+    depends_on:
+      solarhub_ha_mqtt_init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1884 -t '#' -C 1 -W 1 -u solarhub_admin -P ${HA_MQTT_ADMIN_PASSWORD:-admin_change_me_in_production} || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # System A - Platform API
   system_a:
     build:
@@ -85,6 +116,13 @@ services:
       - DB_PASSWORD=postgres
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # Home Assistant MQTT broker admin credentials
+      - HA_MQTT_BROKER_HOST=solarhub_ha_mqtt
+      - HA_MQTT_BROKER_PORT=1884
+      - HA_MQTT_ADMIN_USERNAME=solarhub_admin
+      - HA_MQTT_ADMIN_PASSWORD=${HA_MQTT_ADMIN_PASSWORD:-admin_change_me_in_production}
+      - HA_MQTT_PUBLIC_HOST=${HA_MQTT_PUBLIC_HOST:-localhost}
+      - HA_MQTT_PUBLIC_PORT=${HA_MQTT_PUBLIC_PORT:-1884}
     ports:
       - "8000:8000"
     depends_on:
@@ -114,6 +152,14 @@ services:
       - REDIS_PORT=6379
       - REDIS_DB=1
       - PROTOCOL_MQTT_BROKER_HOST=mosquitto
+      # Home Assistant MQTT publisher credentials
+      - HA_MQTT_ENABLED=false
+      - HA_MQTT_BROKER_HOST=solarhub_ha_mqtt
+      - HA_MQTT_BROKER_PORT=1884
+      - HA_MQTT_PUBLISHER_USERNAME=solarhub_publisher
+      - HA_MQTT_PUBLISHER_PASSWORD=${HA_MQTT_PUBLISHER_PASSWORD:-publisher_change_me_in_production}
+      - HA_MQTT_PUBLISH_INTERVAL=30
+      - HA_MQTT_ENROLLMENT_REFRESH_INTERVAL=300
     ports:
       - "8001:8001"
     depends_on:
@@ -122,6 +168,8 @@ services:
       redis:
         condition: service_healthy
       mosquitto:
+        condition: service_healthy
+      solarhub_ha_mqtt:
         condition: service_healthy
     volumes:
       - ./system_b:/app
@@ -133,3 +181,5 @@ volumes:
   redis_data:
   mosquitto_data:
   mosquitto_log:
+  mosquitto_ha_data:
+  mosquitto_ha_log:

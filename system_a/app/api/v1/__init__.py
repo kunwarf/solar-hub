@@ -36,6 +36,8 @@ from .admin_ai_prompts import router as admin_ai_prompts_router
 from .admin_billing_schedules import router as admin_billing_schedules_router
 # Public endpoints served to authenticated end-users
 from .public_providers import router as public_providers_router
+# Home Assistant MQTT integration
+from .integrations_mqtt import router as integrations_mqtt_router
 # Deprecated: telemetry_sync and performance_metrics moved to System B
 # from .performance_metrics import router as performance_metrics_router
 # from .telemetry_sync import router as telemetry_sync_router
@@ -77,6 +79,8 @@ api_router.include_router(admin_ai_prompts_router)
 api_router.include_router(admin_billing_schedules_router)
 # Public endpoints for end-users
 api_router.include_router(public_providers_router)
+# Home Assistant MQTT integration
+api_router.include_router(integrations_mqtt_router)
 # api_router.include_router(performance_metrics_router)
 # api_router.include_router(telemetry_sync_router)
 

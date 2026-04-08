@@ -30,6 +30,10 @@ _device_server: Optional["DeviceServer"] = None
 _device_server_task: Optional[asyncio.Task] = None
 _device_server_lock_socket = None
 
+# Global reference to HA Telemetry Publisher
+_ha_publisher = None
+_ha_publisher_task: Optional[asyncio.Task] = None
+
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -48,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     Manages startup and shutdown tasks.
     """
     global _device_server, _device_server_task, _device_server_lock_socket
+    global _ha_publisher, _ha_publisher_task
 
     # Startup
     logger = logging.getLogger(__name__)
@@ -70,6 +75,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
         raise  # Redis is critical for System B
+
+    # Start HA Telemetry Publisher (if enabled)
+    if settings.ha_mqtt.enabled:
+        try:
+            from system_b.device_server.ha.publisher import HATelemetryPublisher
+
+            redis_client = await RedisStreamManager.get_client()
+            _ha_publisher = HATelemetryPublisher(
+                ha_mqtt_settings=settings.ha_mqtt,
+                redis_client=redis_client,
+                system_a_url=settings.system_a_url,
+                system_a_api_key=settings.system_a_api_key,
+            )
+            await _ha_publisher.start()
+            _ha_publisher_task = asyncio.create_task(
+                _ha_publisher.serve_forever(), name="ha_publisher"
+            )
+            logger.info("HA Telemetry Publisher started")
+        except Exception as e:
+            logger.error("HA Publisher startup failed: %s", e)
+            _ha_publisher = None
+            _ha_publisher_task = None
 
     # Start Device Server (TCP server for Modbus device connections)
     # Skip when DEVICE_SERVER_EXTERNAL=true — solarhub-polling-manager.service
@@ -138,6 +165,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     # Shutdown
     logger.info("Shutting down application...")
+
+    # Stop HA Publisher
+    if _ha_publisher:
+        try:
+            await _ha_publisher.stop()
+            if _ha_publisher_task and not _ha_publisher_task.done():
+                _ha_publisher_task.cancel()
+                try:
+                    await _ha_publisher_task
+                except asyncio.CancelledError:
+                    pass
+            logger.info("HA Publisher stopped")
+        except Exception as e:
+            logger.error("Error stopping HA Publisher: %s", e)
 
     # Release device server lock socket
     if _device_server_lock_socket:

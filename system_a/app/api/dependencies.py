@@ -11,6 +11,8 @@ from ..application.services.auth_service import AuthService
 from ..application.services.telemetry_service import TelemetryService
 from ..application.services.telemetry_sync_service import TelemetrySyncService
 from ..application.services.registration_service import RegistrationService
+from ..application.services.mqtt_integration_service import MqttIntegrationService
+from ..infrastructure.mqtt.mosquitto_admin_client import MosquittoAdminClient
 from ..application.interfaces.unit_of_work import UnitOfWork
 from ..domain.entities.user import User, UserRole, UserStatus
 from ..infrastructure.database.connection import (
@@ -38,6 +40,7 @@ _password_hasher: Optional[BcryptPasswordHasher] = None
 _jwt_handler: Optional[JWTHandler] = None
 _email_service: Optional[EmailService] = None
 _system_b_client: Optional[SystemBClient] = None
+_mosquitto_admin_client: Optional[MosquittoAdminClient] = None
 
 
 def get_password_hasher() -> BcryptPasswordHasher:
@@ -77,6 +80,32 @@ def get_email_service() -> EmailService:
         else:
             _email_service = MockEmailService()
     return _email_service
+
+
+def get_mosquitto_admin_client() -> MosquittoAdminClient:
+    """Get Mosquitto admin client singleton."""
+    global _mosquitto_admin_client
+    if _mosquitto_admin_client is None:
+        _mosquitto_admin_client = MosquittoAdminClient(
+            broker_host=settings.ha_mqtt.broker_host,
+            broker_port=settings.ha_mqtt.broker_port,
+            admin_username=settings.ha_mqtt.admin_username,
+            admin_password=settings.ha_mqtt.admin_password,
+        )
+    return _mosquitto_admin_client
+
+
+def get_mqtt_integration_service(
+    mosquitto_client: MosquittoAdminClient = Depends(get_mosquitto_admin_client),
+    password_hasher: BcryptPasswordHasher = Depends(get_password_hasher),
+) -> MqttIntegrationService:
+    """Get MQTT integration service instance."""
+    return MqttIntegrationService(
+        mosquitto_client=mosquitto_client,
+        password_hasher=password_hasher,
+        broker_public_host=settings.ha_mqtt.public_host,
+        broker_public_port=settings.ha_mqtt.public_port,
+    )
 
 
 def get_system_b_client_instance() -> SystemBClient:

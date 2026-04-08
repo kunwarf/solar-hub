@@ -220,6 +220,27 @@ class WeatherSettings(BaseSettings):
     fallback_to_telemetry: bool = Field(default=True, description='Use telemetry if API fails')
 
 
+class HaMqttSettings(BaseSettings):
+    """Home Assistant MQTT broker connection settings (System A admin credentials)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix='HA_MQTT_',
+        env_file='.env',
+        extra='ignore'
+    )
+
+    broker_host: str = Field(default='localhost', description='HA MQTT broker host')
+    broker_port: int = Field(default=1884, description='HA MQTT broker port')
+    admin_username: str = Field(default='solarhub_admin', description='Mosquitto admin username')
+    admin_password: str = Field(
+        default='admin_change_me_in_production',
+        description='Mosquitto admin password'
+    )
+    # Public address shown to users so they can configure their HA instance
+    public_host: str = Field(default='localhost', description='Public broker host for HA clients')
+    public_port: int = Field(default=1884, description='Public broker port for HA clients')
+
+
 class SystemBSettings(BaseSettings):
     """System B (Telemetry Service) connection settings."""
 
@@ -321,6 +342,7 @@ class AppSettings(BaseSettings):
     ai: AISettings = Field(default_factory=AISettings)
     weather: WeatherSettings = Field(default_factory=WeatherSettings)
     system_b: SystemBSettings = Field(default_factory=SystemBSettings)
+    ha_mqtt: HaMqttSettings = Field(default_factory=HaMqttSettings)
 
     @property
     def is_production(self) -> bool:

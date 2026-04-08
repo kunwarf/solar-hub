@@ -156,6 +156,26 @@ class WorkerSettings(BaseSettings):
     alert_checker_interval: int = Field(default=10, description='Alert check interval in seconds')
 
 
+class HaMqttSettings(BaseSettings):
+    """Home Assistant MQTT publisher settings for System B."""
+
+    model_config = SettingsConfigDict(
+        env_prefix='HA_MQTT_',
+        env_file='.env',
+        extra='ignore'
+    )
+
+    enabled: bool = Field(default=False, description='Enable HA MQTT publisher')
+    broker_host: str = Field(default='localhost', description='HA broker host')
+    broker_port: int = Field(default=1884, description='HA broker port')
+    publisher_username: str = Field(default='solarhub_publisher')
+    publisher_password: str = Field(default='publisher_change_me_in_production')
+    publish_interval: int = Field(default=30, description='Seconds between publish cycles')
+    enrollment_refresh_interval: int = Field(
+        default=300, description='Seconds between enrollment list refresh from System A'
+    )
+
+
 class AppSettings(BaseSettings):
     """Main application settings for System B."""
 
@@ -200,6 +220,7 @@ class AppSettings(BaseSettings):
     device_auth: DeviceAuthSettings = Field(default_factory=DeviceAuthSettings)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
+    ha_mqtt: HaMqttSettings = Field(default_factory=HaMqttSettings)
 
     @property
     def is_production(self) -> bool:

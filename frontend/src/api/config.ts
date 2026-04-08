@@ -188,6 +188,18 @@ export const API_ENDPOINTS = {
     scanResults: (id: string) => `/discovery/scans/${id}/results`,
   },
 
+  // Integrations
+  integrations: {
+    mqtt: {
+      create: '/integrations/mqtt',
+      get: '/integrations/mqtt',
+      delete: '/integrations/mqtt',
+      rotatePassword: '/integrations/mqtt/rotate-password',
+      devices: '/integrations/mqtt/devices',
+      enrollDevice: (deviceId: string) => `/integrations/mqtt/devices/${deviceId}`,
+    },
+  },
+
   // Admin (System A)
   admin: {
     // Auth

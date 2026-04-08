@@ -324,6 +324,12 @@ class JKBMSStreamParser:
         self._known_ids: set = set()       # unit IDs seen in the current cycle
         self._unit_count: Optional[int] = None
         self._cycle_count: int = 0
+        # Consecutive-cycle confirmation: a unit must appear in this many
+        # back-to-back cycles before being included in get_result().
+        # Prevents ghost frames (RS485 noise mis-attributed to a phantom unit)
+        # from showing up in the output without capping the real unit count.
+        self._unit_consecutive: Dict[int, int] = {}   # unit_id -> consecutive cycle count
+        self._REQUIRED_CONSECUTIVE: int = 2
 
     def feed(self, data: bytes) -> None:
         """Append raw bytes and parse all complete frames found."""
@@ -347,6 +353,16 @@ class JKBMSStreamParser:
                 if self._known_ids and battery_id in self._known_ids and battery_id == min(self._known_ids):
                     self._unit_count = len(self._known_ids)
                     self._cycle_count += 1
+
+                    # Increment consecutive count for every unit seen this cycle;
+                    # reset to 0 for any unit that was absent (dropped off the bus
+                    # or was a one-shot ghost from a previous cycle).
+                    for uid in self._known_ids:
+                        self._unit_consecutive[uid] = self._unit_consecutive.get(uid, 0) + 1
+                    for uid in list(self._unit_consecutive.keys()):
+                        if uid not in self._known_ids:
+                            self._unit_consecutive[uid] = 0
+
                     self._known_ids = set()
                     logger.debug(
                         f"JK BMS stream: cycle {self._cycle_count} complete, "
@@ -392,19 +408,32 @@ class JKBMSStreamParser:
 
     def get_result(self) -> Optional[Dict[str, Any]]:
         """
-        Return aggregated telemetry from all discovered units.
+        Return aggregated telemetry from confirmed units only.
 
-        Returns None if no frames have been parsed yet.
+        A unit is confirmed only after appearing in at least
+        ``_REQUIRED_CONSECUTIVE`` back-to-back RS485 cycles.  This filters out
+        ghost frames caused by bus noise before any real unit data is returned.
+
+        Returns None if no confirmed units exist yet (warm-up period).
         """
         if not self._batteries:
             return None
 
-        if len(self._batteries) == 1:
-            return dict(list(self._batteries.values())[0])
+        # Only include units that have been seen in enough consecutive cycles.
+        confirmed = {
+            bid: data
+            for bid, data in self._batteries.items()
+            if self._unit_consecutive.get(bid, 0) >= self._REQUIRED_CONSECUTIVE
+        }
+        if not confirmed:
+            return None
+
+        if len(confirmed) == 1:
+            return dict(list(confirmed.values())[0])
 
         # Multi-unit: aggregate bank-level scalars + build structured lists
-        sorted_ids = sorted(self._batteries.keys())
-        parsed_units = [self._batteries[bid] for bid in sorted_ids]
+        sorted_ids = sorted(confirmed.keys())
+        parsed_units = [confirmed[bid] for bid in sorted_ids]
 
         result = dict(parsed_units[0])
 
@@ -447,7 +476,7 @@ class JKBMSStreamParser:
         result["battery_cells"] = battery_cells
 
         logger.debug(
-            f"JK BMS stream result: {len(parsed_units)} units, "
+            f"JK BMS stream result: {len(parsed_units)} confirmed unit(s), "
             f"{len(battery_cells)} cells, cycle={self._cycle_count}"
         )
         return result

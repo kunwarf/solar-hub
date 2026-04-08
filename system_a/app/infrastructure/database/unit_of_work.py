@@ -29,6 +29,10 @@ from .repositories.ai_repository import (
     SQLAlchemyAIInsightsLogRepository,
     SQLAlchemyAIPromptTemplateRepository,
 )
+from .repositories.mqtt_integration_repository import (
+    SQLAlchemyMqttIntegrationRepository,
+    SQLAlchemyMqttIntegrationDeviceRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +71,9 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
         self._ai_prompt_templates: Optional[SQLAlchemyAIPromptTemplateRepository] = None
         # Provider billing schedules
         self._provider_billing_schedules: Optional[SQLAlchemyProviderBillingScheduleRepository] = None
+        # MQTT integrations
+        self._mqtt_integrations: Optional[SQLAlchemyMqttIntegrationRepository] = None
+        self._mqtt_integration_devices: Optional[SQLAlchemyMqttIntegrationDeviceRepository] = None
 
     async def __aenter__(self) -> "SQLAlchemyUnitOfWork":
         """Enter async context - create session."""
@@ -223,6 +230,24 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._provider_billing_schedules = SQLAlchemyProviderBillingScheduleRepository(self._session)
         return self._provider_billing_schedules
 
+    @property
+    def mqtt_integrations(self) -> SQLAlchemyMqttIntegrationRepository:
+        """Get MQTT integration repository."""
+        if self._mqtt_integrations is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._mqtt_integrations = SQLAlchemyMqttIntegrationRepository(self._session)
+        return self._mqtt_integrations
+
+    @property
+    def mqtt_integration_devices(self) -> SQLAlchemyMqttIntegrationDeviceRepository:
+        """Get MQTT integration device repository."""
+        if self._mqtt_integration_devices is None:
+            if self._session is None:
+                raise RuntimeError("Unit of work not started. Use 'async with' context.")
+            self._mqtt_integration_devices = SQLAlchemyMqttIntegrationDeviceRepository(self._session)
+        return self._mqtt_integration_devices
+
     async def commit(self) -> None:
         """Commit current transaction."""
         if self._session:
@@ -259,6 +284,8 @@ class SQLAlchemyUnitOfWork(UnitOfWork):
             self._ai_insights_log = None
             self._ai_prompt_templates = None
             self._provider_billing_schedules = None
+            self._mqtt_integrations = None
+            self._mqtt_integration_devices = None
 
     def collect_domain_events(self) -> List[DomainEvent]:
         """

@@ -35,6 +35,7 @@ from .ai_models import (
     AIPromptTemplateModel,
     AIPromptTemplateVersionModel,
 )
+from .mqtt_integration_model import MqttIntegrationModel, MqttIntegrationDeviceModel
 
 __all__ = [
     'Base',
@@ -73,4 +74,6 @@ __all__ = [
     'AIInsightsLogModel',
     'AIPromptTemplateModel',
     'AIPromptTemplateVersionModel',
+    'MqttIntegrationModel',
+    'MqttIntegrationDeviceModel',
 ]
