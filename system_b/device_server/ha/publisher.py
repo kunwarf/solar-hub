@@ -64,14 +64,13 @@ class HATelemetryPublisher:
     async def start(self) -> None:
         """Connect to the HA MQTT broker."""
         try:
-            import asyncio_mqtt as amqtt
+            import aiomqtt  # noqa: F401
         except ImportError:
             raise RuntimeError(
-                "asyncio-mqtt is required for HA publisher. "
-                "Install with: pip install asyncio-mqtt"
+                "aiomqtt is required for HA publisher. "
+                "Install with: pip install aiomqtt"
             )
 
-        self._amqtt = amqtt
         logger.info(
             "HA publisher connecting to %s:%d",
             self._settings.broker_host,
@@ -90,17 +89,17 @@ class HATelemetryPublisher:
         Uses asyncio-mqtt's Client as a context manager for the full loop
         so the broker connection persists across publish cycles.
         """
-        import asyncio_mqtt as amqtt
+        import aiomqtt
 
         will_topic = f"solarhub/ha/_publisher/availability"
 
         try:
-            async with amqtt.Client(
+            async with aiomqtt.Client(
                 hostname=self._settings.broker_host,
                 port=self._settings.broker_port,
                 username=self._settings.publisher_username,
                 password=self._settings.publisher_password,
-                will=amqtt.Will(topic=will_topic, payload=b"offline", retain=True),
+                will=aiomqtt.Will(topic=will_topic, payload=b"offline", retain=True),
             ) as client:
                 self._mqtt_client = client
                 logger.info("HA publisher connected to broker")
