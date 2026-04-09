@@ -26,6 +26,7 @@ from .discovery import (
     get_metrics_for_device_type,
     get_stale_metric_keys,
 )
+from .energy_calculator import BatteryEnergyCalculator, InverterEnergyCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +62,9 @@ class HATelemetryPublisher:
         self._discovery_published: Dict[str, str] = {}
         self._shutdown_event = asyncio.Event()
 
-        # Battery energy calculator (Redis accumulator + TimescaleDB for totals)
-        from .energy_calculator import BatteryEnergyCalculator
-        self._energy_calc = BatteryEnergyCalculator(redis_client, db_url=db_url)
+        # Energy calculators  (Redis accumulator + TimescaleDB for totals)
+        self._energy_calc     = BatteryEnergyCalculator(redis_client, db_url=db_url)
+        self._inv_energy_calc = InverterEnergyCalculator(redis_client, db_url=db_url)
 
         # Tracks last-publish wall-clock time per device for interval calculation
         self._last_publish_ts: Dict[str, float] = {}
@@ -93,6 +94,7 @@ class HATelemetryPublisher:
         """Signal the publisher loop to exit."""
         self._shutdown_event.set()
         await self._energy_calc.close()
+        await self._inv_energy_calc.close()
 
     async def serve_forever(self) -> None:
         """
@@ -220,13 +222,14 @@ class HATelemetryPublisher:
 
         state = self._build_state_payload(telemetry)
 
+        # Track per-device publish interval for energy accumulation
+        now = time.monotonic()
+        last_ts = self._last_publish_ts.get(serial)
+        interval_sec = (now - last_ts) if last_ts else 0.0
+        self._last_publish_ts[serial] = now
+
         # For battery devices inject calculated energy (no hardware registers)
         if device_type == "battery":
-            now = time.monotonic()
-            last_ts = self._last_publish_ts.get(serial)
-            interval_sec = (now - last_ts) if last_ts else 0.0
-            self._last_publish_ts[serial] = now
-
             power_w = state.get("battery_power_w")
             (
                 state["battery_charge_today_kwh"],
@@ -234,6 +237,11 @@ class HATelemetryPublisher:
                 state["battery_charge_total_kwh"],
                 state["battery_discharge_total_kwh"],
             ) = await self._energy_calc.get_energy(serial, power_w, interval_sec)
+
+        # For inverter devices fill any None energy fields via calculated values
+        # (covers Voltronic — no energy registers at all — and Deye — no total registers)
+        elif device_type == "inverter":
+            await self._inv_energy_calc.fill_missing_energy(serial, state, interval_sec)
 
         state_topic = build_state_topic(ha_username, serial)
 

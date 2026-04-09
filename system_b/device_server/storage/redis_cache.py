@@ -375,8 +375,8 @@ class TelemetryCacheWriter:
         energy_total_mappings = {
             "pv_kwh": ["pv_energy_total_kwh"],
             "load_kwh": ["load_energy_total_kwh"],
-            "grid_import_kwh": ["grid_import_energy_total_kwh"],
-            "grid_export_kwh": ["grid_export_energy_total_kwh"],
+            "grid_import_kwh": ["grid_import_energy_total_kwh", "import_energy_total_kwh"],   # Senergy / Powdrive
+            "grid_export_kwh": ["grid_export_energy_total_kwh", "export_energy_total_kwh"],   # Senergy / Powdrive
             "battery_charge_kwh": ["battery_charge_energy_total_kwh"],
             "battery_discharge_kwh": ["battery_discharge_energy_total_kwh"],
         }
