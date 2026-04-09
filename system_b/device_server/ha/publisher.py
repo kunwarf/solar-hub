@@ -46,6 +46,7 @@ class HATelemetryPublisher:
         redis_client,
         system_a_url: str,
         system_a_api_key: Optional[str],
+        db_url: Optional[str] = None,
     ) -> None:
         self._settings = ha_mqtt_settings
         self._redis = redis_client
@@ -59,6 +60,13 @@ class HATelemetryPublisher:
         # If device_type changes we re-publish discovery with the correct metric set.
         self._discovery_published: Dict[str, str] = {}
         self._shutdown_event = asyncio.Event()
+
+        # Battery energy calculator (Redis accumulator + TimescaleDB for totals)
+        from .energy_calculator import BatteryEnergyCalculator
+        self._energy_calc = BatteryEnergyCalculator(redis_client, db_url=db_url)
+
+        # Tracks last-publish wall-clock time per device for interval calculation
+        self._last_publish_ts: Dict[str, float] = {}
 
     # ------------------------------------------------------------------
     # Public lifecycle
@@ -84,6 +92,7 @@ class HATelemetryPublisher:
     async def stop(self) -> None:
         """Signal the publisher loop to exit."""
         self._shutdown_event.set()
+        await self._energy_calc.close()
 
     async def serve_forever(self) -> None:
         """
@@ -210,6 +219,22 @@ class HATelemetryPublisher:
             self._discovery_published[discovery_key] = device_type
 
         state = self._build_state_payload(telemetry)
+
+        # For battery devices inject calculated energy (no hardware registers)
+        if device_type == "battery":
+            now = time.monotonic()
+            last_ts = self._last_publish_ts.get(serial)
+            interval_sec = (now - last_ts) if last_ts else 0.0
+            self._last_publish_ts[serial] = now
+
+            power_w = state.get("battery_power_w")
+            (
+                state["battery_charge_today_kwh"],
+                state["battery_discharge_today_kwh"],
+                state["battery_charge_total_kwh"],
+                state["battery_discharge_total_kwh"],
+            ) = await self._energy_calc.get_energy(serial, power_w, interval_sec)
+
         state_topic = build_state_topic(ha_username, serial)
 
         await client.publish(

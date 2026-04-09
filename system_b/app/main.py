@@ -87,11 +87,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             from system_b.device_server.ha.publisher import HATelemetryPublisher
 
             redis_client = await RedisStreamManager.get_client()
+            # Pass the plain postgresql:// URL (asyncpg-compatible, no +asyncpg prefix)
+            _db_url = settings.database.sync_url
             _ha_publisher = HATelemetryPublisher(
                 ha_mqtt_settings=settings.ha_mqtt,
                 redis_client=redis_client,
                 system_a_url=settings.system_a_url,
                 system_a_api_key=settings.system_a_api_key,
+                db_url=_db_url,
             )
             await _ha_publisher.start()
             _ha_publisher_task = asyncio.create_task(

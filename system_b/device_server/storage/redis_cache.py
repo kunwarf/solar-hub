@@ -344,18 +344,22 @@ class TelemetryCacheWriter:
             "grid_import_kwh": [
                 "grid_import_today_kwh", "grid_import_today", "import_kwh",
                 "grid_buy_today_kwh", "today_import_kwh",
+                "grid_import_energy_today_kwh",   # Senergy parser output
             ],
             "grid_export_kwh": [
                 "grid_export_today_kwh", "grid_export_today", "export_kwh",
                 "grid_sell_today_kwh", "today_export_kwh",
+                "grid_export_energy_today_kwh",   # Senergy parser output
             ],
             "battery_charge_kwh": [
                 "battery_charge_today_kwh", "battery_charge_today", "charge_kwh",
                 "today_charge_kwh",
+                "battery_charge_energy_today_kwh",   # Senergy parser output
             ],
             "battery_discharge_kwh": [
                 "battery_discharge_today_kwh", "battery_discharge_today", "discharge_kwh",
                 "today_discharge_kwh",
+                "battery_discharge_energy_today_kwh",  # Senergy parser output
             ],
         }
         for target_key, source_keys in energy_mappings.items():

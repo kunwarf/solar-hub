@@ -57,8 +57,13 @@ BATTERY_METRICS: List[Dict[str, Any]] = [
     {"key": "battery_temp_c",       "name": "Temperature",      "device_class": "temperature", "unit": "°C", "state_class": "measurement"},
     {"key": "battery_soh_percent",  "name": "State of Health",  "device_class": None, "unit": "%",  "state_class": "measurement"},
     {"key": "battery_cycle_count",  "name": "Cycle Count",      "device_class": None, "unit": None, "state_class": "total_increasing"},
-    # Note: JK BMS and Pylontech do not have energy accumulator registers,
-    # so charge/discharge kWh sensors are intentionally omitted here.
+    # Energy counters — calculated by the publisher via Redis accumulator (today)
+    # and TimescaleDB integration (total), since JK BMS/Pylontech have no
+    # hardware kWh registers.
+    {"key": "battery_charge_today_kwh",    "name": "Charge Energy Today",    "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
+    {"key": "battery_discharge_today_kwh", "name": "Discharge Energy Today", "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
+    {"key": "battery_charge_total_kwh",    "name": "Charge Energy Total",    "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
+    {"key": "battery_discharge_total_kwh", "name": "Discharge Energy Total", "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
 ]
 
 # Fallback when device_type is unknown — broad set covering both types
