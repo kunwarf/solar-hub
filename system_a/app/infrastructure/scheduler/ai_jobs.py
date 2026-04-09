@@ -43,7 +43,22 @@ async def outage_detection_job() -> None:
 
     Failures for individual sites are swallowed — they are logged but do not
     abort the cycle for other sites.
+
+    A Redis distributed lock (TTL 90s) ensures only one of the 4 uvicorn
+    workers actually executes the cycle per tick — the others skip silently.
     """
+    import redis.asyncio as aioredis
+    from ...config import settings
+
+    redis = aioredis.from_url(settings.redis.url)
+    lock_key = "scheduler:lock:outage_detection"
+    lock_ttl = 90  # seconds — slightly less than the 2-min interval
+
+    acquired = await redis.set(lock_key, "1", nx=True, ex=lock_ttl)
+    await redis.aclose()
+    if not acquired:
+        return  # another worker is already running this cycle
+
     logger.debug("[outage_job] Starting outage detection cycle")
 
     try:
