@@ -609,13 +609,17 @@ async def get_power_flow(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ):
     """Get real-time power flow data aggregated for the site."""
-    logger.info(f"[power-flow] Request from user {current_user.email}, site_id={site_id}")
-
     site_info = await get_site_with_devices(current_user, uow, site_id)
-    logger.info(f"[power-flow] Site info: {site_info.site_name}, devices: {site_info.device_serials}")
 
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
-    logger.info(f"[power-flow] Telemetry batch from Redis: {telemetry_batch}")
+    logger.info(
+        "[power-flow] site=%s user=%s devices=%d with_data=%d",
+        site_info.site_name,
+        current_user.email,
+        len(site_info.device_serials),
+        sum(1 for s in site_info.device_serials if telemetry_batch.get(s)),
+    )
+    logger.debug(f"[power-flow] Telemetry batch from Redis: {telemetry_batch}")
 
     # Aggregate power data
     total_pv = 0.0
@@ -645,7 +649,7 @@ async def get_power_flow(
         status_val = await telemetry_cache.get_status(serial)
         is_online = status_val == "online"
 
-        logger.info(f"[power-flow] Device {serial}: status={status_val}, online={is_online}, has_telemetry={telemetry is not None}")
+        logger.debug(f"[power-flow] Device {serial}: status={status_val}, online={is_online}, has_telemetry={telemetry is not None}")
 
         if is_online:
             devices_online += 1
@@ -656,7 +660,7 @@ async def get_power_flow(
         )
 
         if telemetry:
-            logger.info(f"[power-flow] Device {serial} telemetry keys: {list(telemetry.keys())}")
+            logger.debug(f"[power-flow] Device {serial} telemetry keys: {list(telemetry.keys())}")
             power = telemetry.get("power", {})
             battery = telemetry.get("battery", {})
             status_info = telemetry.get("status", {})
