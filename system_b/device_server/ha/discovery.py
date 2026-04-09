@@ -55,14 +55,10 @@ BATTERY_METRICS: List[Dict[str, Any]] = [
     {"key": "battery_current_a",    "name": "Current",          "device_class": "current",     "unit": "A",  "state_class": "measurement"},
     {"key": "battery_power_w",      "name": "Power",            "device_class": "power",       "unit": "W",  "state_class": "measurement"},
     {"key": "battery_temp_c",       "name": "Temperature",      "device_class": "temperature", "unit": "°C", "state_class": "measurement"},
-    {"key": "battery_soh_percent",  "name": "State of Health",  "device_class": None,          "unit": "%",  "state_class": "measurement"},
-    {"key": "battery_cycle_count",  "name": "Cycle Count",      "device_class": None,          "unit": None, "state_class": "total_increasing"},
-    # ── Energy today ────────────────────────────────────────────────────────
-    {"key": "battery_charge_today_kwh",    "name": "Charge Energy Today",    "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "battery_discharge_today_kwh", "name": "Discharge Energy Today", "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    # ── Energy total ────────────────────────────────────────────────────────
-    {"key": "battery_charge_total_kwh",    "name": "Charge Energy Total",    "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "battery_discharge_total_kwh", "name": "Discharge Energy Total", "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
+    {"key": "battery_soh_percent",  "name": "State of Health",  "device_class": None, "unit": "%",  "state_class": "measurement"},
+    {"key": "battery_cycle_count",  "name": "Cycle Count",      "device_class": None, "unit": None, "state_class": "total_increasing"},
+    # Note: JK BMS and Pylontech do not have energy accumulator registers,
+    # so charge/discharge kWh sensors are intentionally omitted here.
 ]
 
 # Fallback when device_type is unknown — broad set covering both types
@@ -83,6 +79,17 @@ def get_metrics_for_device_type(device_type: str) -> List[Dict[str, Any]]:
     if dt == "battery":
         return BATTERY_METRICS
     return _FALLBACK_METRICS
+
+
+def get_stale_metric_keys(device_type: str) -> List[str]:
+    """
+    Return metric keys that exist in the fallback set but NOT in the device's
+    actual metric set.  The publisher sends empty retained payloads to these
+    topics so HA removes the orphaned sensor entities.
+    """
+    active_keys = {m["key"] for m in get_metrics_for_device_type(device_type)}
+    all_keys = {m["key"] for m in _FALLBACK_METRICS}
+    return list(all_keys - active_keys)
 
 
 # ---------------------------------------------------------------------------

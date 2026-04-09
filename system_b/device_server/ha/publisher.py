@@ -24,6 +24,7 @@ from .discovery import (
     build_discovery_topic,
     build_state_topic,
     get_metrics_for_device_type,
+    get_stale_metric_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,13 @@ class HATelemetryPublisher:
                 payload=json.dumps(payload).encode(),
                 retain=True,  # retained so HA sees it on reconnect
             )
+        # Tombstone any sensors that existed in the previous (broader) discovery
+        # set but are not valid for this device type.  An empty retained payload
+        # tells HA to remove the entity.
+        for stale_key in get_stale_metric_keys(device_type):
+            stale_topic = build_discovery_topic(ha_username, serial, stale_key)
+            await client.publish(stale_topic, payload=b"", retain=True)
+
         logger.debug(
             "Published HA discovery for %s / %s (type=%s, sensors=%d)",
             ha_username, serial, device_type or "unknown", len(metrics),
