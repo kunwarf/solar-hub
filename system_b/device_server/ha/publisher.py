@@ -19,11 +19,11 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from .discovery import (
-    HA_METRICS,
     build_availability_topic,
     build_discovery_payload,
     build_discovery_topic,
     build_state_topic,
+    get_metrics_for_device_type,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,9 @@ class HATelemetryPublisher:
         self._mqtt_client = None
         self._enrollments: List[Dict[str, Any]] = []
         self._last_enrollment_refresh: float = 0.0
-        self._discovery_published: set = set()  # serials we've already sent discovery for
+        # Maps discovery_key → device_type string for which discovery was published.
+        # If device_type changes we re-publish discovery with the correct metric set.
+        self._discovery_published: Dict[str, str] = {}
         self._shutdown_event = asyncio.Event()
 
     # ------------------------------------------------------------------
@@ -177,22 +179,14 @@ class HATelemetryPublisher:
         manufacturer = enrollment.get("manufacturer") or "Solar Hub"
         model = enrollment.get("model") or "Inverter"
 
-        # Publish discovery payloads once per (ha_username, serial) pair
-        discovery_key = f"{ha_username}:{serial}"
-        if discovery_key not in self._discovery_published:
-            await self._publish_discovery(
-                client, ha_username, serial, device_name, manufacturer, model
-            )
-            self._discovery_published.add(discovery_key)
-
-        # Read telemetry from Redis
+        # Read telemetry from Redis first — we need device_type for discovery
         redis_key = _REDIS_KEY.format(serial=serial)
         raw = await self._redis.get(redis_key)
 
         avail_topic = build_availability_topic(ha_username, serial)
 
         if raw is None:
-            # No recent data — mark device unavailable
+            # No recent data — mark device unavailable, skip discovery for now
             await client.publish(avail_topic, payload=b"offline", retain=False)
             return
 
@@ -202,6 +196,17 @@ class HATelemetryPublisher:
             logger.warning("Corrupt telemetry JSON for %s", serial)
             await client.publish(avail_topic, payload=b"offline", retain=False)
             return
+
+        device_type = (telemetry.get("device_type") or "").lower()
+
+        # Publish discovery when first seen or when device_type changes
+        discovery_key = f"{ha_username}:{serial}"
+        if self._discovery_published.get(discovery_key) != device_type:
+            await self._publish_discovery(
+                client, ha_username, serial, device_name, manufacturer, model,
+                device_type=device_type,
+            )
+            self._discovery_published[discovery_key] = device_type
 
         state = self._build_state_payload(telemetry)
         state_topic = build_state_topic(ha_username, serial)
@@ -221,9 +226,11 @@ class HATelemetryPublisher:
         device_name: str,
         manufacturer: str,
         model: str,
+        device_type: str = "",
     ) -> None:
         """Publish retained HA Discovery config for all metrics of a device."""
-        for metric in HA_METRICS:
+        metrics = get_metrics_for_device_type(device_type)
+        for metric in metrics:
             topic = build_discovery_topic(ha_username, serial, metric["key"])
             payload = build_discovery_payload(
                 ha_username=ha_username,
@@ -238,7 +245,10 @@ class HATelemetryPublisher:
                 payload=json.dumps(payload).encode(),
                 retain=True,  # retained so HA sees it on reconnect
             )
-        logger.debug("Published HA discovery for %s / %s", ha_username, serial)
+        logger.debug(
+            "Published HA discovery for %s / %s (type=%s, sensors=%d)",
+            ha_username, serial, device_type or "unknown", len(metrics),
+        )
 
     def _build_state_payload(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -246,8 +256,14 @@ class HATelemetryPublisher:
 
         Redis cache structure (from redis_cache.py):
           power.pv_total_w, power.grid_w, power.load_w, power.battery_w
-          battery.soc_pct, battery.voltage_v
-          energy_today.pv_kwh, energy_today.grid_import_kwh, energy_today.load_kwh
+          battery.soc_pct, battery.voltage_v, battery.current_a,
+                  battery.soh_pct, battery.cycle_count
+          energy_today.pv_kwh, energy_today.grid_import_kwh,
+                  energy_today.grid_export_kwh, energy_today.load_kwh,
+                  energy_today.battery_charge_kwh, energy_today.battery_discharge_kwh
+          energy_total.pv_kwh, energy_total.grid_import_kwh,
+                  energy_total.grid_export_kwh, energy_total.load_kwh,
+                  energy_total.battery_charge_kwh, energy_total.battery_discharge_kwh
           temperatures.inverter_c, temperatures.battery_c
           grid.frequency_hz, grid.voltage_v
           raw.* (fallback for any field not in normalised sections)
@@ -255,6 +271,7 @@ class HATelemetryPublisher:
         power = telemetry.get("power") or {}
         battery = telemetry.get("battery") or {}
         energy = telemetry.get("energy_today") or {}
+        energy_total = telemetry.get("energy_total") or {}
         temps = telemetry.get("temperatures") or {}
         grid = telemetry.get("grid") or {}
         raw = telemetry.get("raw") or {}
@@ -265,24 +282,44 @@ class HATelemetryPublisher:
             except (TypeError, ValueError):
                 return None
 
+        def _i(value) -> Optional[int]:
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
         return {
-            "battery_soc_percent": _f(battery.get("soc_pct")),
-            "battery_voltage_v": _f(
-                battery.get("voltage_v") or raw.get("battery_voltage_v")
-            ),
+            # ── Live power ──────────────────────────────────────────────────
+            "pv_power_w":      _f(power.get("pv_total_w")),
+            "grid_power_w":    _f(power.get("grid_w")),
+            "load_power_w":    _f(power.get("load_w")),
             "battery_power_w": _f(power.get("battery_w")),
-            "pv_power_w": _f(power.get("pv_total_w")),
-            "grid_power_w": _f(power.get("grid_w")),
-            "load_power_w": _f(power.get("load_w")),
-            "pv_energy_today_kwh": _f(energy.get("pv_kwh")),
-            "grid_import_today_kwh": _f(energy.get("grid_import_kwh")),
-            "load_energy_today_kwh": _f(energy.get("load_kwh")),
-            "inverter_temp_c": _f(temps.get("inverter_c")),
-            "battery_temp_c": _f(
-                temps.get("battery_c") or raw.get("battery_temp_c")
-            ),
+            # ── Battery state ───────────────────────────────────────────────
+            "battery_soc_percent": _f(battery.get("soc_pct")),
+            "battery_voltage_v":   _f(battery.get("voltage_v") or raw.get("battery_voltage_v")),
+            "battery_current_a":   _f(battery.get("current_a")),
+            "battery_soh_percent": _f(battery.get("soh_pct")),
+            "battery_cycle_count": _i(battery.get("cycle_count")),
+            # ── Grid ────────────────────────────────────────────────────────
+            "grid_voltage_v":    _f(grid.get("voltage_v")),
             "grid_frequency_hz": _f(grid.get("frequency_hz")),
-            "grid_voltage_v": _f(grid.get("voltage_v")),
+            # ── Temperatures ────────────────────────────────────────────────
+            "inverter_temp_c": _f(temps.get("inverter_c")),
+            "battery_temp_c":  _f(temps.get("battery_c") or raw.get("battery_temp_c")),
+            # ── Energy today ────────────────────────────────────────────────
+            "pv_energy_today_kwh":         _f(energy.get("pv_kwh")),
+            "grid_import_today_kwh":       _f(energy.get("grid_import_kwh")),
+            "grid_export_today_kwh":       _f(energy.get("grid_export_kwh")),
+            "load_energy_today_kwh":       _f(energy.get("load_kwh")),
+            "battery_charge_today_kwh":    _f(energy.get("battery_charge_kwh")),
+            "battery_discharge_today_kwh": _f(energy.get("battery_discharge_kwh")),
+            # ── Energy total (lifetime) ──────────────────────────────────────
+            "pv_energy_total_kwh":         _f(energy_total.get("pv_kwh")),
+            "grid_import_total_kwh":       _f(energy_total.get("grid_import_kwh")),
+            "grid_export_total_kwh":       _f(energy_total.get("grid_export_kwh")),
+            "load_energy_total_kwh":       _f(energy_total.get("load_kwh")),
+            "battery_charge_total_kwh":    _f(energy_total.get("battery_charge_kwh")),
+            "battery_discharge_total_kwh": _f(energy_total.get("battery_discharge_kwh")),
         }
 
     async def _publish_all_offline(self, client) -> None:

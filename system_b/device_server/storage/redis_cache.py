@@ -366,6 +366,24 @@ class TelemetryCacheWriter:
         if energy_data:
             cache_data["energy_today"] = energy_data
 
+        # Extract total (lifetime) energy metrics
+        energy_total_data = {}
+        energy_total_mappings = {
+            "pv_kwh": ["pv_energy_total_kwh"],
+            "load_kwh": ["load_energy_total_kwh"],
+            "grid_import_kwh": ["grid_import_energy_total_kwh"],
+            "grid_export_kwh": ["grid_export_energy_total_kwh"],
+            "battery_charge_kwh": ["battery_charge_energy_total_kwh"],
+            "battery_discharge_kwh": ["battery_discharge_energy_total_kwh"],
+        }
+        for target_key, source_keys in energy_total_mappings.items():
+            for src in source_keys:
+                if src in telemetry:
+                    energy_total_data[target_key] = telemetry[src]
+                    break
+        if energy_total_data:
+            cache_data["energy_total"] = energy_total_data
+
         # Extract temperature metrics
         # Modbus field names use _c suffix for Celsius
         temp_data = {}
