@@ -110,13 +110,18 @@ export default defineConfig(({ mode }) => ({
             }
           },
           {
+            // Real-time endpoints must never be served from cache
+            urlPattern: /\/api\/v1\/(devices\/[^/]+\/telemetry|sites\/[^/]+\/energy-flow)/i,
+            handler: "NetworkOnly",
+          },
+          {
             urlPattern: /\/api\/.*/i,
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache",
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 // 24 hours
+                maxAgeSeconds: 60 * 5 // 5 minutes
               },
               networkTimeoutSeconds: 10,
               cacheableResponse: {

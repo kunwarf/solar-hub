@@ -297,6 +297,11 @@ class DeviceServer:
                 device_state.device_id, reason
             )
             logger.info(f"Device {device_state.device_id} disconnected: {reason}")
+            # Clear telemetry so stale data is not served after disconnect
+            if self.redis_cache:
+                cache_serial = device_state.data_logger_serial or device_state.serial_number
+                if cache_serial:
+                    await self.redis_cache.delete_telemetry(cache_serial)
 
     async def _on_device_added(
         self,
@@ -507,6 +512,7 @@ class DeviceServer:
             cache_serial = device_state.data_logger_serial or device_state.serial_number
             if cache_serial:
                 await self.redis_cache.write_status(cache_serial, "offline")
+                await self.redis_cache.delete_telemetry(cache_serial)
 
     def get_stats(self) -> dict:
         """Get server statistics."""

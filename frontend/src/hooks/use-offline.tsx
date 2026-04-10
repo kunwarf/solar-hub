@@ -144,12 +144,15 @@ export const useOffline = () => {
     localStorage.setItem(CACHED_DATA_KEY, JSON.stringify(cacheObj));
   }, []);
 
-  // Get cached data
-  const getCachedData = useCallback(<T,>(key: string): { data: T; timestamp: number } | null => {
+  // Get cached data — returns null if older than maxAgeMs (default 5 minutes)
+  const getCachedData = useCallback(<T,>(key: string, maxAgeMs: number = 5 * 60 * 1000): { data: T; timestamp: number } | null => {
     const cache = localStorage.getItem(CACHED_DATA_KEY);
     if (!cache) return null;
     const cacheObj = JSON.parse(cache);
-    return cacheObj[key] || null;
+    const entry = cacheObj[key];
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > maxAgeMs) return null;
+    return entry;
   }, []);
 
   // Auto-sync when coming back online

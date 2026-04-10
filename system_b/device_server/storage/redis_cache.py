@@ -153,6 +153,17 @@ class TelemetryCacheWriter:
             logger.error(f"Failed to cache telemetry for {serial_number}: {e}")
             return False
 
+    async def delete_telemetry(self, serial_number: str) -> None:
+        """Delete cached telemetry for a device (called on disconnect)."""
+        if not self.is_connected:
+            return
+        try:
+            key = self.KEY_TELEMETRY.format(serial=serial_number)
+            await self._client.delete(key)
+            logger.debug(f"Deleted telemetry cache for device {serial_number}")
+        except Exception as e:
+            logger.warning(f"Failed to delete telemetry cache for {serial_number}: {e}")
+
     async def write_status(
         self,
         serial_number: str,
