@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -208,6 +209,24 @@ class HATelemetryPublisher:
             logger.warning("Corrupt telemetry JSON for %s", serial)
             await client.publish(avail_topic, payload=b"offline", retain=False)
             return
+
+        # Staleness guard: if the telemetry timestamp is older than 5 minutes,
+        # treat the device as offline even if the Redis key hasn't expired yet.
+        # This prevents the publisher from accumulating energy from frozen readings
+        # (e.g. JK BMS devices that disconnect without clearing their Redis key).
+        ts_str = telemetry.get("timestamp")
+        if ts_str:
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                age_seconds = (datetime.now(timezone.utc) - ts).total_seconds()
+                if age_seconds > 300:  # 5 minutes
+                    logger.debug(
+                        "Stale telemetry for %s (age=%.0fs) — marking offline", serial, age_seconds
+                    )
+                    await client.publish(avail_topic, payload=b"offline", retain=False)
+                    return
+            except (ValueError, TypeError):
+                pass  # malformed timestamp — let it through
 
         device_type = (telemetry.get("device_type") or "").lower()
 

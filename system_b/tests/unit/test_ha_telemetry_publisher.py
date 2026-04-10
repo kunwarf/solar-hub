@@ -207,6 +207,42 @@ class TestPublishDeviceState:
         assert avail_topic in published_topics
 
     @pytest.mark.asyncio
+    async def test_publishes_offline_when_telemetry_is_stale(self, publisher, redis_client):
+        """Telemetry older than 5 minutes should mark device offline even if Redis key exists."""
+        stale_telemetry = {
+            **SAMPLE_INVERTER_TELEMETRY,
+            "timestamp": "2020-01-01T00:00:00+00:00",  # obviously old
+        }
+        redis_client.get = AsyncMock(return_value=json.dumps(stale_telemetry).encode())
+        mqtt_client = AsyncMock()
+        publisher._discovery_published["sh_abc123:SH01GWAT9Q7YDV90"] = "inverter"
+
+        await publisher._publish_device(mqtt_client, SAMPLE_ENROLLMENT)
+
+        avail_topic = build_availability_topic("sh_abc123", "SH01GWAT9Q7YDV90")
+        mqtt_client.publish.assert_called_once_with(
+            avail_topic, payload=b"offline", retain=False
+        )
+
+    @pytest.mark.asyncio
+    async def test_publishes_online_when_telemetry_is_fresh(self, publisher, redis_client):
+        """Telemetry with a recent timestamp should publish normally."""
+        from datetime import datetime, timezone
+        fresh_telemetry = {
+            **SAMPLE_INVERTER_TELEMETRY,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        redis_client.get = AsyncMock(return_value=json.dumps(fresh_telemetry).encode())
+        mqtt_client = AsyncMock()
+        publisher._discovery_published["sh_abc123:SH01GWAT9Q7YDV90"] = "inverter"
+
+        await publisher._publish_device(mqtt_client, SAMPLE_ENROLLMENT)
+
+        state_topic = build_state_topic("sh_abc123", "SH01GWAT9Q7YDV90")
+        published_topics = [c[0][0] for c in mqtt_client.publish.call_args_list]
+        assert state_topic in published_topics
+
+    @pytest.mark.asyncio
     async def test_publishes_offline_when_no_redis_data(self, publisher, redis_client):
         redis_client.get = AsyncMock(return_value=None)
         mqtt_client = AsyncMock()
