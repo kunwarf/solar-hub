@@ -340,9 +340,11 @@ const EnergyFlowDiagramComponent = ({
     centerToGrid: `M ${cx + 28} ${cy + 18} Q ${cx + 100} ${cy + 120} ${positions.grid.x - 40} ${positions.grid.y - 50}`,
   };
 
+  // Battery flow color reflects direction: green = charging, amber = discharging
+  const batteryIsCharging = isCharging !== undefined ? isCharging : batteryPower > 0;
   const colors = {
     solar: "#F59E0B",
-    battery: "#10B981",
+    battery: batteryIsCharging ? "#10B981" : "#F59E0B",
     home: "#A855F7",
     grid: "#3B82F6",
     center: "#10B981",
