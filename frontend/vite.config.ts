@@ -80,6 +80,8 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -110,25 +112,11 @@ export default defineConfig(({ mode }) => ({
             }
           },
           {
-            // Real-time endpoints must never be served from cache
-            urlPattern: /\/api\/v1\/(devices\/[^/]+\/telemetry|sites\/[^/]+\/energy-flow)/i,
+            // All API endpoints must always hit the network — never serve stale
+            // telemetry, dashboard, or any other live data from SW cache.
+            urlPattern: /\/api\/.*/i,
             handler: "NetworkOnly",
           },
-          {
-            urlPattern: /\/api\/.*/i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 5 // 5 minutes
-              },
-              networkTimeoutSeconds: 10,
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          }
         ]
       }
     })

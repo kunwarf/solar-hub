@@ -17,7 +17,7 @@ import React, {
   useRef,
 } from 'react';
 import { useWebSocket, ConnectionStatus } from '@/hooks/use-websocket';
-import { dashboardService, PowerSnapshot, PowerFlowData } from '@/api';
+import { dashboardService, PowerFlowData } from '@/api';
 import { useAuth } from '@/hooks/use-auth';
 
 export interface TelemetryData {
@@ -48,20 +48,6 @@ interface TelemetryContextType {
 
   // Manual refresh
   refresh: () => Promise<void>;
-}
-
-// Convert API PowerSnapshot to TelemetryData (legacy)
-function powerSnapshotToTelemetry(snapshot: PowerSnapshot): TelemetryData {
-  return {
-    timestamp: snapshot.timestamp,
-    solarPower: snapshot.solar_power_kw,
-    batteryPower: Math.abs(snapshot.battery_power_kw),
-    batteryLevel: Math.round(snapshot.battery_soc),
-    isCharging: snapshot.battery_power_kw > 0, // Positive means charging (server normalises sign)
-    consumption: snapshot.consumption_kw,
-    gridPower: Math.abs(snapshot.grid_power_kw),
-    isGridExporting: snapshot.is_exporting,
-  };
 }
 
 // Convert PowerFlowData (from Redis cache) to TelemetryData
@@ -147,18 +133,12 @@ export const TelemetryProvider = ({
         setAuthError(false);
         fetchCountRef.current = 0;
         console.log('[Telemetry] Updated with real data:', telemetryData);
-        return;
       } else {
-        console.log('[Telemetry] Power flow returned online=false, devices may be offline');
-        // Even if offline, still use the API response (shows 0 values)
-        const telemetryData = powerFlowToTelemetry(powerFlow);
-        setTelemetry(telemetryData);
-        setLastUpdated(new Date());
-        setDataReceivedAt(Date.now());
-        setHasRealData(true);
-        setAuthError(false);
-        fetchCountRef.current = 0;
-        return;
+        // Device is offline — show nothing rather than stale/zero values.
+        console.log('[Telemetry] Power flow returned online=false, clearing telemetry');
+        setTelemetry(null);
+        setLastUpdated(null);
+        setHasRealData(false);
       }
     } catch (error: any) {
       // Check for 401 Unauthorized - token refresh might be in progress
@@ -174,36 +154,10 @@ export const TelemetryProvider = ({
         return;
       }
       console.warn('[Telemetry] Failed to fetch power flow:', error);
-    }
-
-    // Fallback to legacy API only if widget API completely fails
-    try {
-      console.log('[Telemetry] Trying legacy API fallback...');
-      const snapshot = await dashboardService.getCurrentPower(siteId);
-      const telemetryData = powerSnapshotToTelemetry(snapshot);
-      setTelemetry(telemetryData);
-      setLastUpdated(new Date());
-      setDataReceivedAt(Date.now());
-      setAuthError(false);
-      fetchCountRef.current = 0;
-    } catch (error: any) {
-      // Check for 401 Unauthorized - token refresh might be in progress
-      if (error?.response?.status === 401 || error?.status === 401 || error?.error === 'UNAUTHORIZED') {
-        console.warn('[Telemetry] Authentication error on legacy API (token may be refreshing)');
-        fetchCountRef.current += 1;
-        if (fetchCountRef.current > 3) {
-          console.warn('[Telemetry] Multiple auth errors, stopping polling');
-          setAuthError(true);
-        }
-        return;
-      }
-      console.warn('[Telemetry] Failed to fetch from legacy API:', error);
-      // Increment fetch count and stop if too many failures
-      fetchCountRef.current += 1;
-      if (fetchCountRef.current > 5) {
-        console.warn('[Telemetry] Too many fetch failures, pausing telemetry');
-        setAuthError(true);
-      }
+      // Clear stale state — no fallback, no retained previous values.
+      setTelemetry(null);
+      setLastUpdated(null);
+      setHasRealData(false);
     }
   }, [siteId, isAuthenticated, authError]);
 

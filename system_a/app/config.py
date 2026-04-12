@@ -307,6 +307,14 @@ class AppSettings(BaseSettings):
         description='Require email verification before account activation (set True in production)'
     )
 
+    # Scheduler Feature Flag
+    # Set SCHEDULER_ENABLED=false in .env when using the standalone solarhub-scheduler service.
+    # Default true preserves the current embedded-scheduler behaviour.
+    scheduler_enabled: bool = Field(
+        default=True,
+        description='Run APScheduler embedded in this process. Set false when using solarhub-scheduler.service.'
+    )
+
     # Billing Migration Feature Flags
     use_system_b_for_billing: bool = Field(
         default=False,

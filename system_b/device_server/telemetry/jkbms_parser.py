@@ -25,6 +25,7 @@ identically.
 """
 import logging
 import struct
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -316,11 +317,13 @@ class JKBMSStreamParser:
         result = stream.get_result()   # None until first frame parsed
     """
 
-    def __init__(self, cells_per_bms: int = 16) -> None:
+    def __init__(self, cells_per_bms: int = 16, freshness_seconds: float = 60.0) -> None:
         self._cells_per_bms = cells_per_bms
+        self._freshness_seconds = freshness_seconds
         self._buffer: bytes = b""
         self._current_battery_id: int = 0
         self._batteries: Dict[int, Dict[str, Any]] = {}
+        self._last_parsed_at: Dict[int, float] = {}
         self._known_ids: set = set()       # unit IDs seen in the current cycle
         self._unit_count: Optional[int] = None
         self._cycle_count: int = 0
@@ -372,6 +375,7 @@ class JKBMSStreamParser:
                     if b_id not in self._batteries:
                         logger.info(f"JK BMS stream: unit {b_id} discovered")
                     self._batteries[b_id] = parsed
+                    self._last_parsed_at[b_id] = time.monotonic()
 
                 # Advance by 1 byte past the current frame header, NOT by next_header.
                 # If we jumped directly to next_header, any Modbus request frames that
@@ -394,8 +398,29 @@ class JKBMSStreamParser:
         """
         Return aggregated telemetry from all discovered units.
 
-        Returns None if no frames have been parsed yet.
+        Returns None if no frames have been parsed yet, or if all units have
+        gone silent for longer than freshness_seconds (stale data pruned).
         """
+        if not self._batteries:
+            return None
+
+        # Prune units whose last successful parse is older than freshness_seconds.
+        # This prevents perpetually re-writing stale values to Redis when a JK BMS
+        # unit stops responding (e.g. RS485 disconnected, BMS powered off).
+        now = time.monotonic()
+        stale_ids = [
+            b_id for b_id, ts in self._last_parsed_at.items()
+            if now - ts > self._freshness_seconds
+        ]
+        for b_id in stale_ids:
+            elapsed = now - self._last_parsed_at[b_id]
+            logger.warning(
+                f"JK BMS stream: unit {b_id} aged out after {elapsed:.0f}s "
+                f"(freshness_seconds={self._freshness_seconds}), removing stale data"
+            )
+            del self._batteries[b_id]
+            del self._last_parsed_at[b_id]
+
         if not self._batteries:
             return None
 

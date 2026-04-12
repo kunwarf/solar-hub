@@ -133,7 +133,11 @@ export const useOffline = () => {
     setState(prev => ({ ...prev, isSyncing: false }));
   }, [getQueuedActions, clearAllActions]);
 
-  // Cache data for offline access
+  // Cache data for offline access.
+  // NOTE: Do NOT use cacheData/getCachedData for telemetry or dashboard data.
+  // Live telemetry must always come from the network — showing stale cached
+  // values violates the product rule that no value should appear if no fresh
+  // value is available.
   const cacheData = useCallback((key: string, data: unknown) => {
     const cache = localStorage.getItem(CACHED_DATA_KEY);
     const cacheObj = cache ? JSON.parse(cache) : {};

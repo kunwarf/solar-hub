@@ -1,0 +1,49 @@
+[Unit]
+Description=Solar Hub Standalone Scheduler Service
+Documentation=https://github.com/solarhub/solar-hub
+After=network.target postgresql.service redis-server.service solarhub-platform.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=exec
+User=solarhub
+Group=solarhub
+
+# Working directory must be the project root so 'python -m scheduler' resolves
+WorkingDirectory=/opt/solarhub/app/solar-hub
+
+# PYTHONPATH: system_a/ so that 'from app.xxx import ...' resolves System A modules,
+# and the project root so 'from scheduler.xxx import ...' resolves the scheduler package.
+Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/opt/solarhub/app/solar-hub/system_a:/opt/solarhub/app/solar-hub"
+
+# Optional: override health server port (default 8002)
+# Environment="SCHEDULER_HEALTH_PORT=8002"
+
+# Load all Solar Hub env vars (DB credentials, Redis URL, etc.)
+EnvironmentFile=/opt/solarhub/app/.env
+
+ExecStart=/opt/solarhub/venv/bin/python -m scheduler
+
+# Restart policy: always restart, with 10s delay between attempts.
+# Combined with APScheduler's 12h misfire_grace_time, any jobs missed
+# during a brief outage will replay on the next restart.
+Restart=always
+RestartSec=10
+
+# Log to dedicated files (separate from System A/B logs)
+StandardOutput=append:/opt/solarhub/logs/scheduler.log
+StandardError=append:/opt/solarhub/logs/scheduler-error.log
+
+# Security hardening (mirrors solarhub-platform.service)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/solarhub/logs /opt/solarhub/data
+
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

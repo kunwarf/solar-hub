@@ -54,7 +54,16 @@ import LoadSheddingSchedules from "./pages/admin/LoadSheddingSchedules";
 import AIPrompts from "./pages/admin/AIPrompts";
 import BillingSchedules from "./pages/admin/BillingSchedules";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 0,
+      gcTime: 0,
+      refetchOnMount: "always",
+      refetchOnWindowFocus: true,
+    },
+  },
+});
 
 const App = () => (
   <ErrorBoundary variant="full">

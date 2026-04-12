@@ -1,6 +1,11 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
+import { registerSW } from "virtual:pwa-register";
 import App from "./App.tsx";
+
+// Activate new service worker immediately on install so mobile PWA users
+// receive frontend updates without having to fully close and reopen the app.
+registerSW({ immediate: true, onNeedRefresh() { location.reload(); } });
 
 // Ensure React and hooks are available globally for Radix UI
 if (typeof window !== 'undefined') {
