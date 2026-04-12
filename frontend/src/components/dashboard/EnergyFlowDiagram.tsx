@@ -221,7 +221,7 @@ const BatteryNode = ({
         className="font-mono text-xl font-bold"
         fill={isCharging ? "#10B981" : isDischarging ? "#F59E0B" : getFillColor()}
       >
-        {Math.abs(power).toFixed(1)} kW {isCharging ? "↑" : isDischarging ? "↓" : ""}
+        {Math.abs(power).toFixed(1)} kW {isDischarging ? "↑" : isCharging ? "↓" : ""}
       </text>
     </motion.g>
   );
