@@ -738,7 +738,7 @@ async def get_power_flow(
         load_power_w=total_load,
         battery_power_w=total_battery,
         battery_soc_pct=avg_soc,
-        is_charging=any_charging,
+        is_charging=total_battery > 0,  # derive from sign, not OR across devices
         grid_connected=grid_connected,
         online=devices_online > 0,
         stale=any_stale,
@@ -935,7 +935,7 @@ async def get_battery_status(
         site_name=site_info.site_name,
         avg_soc_pct=avg_soc,
         total_power_w=total_power,
-        is_charging=any_charging,
+        is_charging=total_power > 0,  # derive from sign, not OR across devices
         online=devices_online > 0,
         devices_online=devices_online,
         devices_total=len(site_info.device_serials),
@@ -2009,7 +2009,7 @@ async def get_all_widgets(
             load_power_w=total_load,
             battery_power_w=total_battery,
             battery_soc_pct=avg_soc,
-            is_charging=any_charging,
+            is_charging=total_battery > 0,  # derive from sign, not OR across devices
             grid_connected=grid_connected,
             online=devices_online > 0,
             stale=any_stale,
@@ -2036,7 +2036,7 @@ async def get_all_widgets(
             site_name=site_info.site_name,
             avg_soc_pct=avg_soc,
             total_power_w=total_battery,
-            is_charging=any_charging,
+            is_charging=total_battery > 0,  # derive from sign, not OR across devices
             online=devices_online > 0,
             devices_online=devices_online,
             devices_total=devices_total,
