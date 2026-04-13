@@ -366,6 +366,46 @@ class SystemBClient:
             logger.error("System B connection error: %s", e)
             raise SystemBClientError(f"Connection error: {str(e)}")
 
+    async def get_site_daily_peaks(
+        self,
+        site_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> dict:
+        """
+        Get today's peak instantaneous power metrics for a site from System B.
+
+        Args:
+            site_id: Site UUID.
+            start_time: UTC start of "today" in the site's local timezone.
+            end_time: UTC end of "today" in the site's local timezone.
+
+        Returns:
+            Dict with 'peaks' key containing pv, load, export, import sub-dicts,
+            each with value_w (float|None) and occurred_at (ISO string|None).
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/daily-peaks/{site_id}"
+            params = {
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+            }
+            logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            logger.error("System B daily-peaks error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get daily peaks: {e.response.text}",
+                status_code=e.response.status_code,
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
     async def get_site_telemetry(
         self,
         site_id: UUID,
@@ -845,6 +885,39 @@ class SystemBClient:
             )
         except httpx.RequestError as e:
             logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
+    async def get_settings_schema(self, protocol: str) -> dict:
+        """
+        Get the settings schema for an inverter protocol from System B.
+
+        Args:
+            protocol: Protocol ID (e.g. "powdrive", "senergy", "voltronic_pi30")
+
+        Returns:
+            Schema dict with 'version', 'family', and 'groups' keys.
+
+        Raises:
+            SystemBClientError: If the protocol is unknown (404) or on connection error.
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/settings/schema/{protocol}"
+            logger.info("System B request: GET %s%s", self._base_url, url)
+            response = await client.get(url)
+            logger.info(
+                "System B response: status=%d, body=%s",
+                response.status_code,
+                response.text[:200] if response.text else "empty",
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            raise SystemBClientError(
+                f"Failed to get settings schema for '{protocol}': {e.response.text}",
+                status_code=e.response.status_code,
+            )
+        except httpx.RequestError as e:
             raise SystemBClientError(f"Connection error: {str(e)}")
 
 

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { Sun, Battery, Home, Zap, Activity, Thermometer, Gauge, TrendingUp } from "lucide-react";
+import { Sun, Battery, Home, Zap, Activity, Thermometer, Gauge, TrendingUp, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import type { MaxMetric } from "@/api/services/dashboard.service";
 import { cn } from "@/lib/utils";
 import {
   LineChart,
@@ -26,6 +27,14 @@ interface DeviceTelemetry {
   raw?: Record<string, any>;
 }
 
+interface TodaysPeaks {
+  max_pv_today?: MaxMetric | null;
+  max_load_today?: MaxMetric | null;
+  max_export_today?: MaxMetric | null;
+  max_import_today?: MaxMetric | null;
+  site_timezone?: string;
+}
+
 interface InverterTelemetryProps {
   device: {
     id: string;
@@ -34,6 +43,7 @@ interface InverterTelemetryProps {
     metrics: { label: string; value: string; unit: string }[];
   };
   telemetry?: DeviceTelemetry | null;
+  peaks?: TodaysPeaks | null;
 }
 
 
@@ -90,7 +100,7 @@ const arrayStatusStyles = {
   low: { bg: "bg-muted/50", text: "text-muted-foreground", label: "Low Output" },
 };
 
-const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
+const InverterTelemetry = ({ device, telemetry, peaks }: InverterTelemetryProps) => {
   // Fetch extended telemetry data with real-time updates
   const {
     metrics: extendedMetrics,
@@ -162,6 +172,27 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
     temperature: extendedMetrics?.temperature_c || 0,
   };
 
+  // Format a UTC ISO timestamp to "HH:mm" in the site's local timezone
+  const formatPeakTime = (isoUtc: string | null | undefined, siteTimezone?: string): string => {
+    if (!isoUtc) return "";
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: siteTimezone || "UTC",
+      }).format(new Date(isoUtc));
+    } catch {
+      return "";
+    }
+  };
+
+  const hasPeaks =
+    peaks?.max_pv_today != null ||
+    peaks?.max_load_today != null ||
+    peaks?.max_export_today != null ||
+    peaks?.max_import_today != null;
+
   return (
     <div className="space-y-6">
       {/* Power Flow Overview */}
@@ -211,6 +242,103 @@ const InverterTelemetry = ({ device, telemetry }: InverterTelemetryProps) => {
           />
         </div>
       </motion.div>
+
+      {/* Today's Peak Metrics */}
+      {hasPeaks && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="glass-card p-3 sm:p-5"
+        >
+          <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Today's Peaks</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Max Solar */}
+            <div className="bg-secondary/30 rounded-xl p-3 sm:p-4 border border-border/50">
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-solar/20 text-solar">
+                  <Sun className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Max Solar</p>
+              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
+                {peaks?.max_pv_today != null
+                  ? peaks.max_pv_today.value_kw.toFixed(2)
+                  : "—"}
+                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
+              </p>
+              {peaks?.max_pv_today?.occurred_at && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Peak at {formatPeakTime(peaks.max_pv_today.occurred_at, peaks.site_timezone)}
+                </p>
+              )}
+            </div>
+
+            {/* Max Load */}
+            <div className="bg-secondary/30 rounded-xl p-3 sm:p-4 border border-border/50">
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-consumption/20 text-consumption">
+                  <Home className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Max Load</p>
+              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
+                {peaks?.max_load_today != null
+                  ? peaks.max_load_today.value_kw.toFixed(2)
+                  : "—"}
+                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
+              </p>
+              {peaks?.max_load_today?.occurred_at && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Peak at {formatPeakTime(peaks.max_load_today.occurred_at, peaks.site_timezone)}
+                </p>
+              )}
+            </div>
+
+            {/* Max Export */}
+            <div className="bg-secondary/30 rounded-xl p-3 sm:p-4 border border-border/50">
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-grid/20 text-grid">
+                  <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Max Export</p>
+              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
+                {peaks?.max_export_today != null
+                  ? peaks.max_export_today.value_kw.toFixed(2)
+                  : "—"}
+                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
+              </p>
+              {peaks?.max_export_today?.occurred_at && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Peak at {formatPeakTime(peaks.max_export_today.occurred_at, peaks.site_timezone)}
+                </p>
+              )}
+            </div>
+
+            {/* Max Import */}
+            <div className="bg-secondary/30 rounded-xl p-3 sm:p-4 border border-border/50">
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-warning/20 text-warning">
+                  <ArrowDownLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Max Import</p>
+              <p className="text-lg sm:text-2xl font-mono font-bold text-foreground">
+                {peaks?.max_import_today != null
+                  ? peaks.max_import_today.value_kw.toFixed(2)
+                  : "—"}
+                <span className="text-xs sm:text-sm text-muted-foreground ml-1">kW</span>
+              </p>
+              {peaks?.max_import_today?.occurred_at && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Peak at {formatPeakTime(peaks.max_import_today.occurred_at, peaks.site_timezone)}
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Solar Array Telemetry - Real MPPT Data */}
       <motion.div

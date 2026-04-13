@@ -140,6 +140,12 @@ class DeviceStatsData(BaseModel):
     online: bool = False
 
 
+class MaxMetric(BaseModel):
+    """A single peak metric with the value and when it occurred."""
+    value_kw: float
+    occurred_at: datetime
+
+
 class StatsResponse(BaseModel):
     """Statistics cards data."""
     organization_id: UUID
@@ -159,6 +165,12 @@ class StatsResponse(BaseModel):
     grid_import_today_kwh: float = 0
     grid_export_today_kwh: float = 0
     devices_total: int = 0
+
+    # Today's peak instantaneous metrics
+    max_pv_today: Optional[MaxMetric] = None
+    max_load_today: Optional[MaxMetric] = None
+    max_export_today: Optional[MaxMetric] = None
+    max_import_today: Optional[MaxMetric] = None
 
     # Per-device breakdown
     devices: List[DeviceStatsData] = Field(default_factory=list)
@@ -771,8 +783,21 @@ async def get_stats(
 
     Fetches energy totals from System B's TimescaleDB.
     """
+    from ...domain.services.timezone_utils import TimezoneUtils
+
     site_info = await get_site_with_devices(current_user, uow, site_id)
     telemetry_batch = await get_all_devices_telemetry(site_info.device_serials)
+
+    # Resolve site timezone for "today" boundaries
+    site_entity = await uow.sites.get_by_id(site_info.site_id)
+    site_timezone = "UTC"
+    if site_entity and site_entity.timezone:
+        site_timezone = site_entity.timezone
+    else:
+        logger.warning("Site %s has no timezone configured; using UTC for daily peaks", site_info.site_id)
+
+    today_local = TimezoneUtils.get_date_in_timezone(datetime.now(timezone.utc), site_timezone)
+    today_start_utc, today_end_utc = TimezoneUtils.get_local_date_range(today_local, site_timezone)
 
     # Fetch today's and this month's energy from System B
     total_energy_today_kwh = 0.0
@@ -781,6 +806,12 @@ async def get_stats(
     load_energy_today_kwh = 0.0
     grid_import_today_kwh = 0.0
     grid_export_today_kwh = 0.0
+
+    # Today's peak metrics (populated below)
+    max_pv_today: Optional[MaxMetric] = None
+    max_load_today: Optional[MaxMetric] = None
+    max_export_today: Optional[MaxMetric] = None
+    max_import_today: Optional[MaxMetric] = None
 
     try:
         # Get today's hourly data
@@ -805,6 +836,27 @@ async def get_stats(
         )
         for point in month_data.get("data", []):
             month_energy_kwh += point.get("pv_kwh", 0)
+
+        # Get today's peak instantaneous metrics
+        peaks_data = await system_b_client.get_site_daily_peaks(
+            site_id=site_info.site_id,
+            start_time=today_start_utc,
+            end_time=today_end_utc,
+        )
+        peaks = peaks_data.get("peaks", {})
+
+        def _parse_peak(raw: dict) -> Optional[MaxMetric]:
+            if not raw or raw.get("value_w") is None:
+                return None
+            return MaxMetric(
+                value_kw=round(raw["value_w"] / 1000, 3),
+                occurred_at=datetime.fromisoformat(raw["occurred_at"]),
+            )
+
+        max_pv_today = _parse_peak(peaks.get("pv", {}))
+        max_load_today = _parse_peak(peaks.get("load", {}))
+        max_export_today = _parse_peak(peaks.get("export", {}))
+        max_import_today = _parse_peak(peaks.get("import", {}))
 
     except Exception as e:
         logger.error(f"Failed to fetch stats from System B: {e}")
@@ -864,6 +916,10 @@ async def get_stats(
         load_energy_today_kwh=load_energy_today_kwh,
         grid_import_today_kwh=grid_import_today_kwh,
         grid_export_today_kwh=grid_export_today_kwh,
+        max_pv_today=max_pv_today,
+        max_load_today=max_load_today,
+        max_export_today=max_export_today,
+        max_import_today=max_import_today,
     )
 
 

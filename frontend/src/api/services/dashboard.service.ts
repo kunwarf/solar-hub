@@ -82,6 +82,11 @@ export interface PowerFlowData {
   devices: DevicePowerData[];
 }
 
+export interface MaxMetric {
+  value_kw: number;
+  occurred_at: string; // UTC ISO string
+}
+
 export interface StatsData {
   organization_id: string;
   site_id: string;
@@ -100,6 +105,12 @@ export interface StatsData {
   load_energy_today_kwh: number;
   grid_import_today_kwh: number;
   grid_export_today_kwh: number;
+
+  // Today's peak instantaneous metrics (null when no data)
+  max_pv_today?: MaxMetric | null;
+  max_load_today?: MaxMetric | null;
+  max_export_today?: MaxMetric | null;
+  max_import_today?: MaxMetric | null;
 
   // Per-device breakdown
   devices: DeviceStatsData[];

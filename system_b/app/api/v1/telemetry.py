@@ -9,6 +9,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dependencies import get_db_session, get_telemetry_service
@@ -427,6 +428,115 @@ async def get_energy_chart(
         bucket_interval=bucket_interval,
         data=[EnergyChartDataPoint(**point) for point in data],
     )
+
+
+@router.get(
+    "/daily-peaks/{site_id}",
+    summary="Get today's peak power metrics for a site",
+    description=(
+        "Returns the maximum instantaneous power for PV, load, grid-export, and "
+        "grid-import within the requested UTC window (pass today's local midnight "
+        "→ end-of-day as UTC bounds). Null values are returned when no data exists."
+    ),
+)
+async def get_daily_peaks(
+    site_id: UUID,
+    start_time: datetime,
+    end_time: datetime,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """
+    Get today's peak instantaneous power metrics for a site.
+
+    Uses a single SQL pass over telemetry_raw with FILTER clauses so only one
+    table scan is needed.  Peak timestamps are obtained via a DISTINCT ON subquery
+    on the same table, which TimescaleDB handles efficiently through chunk pruning.
+    """
+    # Ensure UTC-aware
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+
+    query = text("""
+        WITH peak_values AS (
+            SELECT
+                MAX(metric_value) FILTER (WHERE metric_name = 'pv_power_w')              AS max_pv_w,
+                MAX(metric_value) FILTER (WHERE metric_name = 'load_power_w')             AS max_load_w,
+                MAX(-metric_value) FILTER (WHERE metric_name = 'grid_power_w'
+                                            AND metric_value < 0)                         AS max_export_w,
+                MAX(metric_value)  FILTER (WHERE metric_name = 'grid_power_w'
+                                            AND metric_value > 0)                         AS max_import_w
+            FROM telemetry_raw
+            WHERE site_id   = :site_id
+              AND time      >= :start_time
+              AND time       < :end_time
+        ),
+        pv_time AS (
+            SELECT time FROM telemetry_raw
+            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
+              AND metric_name = 'pv_power_w'
+            ORDER BY metric_value DESC LIMIT 1
+        ),
+        load_time AS (
+            SELECT time FROM telemetry_raw
+            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
+              AND metric_name = 'load_power_w'
+            ORDER BY metric_value DESC LIMIT 1
+        ),
+        export_time AS (
+            SELECT time FROM telemetry_raw
+            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
+              AND metric_name = 'grid_power_w' AND metric_value < 0
+            ORDER BY metric_value ASC LIMIT 1
+        ),
+        import_time AS (
+            SELECT time FROM telemetry_raw
+            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
+              AND metric_name = 'grid_power_w' AND metric_value > 0
+            ORDER BY metric_value DESC LIMIT 1
+        )
+        SELECT
+            pv.max_pv_w,
+            (SELECT time FROM pv_time)     AS max_pv_at,
+            pv.max_load_w,
+            (SELECT time FROM load_time)   AS max_load_at,
+            pv.max_export_w,
+            (SELECT time FROM export_time) AS max_export_at,
+            pv.max_import_w,
+            (SELECT time FROM import_time) AS max_import_at
+        FROM peak_values pv
+    """)
+
+    result = await session.execute(
+        query,
+        {
+            "site_id": str(site_id),
+            "start_time": start_time,
+            "end_time": end_time,
+        },
+    )
+    row = result.fetchone()
+
+    def _metric(value, occurred_at):
+        if value is None:
+            return {"value_w": None, "occurred_at": None}
+        return {
+            "value_w": float(value),
+            "occurred_at": occurred_at.isoformat() if occurred_at else None,
+        }
+
+    return {
+        "site_id": str(site_id),
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
+        "peaks": {
+            "pv":     _metric(row.max_pv_w,     row.max_pv_at),
+            "load":   _metric(row.max_load_w,   row.max_load_at),
+            "export": _metric(row.max_export_w, row.max_export_at),
+            "import": _metric(row.max_import_w, row.max_import_at),
+        },
+    }
 
 
 @router.get(

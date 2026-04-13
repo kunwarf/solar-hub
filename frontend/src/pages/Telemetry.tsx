@@ -25,7 +25,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useDevicesForUI } from "@/hooks/useDevices";
-import { dashboardService, type PowerFlowData, type DevicePowerData } from "@/api";
+import { dashboardService, type PowerFlowData, type DevicePowerData, type StatsData } from "@/api";
 import { cn } from "@/lib/utils";
 
 const TelemetryPage = () => {
@@ -45,6 +45,7 @@ const TelemetryPage = () => {
   // Real-time telemetry from power-flow API
   const [powerFlowData, setPowerFlowData] = useState<PowerFlowData | null>(null);
   const [telemetryMap, setTelemetryMap] = useState<Map<string, DevicePowerData>>(new Map());
+  const [statsData, setStatsData] = useState<StatsData | null>(null);
 
   // Fetch real-time telemetry
   const fetchTelemetry = useCallback(async () => {
@@ -72,6 +73,22 @@ const TelemetryPage = () => {
     const interval = setInterval(fetchTelemetry, 5000); // Poll every 5s for real-time feel
     return () => clearInterval(interval);
   }, [fetchTelemetry]);
+
+  // Fetch stats (includes today's peaks) every 30s
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await dashboardService.getStats();
+      setStatsData(data);
+    } catch (err) {
+      console.warn("Failed to fetch stats:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
   // Set initial selected device when devices load
   useEffect(() => {
@@ -209,7 +226,17 @@ const TelemetryPage = () => {
         {currentDevice && (
           <>
             {currentDevice.type === "inverter" && (
-              <InverterTelemetry device={currentDevice} telemetry={currentDeviceTelemetry} />
+              <InverterTelemetry
+                device={currentDevice}
+                telemetry={currentDeviceTelemetry}
+                peaks={statsData ? {
+                  max_pv_today: statsData.max_pv_today,
+                  max_load_today: statsData.max_load_today,
+                  max_export_today: statsData.max_export_today,
+                  max_import_today: statsData.max_import_today,
+                  site_timezone: undefined,
+                } : null}
+              />
             )}
             {currentDevice.type === "battery" && (
               <BatteryCellGrid device={currentDevice} telemetry={currentDeviceTelemetry} />
