@@ -203,6 +203,18 @@ class CommandWorker:
         command_type = command.get("command_type")
         command_params = command.get("command_params") or {}
 
+        # In a multi-process setup (polling-manager with N workers) every worker
+        # polls the same device_commands table.  Only the worker that actually has
+        # the device connected should process the command; all others must skip it
+        # and leave it PENDING so the right worker picks it up.
+        if device_serial and hasattr(self._executor, "device_manager"):
+            if not self._executor.device_manager.get_device_by_serial(device_serial):
+                logger.debug(
+                    "[COMMAND_WORKER] Skipping command %s (device serial=%s not in this worker)",
+                    command_id, device_serial,
+                )
+                return  # Leave command PENDING for the correct worker
+
         logger.info(
             f"[COMMAND_WORKER] Executing command {command_id}: "
             f"type={command_type}, device={device_id}, serial={device_serial}, params={command_params}"

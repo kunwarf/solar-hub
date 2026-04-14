@@ -48,6 +48,13 @@ const DeviceSettingsPageHybrid = () => {
   // Track edits made in the config form so Save uses the modified values
   const [pendingUISettings, setPendingUISettings] = useState<Record<string, any> | null>(null);
 
+  // Voltronic devices don't support query_settings via Modbus — skip the hook
+  // entirely so it doesn't fire a command that stays pending and triggers the
+  // "device offline" banner.
+  const deviceMfr = (device?.manufacturer ?? "").toLowerCase();
+  const deviceProto = (device?.protocol ?? "").toLowerCase();
+  const isVoltronicDevice = deviceProto.startsWith("voltronic") || deviceMfr.includes("voltronic");
+
   const {
     settings,
     isLoading: settingsLoading,
@@ -63,7 +70,7 @@ const DeviceSettingsPageHybrid = () => {
   } = useDeviceSettings({
     deviceId: deviceId!,
     deviceType: device?.device_type || 'unknown',
-    enabled: !!device,
+    enabled: !!device && !isVoltronicDevice,
     pollInterval: 0, // Disable polling - only query on manual refresh
   });
 
@@ -161,7 +168,7 @@ const DeviceSettingsPageHybrid = () => {
         </Button>
 
         {/* Status Alerts */}
-        {isDeviceOffline && (
+        {isDeviceOffline && !isVoltronicDevice && (
           <Alert variant="destructive">
             <WifiOff className="h-4 w-4" />
             <AlertTitle>Device Offline</AlertTitle>
@@ -257,7 +264,7 @@ const DeviceSettingsPageHybrid = () => {
         </motion.div>
 
         {/* Configuration Content */}
-        {settings && (
+        {(settings || isVoltronicDevice) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -294,7 +301,7 @@ const DeviceSettingsPageHybrid = () => {
                     deviceSerial={device.serial_number}
                     protocolVariant={variant}
                     firmwareVersion={device.firmware_version}
-                    settings={settings}
+                    settings={settings ?? {}}
                     onSendCommand={async (commandKey, value) => {
                       try {
                         await updateDevice({ [commandKey]: value });
