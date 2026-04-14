@@ -3,8 +3,8 @@ Unit tests for the GET /telemetry/daily-peaks/{site_id} endpoint.
 
 Tests:
 1. Returns all four peaks for a site with known seeded data.
-2. Export peak honours the correct sign (grid_power_w < 0 → -metric_value).
-3. Import peak honours the correct sign (grid_power_w > 0).
+2. Export peak honours the correct sign (grid_w < 0 → -metric_value).
+3. Import peak honours the correct sign (grid_w > 0).
 4. Returns None peak values when no telemetry exists in the time window.
 5. Values outside the time window are not included.
 """

@@ -10,12 +10,12 @@
 
 The Inverter Telemetry page shows live instantaneous power but gives no quick answer to "what was the best solar output today?" or "what was the peak load?". This feature adds four read-only **Today's Peaks** tiles:
 
-| Tile | Metric | Source column | Sign rule |
+| Tile | Metric | Source column (`metric_name` in `telemetry_raw`) | Sign rule |
 |---|---|---|---|
-| Max Solar | Peak `pv_power_w` | `pv_power_w` | Always positive |
-| Max Load | Peak `load_power_w` | `load_power_w` | Always positive |
-| Max Export | Peak export power | `grid_power_w < 0` → `-grid_power_w` | Negative = export |
-| Max Import | Peak import power | `grid_power_w > 0` | Positive = import |
+| Max Solar | Peak PV power | `pv_total_w` | Always positive |
+| Max Load | Peak load power | `load_w` | Always positive |
+| Max Export | Peak export power | `grid_w < 0` → `-metric_value` | Negative = export |
+| Max Import | Peak import power | `grid_w > 0` | Positive = import |
 
 Each tile also shows **when** the peak occurred (HH:mm in the site's local timezone).
 
