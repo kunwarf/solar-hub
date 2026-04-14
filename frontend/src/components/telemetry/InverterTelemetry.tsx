@@ -187,12 +187,6 @@ const InverterTelemetry = ({ device, telemetry, peaks }: InverterTelemetryProps)
     }
   };
 
-  const hasPeaks =
-    peaks?.max_pv_today != null ||
-    peaks?.max_load_today != null ||
-    peaks?.max_export_today != null ||
-    peaks?.max_import_today != null;
-
   return (
     <div className="space-y-6">
       {/* Power Flow Overview */}
@@ -244,15 +238,14 @@ const InverterTelemetry = ({ device, telemetry, peaks }: InverterTelemetryProps)
       </motion.div>
 
       {/* Today's Peak Metrics */}
-      {hasPeaks && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="glass-card p-3 sm:p-5"
-        >
-          <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Today's Peaks</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="glass-card p-3 sm:p-5"
+      >
+        <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Today's Peaks</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Max Solar */}
             <div className="bg-secondary/30 rounded-xl p-3 sm:p-4 border border-border/50">
               <div className="flex items-center justify-between mb-2">
@@ -338,7 +331,6 @@ const InverterTelemetry = ({ device, telemetry, peaks }: InverterTelemetryProps)
             </div>
           </div>
         </motion.div>
-      )}
 
       {/* Solar Array Telemetry - Real MPPT Data */}
       <motion.div
