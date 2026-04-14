@@ -459,41 +459,42 @@ async def get_daily_peaks(
         end_time = end_time.replace(tzinfo=timezone.utc)
 
     query = text("""
-        WITH peak_values AS (
+        WITH base AS (
+            SELECT metric_name, metric_value, time
+            FROM telemetry_raw
+            WHERE site_id = :site_id
+              AND time    >= :start_time
+              AND time     < :end_time
+              AND metric_name IN ('pv_total_w', 'load_w', 'grid_w')
+        ),
+        peak_values AS (
             SELECT
-                MAX(metric_value) FILTER (WHERE metric_name = 'pv_total_w')               AS max_pv_w,
-                MAX(metric_value) FILTER (WHERE metric_name = 'load_w')                    AS max_load_w,
+                MAX(metric_value)  FILTER (WHERE metric_name = 'pv_total_w')              AS max_pv_w,
+                MAX(metric_value)  FILTER (WHERE metric_name = 'load_w')                   AS max_load_w,
                 MAX(-metric_value) FILTER (WHERE metric_name = 'grid_w'
                                             AND metric_value < 0)                          AS max_export_w,
                 MAX(metric_value)  FILTER (WHERE metric_name = 'grid_w'
                                             AND metric_value > 0)                          AS max_import_w
-            FROM telemetry_raw
-            WHERE site_id   = :site_id
-              AND time      >= :start_time
-              AND time       < :end_time
+            FROM base
         ),
         pv_time AS (
-            SELECT time FROM telemetry_raw
-            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
-              AND metric_name = 'pv_total_w'
+            SELECT time FROM base
+            WHERE metric_name = 'pv_total_w'
             ORDER BY metric_value DESC LIMIT 1
         ),
         load_time AS (
-            SELECT time FROM telemetry_raw
-            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
-              AND metric_name = 'load_w'
+            SELECT time FROM base
+            WHERE metric_name = 'load_w'
             ORDER BY metric_value DESC LIMIT 1
         ),
         export_time AS (
-            SELECT time FROM telemetry_raw
-            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
-              AND metric_name = 'grid_w' AND metric_value < 0
+            SELECT time FROM base
+            WHERE metric_name = 'grid_w' AND metric_value < 0
             ORDER BY metric_value ASC LIMIT 1
         ),
         import_time AS (
-            SELECT time FROM telemetry_raw
-            WHERE site_id = :site_id AND time >= :start_time AND time < :end_time
-              AND metric_name = 'grid_w' AND metric_value > 0
+            SELECT time FROM base
+            WHERE metric_name = 'grid_w' AND metric_value > 0
             ORDER BY metric_value DESC LIMIT 1
         )
         SELECT
