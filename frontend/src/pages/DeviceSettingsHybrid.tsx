@@ -14,6 +14,9 @@ import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { InverterConfigPage } from "@/components/settings/InverterConfigPage";
 import { MeterConfigPage } from "@/components/settings/MeterConfigPage";
 import { BatteryConfigPage } from "@/components/settings/BatteryConfigPage";
+import { PowdriveSettingsPage } from "@/components/settings/powdrive/PowdriveSettingsPage";
+import { VoltronicSettingsPage } from "@/components/settings/voltronic/VoltronicSettingsPage";
+import { SenergySettingsPage } from "@/components/settings/senergy/SenergySettingsPage";
 
 const deviceIcons = {
   inverter: Cpu,
@@ -147,7 +150,7 @@ const DeviceSettingsPageHybrid = () => {
     <AppLayout>
       <AppHeader
         title={`${device.name} Configuration`}
-        subtitle={`${device.model} • ${device.serialNumber}`}
+        subtitle={`${device.model} • ${device.serial_number}`}
       />
 
       <div className="p-6 space-y-6">
@@ -260,14 +263,76 @@ const DeviceSettingsPageHybrid = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            {device.device_type === "inverter" && (
-              <InverterConfigPage
-                deviceId={device.id}
-                deviceName={device.name}
-                settings={settings}
-                onSettingsChange={setPendingUISettings}
-              />
-            )}
+            {device.device_type === "inverter" && (() => {
+              const mfr = (device.manufacturer ?? "").toLowerCase();
+              const proto = (device.protocol ?? "").toLowerCase();
+              const isVoltronic = proto.startsWith("voltronic") || mfr.includes("voltronic");
+              const isSenergy = mfr.includes("senergy") || proto === "senergy";
+              const isPowdrive = mfr.includes("powdrive") || mfr.includes("deye") || proto === "powdrive" || proto === "deye";
+
+              if (isPowdrive) {
+                return (
+                  <PowdriveSettingsPage
+                    deviceId={device.id}
+                    deviceName={device.name}
+                    deviceSerial={device.serial_number}
+                    firmwareVersion={device.firmware_version}
+                    settings={settings}
+                    lastSyncedAt={lastSyncedAt}
+                    onApply={async (changes) => { await updateDevice({ ...settings, ...changes }); }}
+                    onRefresh={handleRefresh}
+                    isRefreshing={isQuerying}
+                  />
+                );
+              }
+              if (isVoltronic) {
+                const variant = proto.replace("voltronic_", "").toUpperCase() || "PI30";
+                return (
+                  <VoltronicSettingsPage
+                    deviceId={device.id}
+                    deviceName={device.name}
+                    deviceSerial={device.serial_number}
+                    protocolVariant={variant}
+                    firmwareVersion={device.firmware_version}
+                    settings={settings}
+                    onSendCommand={async (commandKey, value) => {
+                      try {
+                        await updateDevice({ [commandKey]: value });
+                        return { success: true };
+                      } catch (e: any) {
+                        return { success: false, error: e?.message ?? "Command failed" };
+                      }
+                    }}
+                    onRefreshAll={handleRefresh}
+                    isRefreshing={isQuerying}
+                  />
+                );
+              }
+              if (isSenergy) {
+                return (
+                  <SenergySettingsPage
+                    deviceId={device.id}
+                    deviceName={device.name}
+                    deviceSerial={device.serial_number}
+                    firmwareVersion={device.firmware_version}
+                    settings={settings}
+                    lastSyncedAt={lastSyncedAt}
+                    onApply={async (changes) => { await updateDevice({ ...settings, ...changes }); }}
+                    onRefresh={handleRefresh}
+                    isRefreshing={isQuerying}
+                  />
+                );
+              }
+              // Unknown inverter family → legacy generic page
+              return (
+                <InverterConfigPage
+                  deviceId={device.id}
+                  deviceName={device.name}
+                  settings={settings}
+                  onSettingsChange={setPendingUISettings}
+                />
+              );
+            })()}
             {device.device_type === "battery" && (
               <BatteryConfigPage
                 deviceId={device.id}

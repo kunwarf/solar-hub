@@ -837,29 +837,34 @@ async def get_stats(
         for point in month_data.get("data", []):
             month_energy_kwh += point.get("pv_kwh", 0)
 
-        # Get today's peak instantaneous metrics
+    except Exception as e:
+        logger.error(f"Failed to fetch energy stats from System B: {e}")
+
+    # Fetch today's peak metrics in a separate block so energy stats are unaffected by peaks errors
+    def _parse_peak(raw: dict) -> Optional[MaxMetric]:
+        if not raw or raw.get("value_w") is None:
+            return None
+        try:
+            return MaxMetric(
+                value_kw=round(raw["value_w"] / 1000, 3),
+                occurred_at=datetime.fromisoformat(raw["occurred_at"]),
+            )
+        except Exception:
+            return None
+
+    try:
         peaks_data = await system_b_client.get_site_daily_peaks(
             site_id=site_info.site_id,
             start_time=today_start_utc,
             end_time=today_end_utc,
         )
         peaks = peaks_data.get("peaks", {})
-
-        def _parse_peak(raw: dict) -> Optional[MaxMetric]:
-            if not raw or raw.get("value_w") is None:
-                return None
-            return MaxMetric(
-                value_kw=round(raw["value_w"] / 1000, 3),
-                occurred_at=datetime.fromisoformat(raw["occurred_at"]),
-            )
-
         max_pv_today = _parse_peak(peaks.get("pv", {}))
         max_load_today = _parse_peak(peaks.get("load", {}))
         max_export_today = _parse_peak(peaks.get("export", {}))
         max_import_today = _parse_peak(peaks.get("import", {}))
-
     except Exception as e:
-        logger.error(f"Failed to fetch stats from System B: {e}")
+        logger.error(f"Failed to fetch daily peaks from System B: {e}")
 
     devices_online = 0
     devices_data = []
