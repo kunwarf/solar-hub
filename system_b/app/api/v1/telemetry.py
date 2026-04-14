@@ -460,12 +460,22 @@ async def get_daily_peaks(
 
     query = text("""
         WITH base AS (
-            SELECT metric_name, metric_value, time
+            -- Normalise metric names so Voltronic (load_power_w / grid_power_w)
+            -- and all other families (load_w / grid_w) are treated identically.
+            SELECT
+                CASE metric_name
+                    WHEN 'load_power_w' THEN 'load_w'
+                    WHEN 'grid_power_w' THEN 'grid_w'
+                    ELSE metric_name
+                END AS metric_name,
+                metric_value,
+                time
             FROM telemetry_raw
             WHERE site_id = :site_id
               AND time    >= :start_time
               AND time     < :end_time
-              AND metric_name IN ('pv_total_w', 'load_w', 'grid_w')
+              AND metric_name IN ('pv_total_w', 'load_w', 'load_power_w',
+                                  'grid_w',    'grid_power_w')
         ),
         peak_values AS (
             SELECT
@@ -509,15 +519,25 @@ async def get_daily_peaks(
         FROM peak_values pv
     """)
 
+    logger.info(
+        "[daily-peaks] site=%s window=%s → %s", site_id, start_time.isoformat(), end_time.isoformat()
+    )
     result = await session.execute(
         query,
         {
-            "site_id": str(site_id),
+            "site_id": site_id,          # UUID object — avoids asyncpg string-cast issues
             "start_time": start_time,
             "end_time": end_time,
         },
     )
     row = result.fetchone()
+    logger.info(
+        "[daily-peaks] result: pv=%s load=%s export=%s import=%s",
+        getattr(row, "max_pv_w", None),
+        getattr(row, "max_load_w", None),
+        getattr(row, "max_export_w", None),
+        getattr(row, "max_import_w", None),
+    )
 
     def _metric(value, occurred_at):
         if value is None:
