@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, status
 
-from ....device_server.settings_schema import get_schema, SCHEMAS_BY_PROTOCOL
+from device_server.settings_schema import get_schema, SCHEMAS_BY_PROTOCOL
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/settings", tags=["Settings Schema"])
