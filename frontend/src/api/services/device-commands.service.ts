@@ -40,9 +40,50 @@ export interface CommandStatusResponse {
   updated_at?: string;
 }
 
+// ============== Schema Types ==============
+
+export interface SettingsSchemaField {
+  key: string;
+  label: string;
+  type: "number" | "enum" | "bool";
+  unit?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  scale?: number;
+  options?: Record<string, string>;
+  description?: string;
+  writable?: boolean;
+  destructive?: boolean;
+}
+
+export interface SettingsSchemaGroup {
+  id: string;
+  label: string;
+  sign_note?: string;
+  fields: SettingsSchemaField[];
+}
+
+export interface SettingsSchema {
+  version: string;
+  family: "powdrive" | "senergy" | "voltronic" | string;
+  groups: SettingsSchemaGroup[];
+}
+
 // ============== API Service ==============
 
 class DeviceCommandsService {
+  /**
+   * Fetch the settings schema for a given inverter protocol.
+   * The schema defines each writable field's label, type, units, min/max, and enum options.
+   */
+  async getSettingsSchema(protocol: string): Promise<SettingsSchema> {
+    const response = await apiClient.get<SettingsSchema>(
+      `/devices/settings-schema/${encodeURIComponent(protocol)}`
+    );
+    return response.data;
+  }
+
   /**
    * Query current settings from physical device
    */

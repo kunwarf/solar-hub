@@ -395,6 +395,31 @@ async def get_command_status(
 
 
 @router.get(
+    "/settings-schema/{protocol}",
+    summary="Get settings schema for an inverter protocol",
+    description=(
+        "Returns the complete writable-field metadata for a given inverter protocol "
+        "(powdrive, senergy, voltronic_pi30, voltronic_pi18, …). "
+        "Frontend pages use this schema to render the correct controls, labels, "
+        "units, and validation ranges without hard-coding them per page."
+    ),
+)
+async def get_device_settings_schema(
+    protocol: str,
+    current_user: User = Depends(get_current_user),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
+) -> dict:
+    """Proxy the settings schema request to System B."""
+    try:
+        return await system_b_client.get_settings_schema(protocol)
+    except SystemBClientError as e:
+        raise HTTPException(
+            status_code=e.status_code or status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch settings schema: {str(e)}",
+        )
+
+
+@router.get(
     "/{device_id}/commands",
     summary="List recent commands for device",
     description="Get a list of recent commands sent to this device.",
