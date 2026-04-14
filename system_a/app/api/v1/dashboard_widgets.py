@@ -774,6 +774,7 @@ async def get_power_flow(
 )
 async def get_stats(
     site_id: Optional[UUID] = Query(None, description="Site ID (uses default if not provided)"),
+    device_id: Optional[UUID] = Query(None, description="Device ID to restrict daily peaks to a single inverter"),
     current_user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
     system_b_client: SystemBClient = Depends(get_system_b_client_instance),
@@ -852,15 +853,33 @@ async def get_stats(
         except Exception:
             return None
 
+    # Resolve the System B device UUID from the System A device_id so the
+    # peaks query is scoped to exactly one inverter.
+    system_b_device_id: Optional[UUID] = None
+    if device_id is not None:
+        try:
+            sys_a_device = await uow.devices.get_by_id(device_id)
+            if sys_a_device:
+                sys_b_info = await system_b_client.get_device_by_serial(sys_a_device.serial_number)
+                if sys_b_info:
+                    system_b_device_id = sys_b_info.id
+                else:
+                    logger.warning("[daily-peaks] device serial %s not found in System B", sys_a_device.serial_number)
+            else:
+                logger.warning("[daily-peaks] device_id %s not found in System A", device_id)
+        except Exception as exc:
+            logger.warning("[daily-peaks] could not resolve System B device for %s: %s", device_id, exc)
+
     logger.info(
-        "[daily-peaks] requesting site=%s window=%s → %s tz=%s",
-        site_info.site_id, today_start_utc.isoformat(), today_end_utc.isoformat(), site_timezone,
+        "[daily-peaks] requesting site=%s sysb_device=%s window=%s → %s tz=%s",
+        site_info.site_id, system_b_device_id, today_start_utc.isoformat(), today_end_utc.isoformat(), site_timezone,
     )
     try:
         peaks_data = await system_b_client.get_site_daily_peaks(
             site_id=site_info.site_id,
             start_time=today_start_utc,
             end_time=today_end_utc,
+            device_id=system_b_device_id,
         )
         logger.info("[daily-peaks] raw response from System B: %s", peaks_data)
         peaks = peaks_data.get("peaks", {})

@@ -74,10 +74,10 @@ const TelemetryPage = () => {
     return () => clearInterval(interval);
   }, [fetchTelemetry]);
 
-  // Fetch stats (includes today's peaks) every 30s
-  const fetchStats = useCallback(async () => {
+  // Fetch stats (includes today's peaks) every 30s, scoped to the selected device
+  const fetchStats = useCallback(async (deviceId?: string) => {
     try {
-      const data = await dashboardService.getStats();
+      const data = await dashboardService.getStats(undefined, deviceId);
       setStatsData(data);
     } catch (err) {
       console.warn("Failed to fetch stats:", err);
@@ -85,10 +85,10 @@ const TelemetryPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000);
+    fetchStats(selectedDevice ?? undefined);
+    const interval = setInterval(() => fetchStats(selectedDevice ?? undefined), 30000);
     return () => clearInterval(interval);
-  }, [fetchStats]);
+  }, [fetchStats, selectedDevice]);
 
   // Set initial selected device when devices load
   useEffect(() => {

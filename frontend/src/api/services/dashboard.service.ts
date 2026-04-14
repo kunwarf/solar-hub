@@ -543,9 +543,10 @@ class DashboardService {
    * Get statistics data for stats cards
    * Returns aggregated stats for all devices in the site
    */
-  async getStats(siteId?: string): Promise<StatsData> {
+  async getStats(siteId?: string, deviceId?: string): Promise<StatsData> {
     const params: Record<string, string> = {};
     if (siteId) params.site_id = siteId;
+    if (deviceId) params.device_id = deviceId;
 
     const response = await apiClient.get<StatsData>(
       API_ENDPOINTS.dashboard.stats,

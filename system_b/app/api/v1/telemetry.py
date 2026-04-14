@@ -436,17 +436,19 @@ async def get_energy_chart(
     description=(
         "Returns the maximum instantaneous power for PV, load, grid-export, and "
         "grid-import within the requested UTC window (pass today's local midnight "
-        "→ end-of-day as UTC bounds). Null values are returned when no data exists."
+        "→ end-of-day as UTC bounds). Null values are returned when no data exists. "
+        "Pass device_id to restrict peaks to a single inverter."
     ),
 )
 async def get_daily_peaks(
     site_id: UUID,
     start_time: datetime,
     end_time: datetime,
+    device_id: Optional[UUID] = Query(None, description="Restrict peaks to a specific device"),
     session: AsyncSession = Depends(get_db_session),
 ) -> dict:
     """
-    Get today's peak instantaneous power metrics for a site.
+    Get today's peak instantaneous power metrics for a site (or single device).
 
     Uses a single SQL pass over telemetry_raw with FILTER clauses so only one
     table scan is needed.  Peak timestamps are obtained via a DISTINCT ON subquery
@@ -458,7 +460,9 @@ async def get_daily_peaks(
     if end_time.tzinfo is None:
         end_time = end_time.replace(tzinfo=timezone.utc)
 
-    query = text("""
+    device_filter = "AND device_id = :device_id" if device_id is not None else ""
+
+    query = text(f"""
         WITH base AS (
             -- Normalise metric names so Voltronic (load_power_w / grid_power_w)
             -- and all other families (load_w / grid_w) are treated identically.
@@ -472,6 +476,7 @@ async def get_daily_peaks(
                 time
             FROM telemetry_raw
             WHERE site_id = :site_id
+              {device_filter}
               AND time    >= :start_time
               AND time     < :end_time
               AND metric_name IN ('pv_total_w', 'load_w', 'load_power_w',
@@ -520,16 +525,17 @@ async def get_daily_peaks(
     """)
 
     logger.info(
-        "[daily-peaks] site=%s window=%s → %s", site_id, start_time.isoformat(), end_time.isoformat()
+        "[daily-peaks] site=%s device=%s window=%s → %s",
+        site_id, device_id, start_time.isoformat(), end_time.isoformat(),
     )
-    result = await session.execute(
-        query,
-        {
-            "site_id": site_id,          # UUID object — avoids asyncpg string-cast issues
-            "start_time": start_time,
-            "end_time": end_time,
-        },
-    )
+    params: dict = {
+        "site_id": site_id,
+        "start_time": start_time,
+        "end_time": end_time,
+    }
+    if device_id is not None:
+        params["device_id"] = device_id
+    result = await session.execute(query, params)
     row = result.fetchone()
     logger.info(
         "[daily-peaks] result: pv=%s load=%s export=%s import=%s",

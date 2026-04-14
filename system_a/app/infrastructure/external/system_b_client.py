@@ -371,14 +371,16 @@ class SystemBClient:
         site_id: UUID,
         start_time: datetime,
         end_time: datetime,
+        device_id: Optional[UUID] = None,
     ) -> dict:
         """
-        Get today's peak instantaneous power metrics for a site from System B.
+        Get today's peak instantaneous power metrics for a site (or single device) from System B.
 
         Args:
             site_id: Site UUID.
             start_time: UTC start of "today" in the site's local timezone.
             end_time: UTC end of "today" in the site's local timezone.
+            device_id: Optional — restrict peaks to a single inverter.
 
         Returns:
             Dict with 'peaks' key containing pv, load, export, import sub-dicts,
@@ -387,10 +389,12 @@ class SystemBClient:
         try:
             client = await self._get_client()
             url = f"/api/v1/telemetry/daily-peaks/{site_id}"
-            params = {
+            params: dict = {
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat(),
             }
+            if device_id is not None:
+                params["device_id"] = str(device_id)
             logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
             response = await client.get(url, params=params)
             response.raise_for_status()
