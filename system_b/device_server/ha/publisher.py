@@ -349,6 +349,10 @@ class HATelemetryPublisher:
                 return None
 
         return {
+            # Epoch anchor for lifetime-total sensors (state_class: total).
+            # A fixed last_reset tells HA to always delta from the previous
+            # known value instead of from 0, preventing reconnect spikes.
+            "last_reset_epoch": "1970-01-01T00:00:00+00:00",
             # ── Live power ──────────────────────────────────────────────────
             "pv_power_w":      _f(power.get("pv_total_w")),
             "grid_power_w":    _f(power.get("grid_w")),

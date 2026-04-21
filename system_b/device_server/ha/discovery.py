@@ -39,12 +39,15 @@ INVERTER_METRICS: List[Dict[str, Any]] = [
     {"key": "battery_charge_today_kwh",       "name": "Battery Charge Today",         "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
     {"key": "battery_discharge_today_kwh",    "name": "Battery Discharge Today",      "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
     # ── Energy total (lifetime counters) ────────────────────────────────────
-    {"key": "pv_energy_total_kwh",            "name": "Solar Energy Total",           "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "grid_import_total_kwh",          "name": "Grid Import Total",            "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "grid_export_total_kwh",          "name": "Grid Export Total",            "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "load_energy_total_kwh",          "name": "Load Energy Total",            "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "battery_charge_total_kwh",       "name": "Battery Charge Total",         "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "battery_discharge_total_kwh",    "name": "Battery Discharge Total",      "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
+    # state_class "total" + last_reset_epoch prevents HA from counting the full
+    # lifetime total as new energy when the device reconnects after being offline.
+    # HA computes delta from the last known value, not from 0.
+    {"key": "pv_energy_total_kwh",            "name": "Solar Energy Total",           "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
+    {"key": "grid_import_total_kwh",          "name": "Grid Import Total",            "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
+    {"key": "grid_export_total_kwh",          "name": "Grid Export Total",            "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
+    {"key": "load_energy_total_kwh",          "name": "Load Energy Total",            "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
+    {"key": "battery_charge_total_kwh",       "name": "Battery Charge Total",         "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
+    {"key": "battery_discharge_total_kwh",    "name": "Battery Discharge Total",      "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
 ]
 
 # Sensors published for battery-type devices (JK BMS, Pylontech, …)
@@ -62,8 +65,8 @@ BATTERY_METRICS: List[Dict[str, Any]] = [
     # hardware kWh registers.
     {"key": "battery_charge_today_kwh",    "name": "Charge Energy Today",    "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
     {"key": "battery_discharge_today_kwh", "name": "Discharge Energy Today", "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "battery_charge_total_kwh",    "name": "Charge Energy Total",    "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
-    {"key": "battery_discharge_total_kwh", "name": "Discharge Energy Total", "device_class": "energy", "unit": "kWh", "state_class": "total_increasing"},
+    {"key": "battery_charge_total_kwh",    "name": "Charge Energy Total",    "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
+    {"key": "battery_discharge_total_kwh", "name": "Discharge Energy Total", "device_class": "energy", "unit": "kWh", "state_class": "total", "last_reset_template": "{{ value_json.last_reset_epoch }}"},
 ]
 
 # Fallback when device_type is unknown — broad set covering both types
@@ -158,5 +161,8 @@ def build_discovery_payload(
 
     if metric.get("device_class"):
         payload["device_class"] = metric["device_class"]
+
+    if metric.get("last_reset_template"):
+        payload["last_reset_value_template"] = metric["last_reset_template"]
 
     return payload
