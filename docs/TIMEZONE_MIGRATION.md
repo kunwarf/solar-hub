@@ -232,18 +232,48 @@ done
 
 ---
 
+---
+
+## ✅ Pre-Phase Safety Fixes (2026-04-21)
+
+Before cutover to `telemetry_hourly_local`, the following latent timezone bugs
+were fixed across System A to prevent data corruption when the switch happens.
+
+### Root Causes Fixed
+
+| File | Bug | Fix |
+|---|---|---|
+| `billing_scheduler_service.py` | `datetime.now()` naive in 4 places | `datetime.now(timezone.utc)` |
+| `net_metering.py` | `datetime.now()` naive in 2 places | `datetime.now(timezone.utc)` |
+| `net_metering_calculator.py` | `datetime.now()` naive in 2 places | `datetime.now(timezone.utc)` |
+| `net_metering_repository.py` | `datetime.now()` naive in 2 places | `datetime.now(timezone.utc)` |
+| `device_model.py` | `datetime.now()` naive fallback | `datetime.now(timezone.utc)` |
+| `dashboard_widgets.py` | `fromisoformat()` produced naive dt; subtracted from aware `now` | `.replace("Z", "+00:00")` |
+| `dashboard_widgets.py` | Peak demand hour labels used UTC bucket hour | `astimezone(site_tz)` before `strftime` |
+| `InverterTelemetry.tsx` | Chart x-axis used browser locale for timestamps | Added `timeZone: peaks?.site_timezone` to `toLocaleTimeString` |
+
+### Tests Added
+- `system_a/tests/unit/test_timezone_fixes.py` — 18 unit tests, all passing
+
+### Commit
+`93da2f0` — "fix: replace naive datetime.now() with UTC-aware calls across System A"
+
+---
+
 ## Rollout Checklist
 
 ### Pre-Migration
 - [x] Create timezone-aware continuous aggregate
 - [x] Write timezone utility functions
 - [x] Create comprehensive tests
+- [x] Fix all naive datetime.now() and fromisoformat() calls (2026-04-21)
 - [ ] Review and approve architecture (approved: Option B)
 - [ ] Set up monitoring and alerting
 - [ ] Create rollback procedures
 
 ### Migration
-- [ ] Phase 1: Infrastructure ✅ COMPLETED
+- [x] Phase 1: Infrastructure ✅ COMPLETED
+- [x] Pre-Phase: Safety datetime fixes ✅ COMPLETED (2026-04-21)
 - [ ] Phase 2: Validation (1 week)
 - [ ] Phase 3: Cutover (1 week)
 - [ ] Phase 4: Backfill (4 weeks)
