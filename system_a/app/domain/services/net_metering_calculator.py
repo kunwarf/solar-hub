@@ -12,7 +12,7 @@ Key features:
 - Configurable anchor date billing months
 """
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional, Tuple, Dict, Any
 import hashlib
@@ -422,7 +422,7 @@ class NetMeteringCalculator:
             net_kwh_position=net_kwh,
             days_elapsed=days_elapsed,
             total_days_in_month=total_days,
-            generated_at=datetime.now(),
+            generated_at=datetime.now(timezone.utc),
         )
 
         return RunningBillResult(
@@ -534,7 +534,7 @@ class NetMeteringCalculator:
                 current_cycle.total_settlement_rs = result.cycle_settlement_total
                 current_cycle.closing_cash_credit_rs = cash_balance if cash_balance < 0 else Decimal("0")
                 current_cycle.status = BillingStatus.FINALIZED
-                current_cycle.finalized_at = datetime.now()
+                current_cycle.finalized_at = datetime.now(timezone.utc)
                 billing_cycles.append(current_cycle)
                 current_cycle = None
 

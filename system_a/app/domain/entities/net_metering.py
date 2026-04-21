@@ -5,7 +5,7 @@ Handles 3-month netting cycles, TOU billing, and Pakistan net metering rules.
 Battery is ignored - all logic is based on netting grid imports/exports only.
 """
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Optional, List, Dict, Any
@@ -326,7 +326,7 @@ class BillingCycle(Entity):
         self.closing_cash_credit_rs = self.opening_cash_credit_rs + self.total_settlement_rs
 
         self.status = BillingStatus.FINALIZED
-        self.finalized_at = datetime.now()
+        self.finalized_at = datetime.now(timezone.utc)
         self.mark_updated()
 
 
@@ -502,7 +502,7 @@ class BillingMonth(Entity):
             raise ValueError("Month is already finalized")
 
         self.status = BillingStatus.FINALIZED
-        self.finalized_at = datetime.now()
+        self.finalized_at = datetime.now(timezone.utc)
         self.mark_updated()
 
 

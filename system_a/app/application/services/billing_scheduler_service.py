@@ -7,7 +7,7 @@ Runs as a scheduled job to compute running bills and finalize billing periods.
 import logging
 import pytz
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -146,7 +146,7 @@ class BillingSchedulerService:
         Returns:
             BulkJobResult with summary and per-site results
         """
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
         target_date = target_date or (date.today() - timedelta(days=1))
 
         logger.info("Starting daily billing job for %s", target_date)
@@ -182,7 +182,7 @@ class BillingSchedulerService:
                     error=str(e),
                 ))
 
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
         successful = sum(1 for r in results if r.success)
         failed = len(results) - successful
 
@@ -538,7 +538,7 @@ class BillingSchedulerService:
             month.closing_credit_balance_rs = final_snapshot.bill_credit_balance_rs_to_date
 
         month.status = BillingStatus.FINALIZED
-        month.finalized_at = datetime.now()
+        month.finalized_at = datetime.now(timezone.utc)
         month.config_hash = self._calculator.compute_config_hash(config)
 
         await self._nm_repo.update_billing_month(month)
@@ -619,7 +619,7 @@ class BillingSchedulerService:
         cycle.closing_cash_credit_rs = cycle.opening_cash_credit_rs - cycle.total_settlement_rs
 
         cycle.status = BillingStatus.FINALIZED
-        cycle.finalized_at = datetime.now()
+        cycle.finalized_at = datetime.now(timezone.utc)
         cycle.config_hash = self._calculator.compute_config_hash(config)
 
         await self._nm_repo.update_billing_cycle(cycle)

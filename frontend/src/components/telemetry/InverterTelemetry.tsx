@@ -516,7 +516,7 @@ const InverterTelemetry = ({ device, telemetry, peaks }: InverterTelemetryProps)
           <div className="h-[180px] sm:h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={historicalData.map(point => ({
-                time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: peaks?.site_timezone || 'UTC' }),
                 solarPower: point.solar_power_kw,
                 loadPower: point.load_power_kw,
                 batteryPower: point.battery_power_kw,
@@ -611,7 +611,7 @@ const InverterTelemetry = ({ device, telemetry, peaks }: InverterTelemetryProps)
           <div className="h-[150px] sm:h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={historicalData.map(point => ({
-                time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                time: new Date(point.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: peaks?.site_timezone || 'UTC' }),
                 efficiency: point.efficiency_pct || 0,
                 temperature: point.temperature_c || 0,
               }))}>

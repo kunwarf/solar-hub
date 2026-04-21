@@ -7,7 +7,7 @@ Handles CRUD operations for:
 - BillingMonth
 - BillingDaily
 """
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -215,7 +215,7 @@ class SQLAlchemyNetMeteringRepository:
             raise ValueError(f"Billing cycle {cycle_id} not found")
 
         model.status = BillingStatus.FINALIZED.value
-        model.finalized_at = datetime.now()
+        model.finalized_at = datetime.now(timezone.utc)
         model.version += 1
 
         await self._session.flush()
@@ -350,7 +350,7 @@ class SQLAlchemyNetMeteringRepository:
             raise ValueError(f"Billing month {month_id} not found")
 
         model.status = BillingStatus.FINALIZED.value
-        model.finalized_at = datetime.now()
+        model.finalized_at = datetime.now(timezone.utc)
         model.version += 1
 
         await self._session.flush()

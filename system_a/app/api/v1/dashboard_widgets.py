@@ -848,7 +848,7 @@ async def get_stats(
         try:
             return MaxMetric(
                 value_kw=round(raw["value_w"] / 1000, 3),
-                occurred_at=datetime.fromisoformat(raw["occurred_at"]),
+                occurred_at=datetime.fromisoformat(raw["occurred_at"].replace("Z", "+00:00")),
             )
         except Exception:
             return None
@@ -1322,12 +1322,12 @@ async def get_comparison(
             previous_by_day: Dict[int, float] = {}
 
             for point in current_data.get("data", []):
-                timestamp = datetime.fromisoformat(point["timestamp"])
+                timestamp = datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00"))
                 weekday = timestamp.weekday()
                 current_by_day[weekday] = current_by_day.get(weekday, 0) + (point.get("pv_kwh") or 0)
 
             for point in prev_data.get("data", []):
-                timestamp = datetime.fromisoformat(point["timestamp"])
+                timestamp = datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00"))
                 weekday = timestamp.weekday()
                 previous_by_day[weekday] = previous_by_day.get(weekday, 0) + (point.get("pv_kwh") or 0)
 
@@ -1365,13 +1365,13 @@ async def get_comparison(
             prev_week_totals = [0.0] * 4
 
             for point in current_data.get("data", []):
-                timestamp = datetime.fromisoformat(point["timestamp"])
+                timestamp = datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00"))
                 days_ago = (now - timestamp).days
                 week_idx = min(days_ago // 7, 3)
                 current_week_totals[week_idx] += point.get("pv_kwh") or 0
 
             for point in prev_data.get("data", []):
-                timestamp = datetime.fromisoformat(point["timestamp"])
+                timestamp = datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00"))
                 days_ago = (now - timestamp).days - 28
                 week_idx = min(days_ago // 7, 3)
                 if 0 <= week_idx < 4:
@@ -1433,6 +1433,11 @@ async def get_peak_demand(
     """
     site_info = await get_site_with_devices(current_user, uow, site_id)
 
+    # Resolve site timezone so hourly labels display in local time
+    from zoneinfo import ZoneInfo
+    site_entity = await uow.sites.get_by_id(site_info.site_id)
+    _site_tz = ZoneInfo(site_entity.timezone) if site_entity and site_entity.timezone else timezone.utc
+
     hourly_profile: List[PeakDemandHourly] = []
     peak_kw = 0.0
     peak_hour_str = ""
@@ -1450,7 +1455,7 @@ async def get_peak_demand(
         hourly_load: dict[str, float] = {}
         for point in energy_data.get("data", []):
             load_kwh = point.get("load_kwh", 0)
-            timestamp = datetime.fromisoformat(point["timestamp"])
+            timestamp = datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00")).astimezone(_site_tz)
             hour_label = timestamp.strftime("%H:00")
             hourly_load[hour_label] = hourly_load.get(hour_label, 0.0) + load_kwh
 

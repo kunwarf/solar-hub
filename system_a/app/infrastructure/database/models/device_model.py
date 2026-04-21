@@ -110,12 +110,12 @@ class DeviceModel(BaseModel):
         if not metrics_dict:
             return None
 
-        from datetime import datetime
+        from datetime import datetime, timezone
         recorded_at = metrics_dict.get('recorded_at')
         if recorded_at and isinstance(recorded_at, str):
             recorded_at = datetime.fromisoformat(recorded_at)
         else:
-            recorded_at = datetime.now()
+            recorded_at = datetime.now(timezone.utc)
 
         return DeviceMetrics(
             power_output_w=metrics_dict.get('power_output_w'),
