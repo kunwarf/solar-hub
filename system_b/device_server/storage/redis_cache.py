@@ -354,23 +354,25 @@ class TelemetryCacheWriter:
             ],
             "grid_import_kwh": [
                 "grid_import_today_kwh", "grid_import_today", "import_kwh",
-                "grid_buy_today_kwh", "today_import_kwh",
-                "grid_import_energy_today_kwh",   # Senergy parser output
+                "grid_buy_today_kwh", "today_import_kwh",   # Senergy raw register
+                "grid_import_energy_today_kwh",
             ],
             "grid_export_kwh": [
                 "grid_export_today_kwh", "grid_export_today", "export_kwh",
-                "grid_sell_today_kwh", "today_export_kwh",
-                "grid_export_energy_today_kwh",   # Senergy parser output
+                "grid_sell_today_kwh", "today_export_kwh",  # Senergy raw register
+                "grid_export_energy_today_kwh",
             ],
             "battery_charge_kwh": [
                 "battery_charge_today_kwh", "battery_charge_today", "charge_kwh",
                 "today_charge_kwh",
-                "battery_charge_energy_today_kwh",   # Senergy parser output
+                "battery_daily_charge_energy",           # Senergy raw register
+                "battery_charge_energy_today_kwh",
             ],
             "battery_discharge_kwh": [
                 "battery_discharge_today_kwh", "battery_discharge_today", "discharge_kwh",
                 "today_discharge_kwh",
-                "battery_discharge_energy_today_kwh",  # Senergy parser output
+                "battery_daily_discharge_energy",        # Senergy raw register
+                "battery_discharge_energy_today_kwh",
             ],
         }
         for target_key, source_keys in energy_mappings.items():
@@ -384,12 +386,32 @@ class TelemetryCacheWriter:
         # Extract total (lifetime) energy metrics
         energy_total_data = {}
         energy_total_mappings = {
-            "pv_kwh": ["pv_energy_total_kwh"],
-            "load_kwh": ["load_energy_total_kwh"],
-            "grid_import_kwh": ["grid_import_energy_total_kwh", "import_energy_total_kwh"],   # Senergy / Powdrive
-            "grid_export_kwh": ["grid_export_energy_total_kwh", "export_energy_total_kwh"],   # Senergy / Powdrive
-            "battery_charge_kwh": ["battery_charge_energy_total_kwh"],
-            "battery_discharge_kwh": ["battery_discharge_energy_total_kwh"],
+            "pv_kwh": [
+                "pv_energy_total_kwh",
+                "total_energy",                          # Senergy raw register
+            ],
+            "load_kwh": [
+                "load_energy_total_kwh",
+                "accumulated_energy_of_load",            # Senergy raw register
+            ],
+            "grid_import_kwh": [
+                "grid_import_energy_total_kwh",
+                "import_energy_total_kwh",               # Powdrive
+                "accumulated_energy_positive",           # Senergy raw register
+            ],
+            "grid_export_kwh": [
+                "grid_export_energy_total_kwh",
+                "export_energy_total_kwh",               # Powdrive
+                "accumulated_energy_negative",           # Senergy raw register
+            ],
+            "battery_charge_kwh": [
+                "battery_charge_energy_total_kwh",
+                "battery_accumulated_charge_energy",     # Senergy raw register
+            ],
+            "battery_discharge_kwh": [
+                "battery_discharge_energy_total_kwh",
+                "battery_accumulated_discharge_energy",  # Senergy raw register
+            ],
         }
         for target_key, source_keys in energy_total_mappings.items():
             for src in source_keys:
