@@ -29,6 +29,40 @@ from ....domain.entities.telemetry import (
 logger = logging.getLogger(__name__)
 
 
+_INTERVAL_UNIT_ALIASES = {
+    "second": "seconds", "seconds": "seconds", "sec": "seconds", "secs": "seconds",
+    "minute": "minutes", "minutes": "minutes", "min": "minutes", "mins": "minutes",
+    "hour": "hours",     "hours": "hours",     "hr": "hours",     "hrs": "hours",
+    "day": "days",       "days": "days",
+    "week": "weeks",     "weeks": "weeks",
+}
+
+
+def _parse_pg_interval(spec: str) -> timedelta:
+    """Parse a Postgres-style ``'1 hour'`` / ``'5 minutes'`` string.
+
+    asyncpg requires a Python ``timedelta`` when binding a query parameter
+    to the ``interval`` type — a raw string yields ``('str' object has no
+    attribute 'days')``. The API accepts strings for ergonomics; this
+    converts them for the driver.
+
+    Months / years aren't representable as ``timedelta`` (variable length)
+    and aren't used by any current caller, so we deliberately fail loudly
+    if one shows up.
+    """
+    parts = spec.strip().split()
+    if len(parts) != 2:
+        raise ValueError(f"Unsupported interval format: {spec!r}")
+    try:
+        n = int(parts[0])
+    except ValueError as exc:
+        raise ValueError(f"Interval count must be an integer: {spec!r}") from exc
+    unit = _INTERVAL_UNIT_ALIASES.get(parts[1].lower())
+    if unit is None:
+        raise ValueError(f"Unsupported interval unit in {spec!r}")
+    return timedelta(**{unit: n})
+
+
 class TelemetryRepository:
     """
     Repository for raw telemetry data.
@@ -367,19 +401,21 @@ class TelemetryRepository:
 
         # Use TimescaleDB time_bucket for aggregation.
         #
-        # Two type-cast tweaks vs. the obvious binding:
-        # - CAST(:interval AS INTERVAL): asyncpg sends strings as TEXT, but
-        #   time_bucket(bucket_width, TIMESTAMPTZ) needs bucket_width to be
-        #   INTERVAL. Without the cast Postgres fails to resolve the function
-        #   ("function time_bucket(text, timestamp with time zone) does not
-        #   exist") and the whole endpoint 500s.
-        # - device_id passed as a UUID object, not str(...). asyncpg binds
-        #   raw strings as TEXT and Postgres won't implicitly cast to UUID
-        #   on the WHERE clause. Same class of bug that commit 252fb50 fixed
-        #   for the daily-peaks endpoint.
+        # Binding notes for asyncpg:
+        # - time_bucket takes an INTERVAL as its first argument. asyncpg
+        #   requires a Python ``timedelta`` for an interval bind; a raw
+        #   string raises ``DataError: 'str' object has no attribute
+        #   'days'``. We parse the API's ergonomic string form ('1 hour',
+        #   '5 minutes') to a timedelta before binding.
+        # - device_id is passed as a UUID object, not str(...). asyncpg
+        #   sends strings as TEXT and Postgres won't implicitly cast to
+        #   UUID in a WHERE clause on a UUID column. Same class of bug
+        #   that commit 252fb50 fixed for the daily-peaks endpoint.
+        interval_td = _parse_pg_interval(bucket_interval)
+
         query = text("""
             SELECT
-                time_bucket(CAST(:interval AS INTERVAL), time) AS bucket,
+                time_bucket(:interval, time) AS bucket,
                 AVG(metric_value) AS avg_value,
                 MIN(metric_value) AS min_value,
                 MAX(metric_value) AS max_value,
@@ -399,7 +435,7 @@ class TelemetryRepository:
         result = await self._session.execute(
             query,
             {
-                "interval": bucket_interval,
+                "interval": interval_td,
                 "device_id": device_id,
                 "metric_name": metric_name,
                 "start_time": start_time,
@@ -459,11 +495,15 @@ class TelemetryRepository:
             ORDER BY bucket
         """)
 
+        # Same asyncpg type-cast quirks as get_time_bucket_aggregates:
+        # interval bind wants ``timedelta`` not a string, and site_id must
+        # be passed as UUID not ``str(site_id)`` for the WHERE match.
+        interval_td = _parse_pg_interval(bucket_interval)
         result = await self._session.execute(
             query,
             {
-                "interval": bucket_interval,
-                "site_id": str(site_id),
+                "interval": interval_td,
+                "site_id": site_id,
                 "start_time": start_time,
                 "end_time": end_time,
             }
