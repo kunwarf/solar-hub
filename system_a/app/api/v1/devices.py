@@ -1035,7 +1035,7 @@ async def get_device_cell_health_timeseries(
             },
         }
 
-    system_b_device_id = system_b_device.device_id
+    system_b_device_id = system_b_device.id
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(hours=window_hours)
 
