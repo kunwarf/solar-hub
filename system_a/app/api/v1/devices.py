@@ -1051,27 +1051,55 @@ async def get_device_cell_health_timeseries(
         end_time=end_time,
         bucket_interval="1 hour",
     )
-    try:
-        cell_rows, current_aggregates = await _asyncio.gather(
-            cell_rows_task, current_task, return_exceptions=False,
-        )
-    except SystemBClientError as exc:
+    # Use return_exceptions=True so a failure in one input (e.g. bank current
+    # aggregate not indexed for this device) doesn't discard the other.
+    results = await _asyncio.gather(
+        cell_rows_task, current_task, return_exceptions=True,
+    )
+    cell_rows_raw, current_raw = results
+    if isinstance(cell_rows_raw, BaseException):
         logger.warning(
-            "cell-health timeseries: aggregate fetch failed for %s: %s",
-            device.serial_number, exc,
+            "cell-health timeseries: cell rows fetch failed for %s: %s",
+            device.serial_number, cell_rows_raw,
         )
-        cell_rows, current_aggregates = [], []
+        cell_rows = []
+    else:
+        cell_rows = cell_rows_raw or []
+    if isinstance(current_raw, BaseException):
+        logger.warning(
+            "cell-health timeseries: bank current fetch failed for %s: %s",
+            device.serial_number, current_raw,
+        )
+        current_aggregates = []
+    else:
+        current_aggregates = current_raw or []
 
-    # Key both inputs by bucket ISO string — cheap common denominator.
+    # Prefer bank-level hourly current from telemetry_hourly. If it's missing
+    # (some parsers don't publish battery_current_a as a standard metric name),
+    # fall back to averaging the per-cell ``avg_current_a`` inside each bucket
+    # of ``battery_cell_hourly`` — for a series pack every cell carries the
+    # same current, so the average is a valid stand-in for bank current.
     bank_current_by_bucket: dict = {}
-    for agg in current_aggregates or []:
-        # avg is the hourly mean; positive = charging, negative = discharging.
+    for agg in current_aggregates:
         bucket_key = agg.bucket.isoformat() if agg.bucket else None
         if bucket_key is not None and agg.avg is not None:
             bank_current_by_bucket[bucket_key] = float(agg.avg)
 
+    if not bank_current_by_bucket and cell_rows:
+        # Derive per-bucket current from per-cell CAgg samples.
+        by_bucket_current: dict = {}
+        for row in cell_rows:
+            bucket_key = row.get("bucket")
+            i = row.get("avg_current_a")
+            if bucket_key is None or i is None:
+                continue
+            by_bucket_current.setdefault(bucket_key, []).append(float(i))
+        for bucket_key, samples in by_bucket_current.items():
+            if samples:
+                bank_current_by_bucket[bucket_key] = sum(samples) / len(samples)
+
     report = detect_cell_health_timeseries(
-        cell_rows or [], bank_current_by_bucket, window_hours=window_hours,
+        cell_rows, bank_current_by_bucket, window_hours=window_hours,
     )
 
     return {
