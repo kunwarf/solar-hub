@@ -351,7 +351,8 @@ class ModbusCommandExecutor:
                     # Fallback to legacy registers if defined
                     logger.warning(f"[COMMAND_EXECUTOR] No register map found, using legacy registers")
                     settings = {}
-                    for reg_def in cmd_def.get("registers", []):
+                    legacy_registers = cmd_def.get("registers", []) or []
+                    for reg_def in legacy_registers:
                         try:
                             address = reg_def["address"]
                             name = reg_def["name"]
@@ -361,6 +362,22 @@ class ModbusCommandExecutor:
                                 settings[name] = values[0] * scale
                         except Exception as e:
                             logger.error(f"[COMMAND_EXECUTOR] Error reading register {address}: {e}")
+
+                    # We attempted N register reads and got zero back — that's a
+                    # transport failure (Modbus timeout, RS485 collision, adapter
+                    # offline mid-command). Reporting success=True here makes the
+                    # frontend render a blank settings page with no way to
+                    # distinguish the failure from "device has no settings".
+                    if legacy_registers and not settings:
+                        return CommandResult(
+                            success=False,
+                            command_type=command_type,
+                            device_id=device_state.device_id,
+                            error=(
+                                f"Read failed on all {len(legacy_registers)} legacy "
+                                "registers (Modbus timeout or device offline)"
+                            ),
+                        )
 
                     return CommandResult(
                         success=True,
@@ -469,6 +486,29 @@ class ModbusCommandExecutor:
                         except Exception as e:
                             logger.debug(f"[COMMAND_EXECUTOR] Could not read register {reg_id} (addr {address}): {e}")
                             # Continue reading other registers
+
+                # We attempted N register reads and got zero back — that's a
+                # transport failure (Modbus timeout, RS485 collision, adapter
+                # offline mid-command, or chunk config referencing addresses
+                # the device doesn't answer). Reporting success=True here makes
+                # the frontend render a blank settings page with no way to
+                # distinguish the failure from "device has no settings".
+                if writable_registers and not settings:
+                    logger.warning(
+                        "[COMMAND_EXECUTOR] Read failed on all %d writable registers "
+                        "for protocol=%s — reporting failure instead of empty success",
+                        len(writable_registers), protocol_id,
+                    )
+                    return CommandResult(
+                        success=False,
+                        command_type=command_type,
+                        device_id=device_state.device_id,
+                        error=(
+                            f"Read failed on all {len(writable_registers)} writable "
+                            f"registers for protocol {protocol_id} (Modbus timeout "
+                            "or device offline)"
+                        ),
+                    )
 
                 logger.info(f"[COMMAND_EXECUTOR] ✓ Successfully queried {len(settings)} settings")
                 return CommandResult(
