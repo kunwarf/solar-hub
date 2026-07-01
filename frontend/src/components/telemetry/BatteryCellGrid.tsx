@@ -4,6 +4,9 @@ import { motion } from "framer-motion";
 import { Thermometer, Zap, Battery, Activity, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CellHealthPanel, { CellHealthReport } from "./CellHealthPanel";
+import CellHealthTimeseriesPanel, {
+  TimeseriesReport,
+} from "./CellHealthTimeseriesPanel";
 import {
   Tooltip,
   TooltipContent,
@@ -307,6 +310,20 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
     refetchInterval: 30_000,
   });
 
+  // ── Fetch time-series cell-health (Phase 2, slower refetch) ────────────────
+  // The underlying CAgg only refreshes hourly on the backend, so a 5-minute
+  // client cadence is plenty and avoids hammering the endpoint.
+  const { data: tsResponse } = useQuery<{ cell_health_timeseries: TimeseriesReport } | null>({
+    queryKey: ["battery-cell-health-ts", device?.id],
+    queryFn: () =>
+      device?.id
+        ? devicesService.getBatteryCellHealthTimeseries(device.id, 168)
+        : null,
+    enabled: !!device?.id,
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
+
   // ── Accumulate history when telemetry updates ──────────────────────────────
   useEffect(() => {
     if (!telemetry) return;
@@ -374,6 +391,9 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
 
       {/* Candidate cells for inspection (snapshot detector) */}
       <CellHealthPanel report={bankResponse?.cell_health ?? null} />
+
+      {/* Charge / discharge cycle analysis (time-series detector, Phase 2) */}
+      <CellHealthTimeseriesPanel report={tsResponse?.cell_health_timeseries ?? null} />
 
       {/* Battery Pack Summary */}
       <motion.div

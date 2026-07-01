@@ -6,8 +6,8 @@ diagnostic heuristic, **not** a warranty claim — the UI, API, and this doc use
 the wording "candidate for inspection" throughout.
 
 **Scope.** Phase 1 (snapshot-only) ships in System A's battery-bank endpoint.
-Phase 2 (time-series) is designed but not implemented — see the roadmap at
-the bottom.
+Phase 2 (time-series) is now shipped — see "Phase 2" below for the algorithm,
+API, and storage details.
 
 ---
 
@@ -228,38 +228,121 @@ sanity-check the flag.
 
 ---
 
-## Phase 2 roadmap (design, not implemented)
+## Phase 2 — time-series detector
 
-Time-series detection ("quick full / quick empty" — cells whose voltage
-climbs or drops materially faster than siblings during charge/discharge)
-requires historical per-cell voltage. Today, per-cell arrays only live in
-Redis for 120 s — the narrow `telemetry_raw` hypertable in System B does not
-decompose them into rows.
+Detects "quick full / quick empty" — cells whose voltage climbs or drops
+materially faster than siblings during charge/discharge phases. Complements
+the Phase 1 snapshot detector; both symptoms surface in the same battery
+detail page but from separate API endpoints and separate UI sections.
 
-Proposed design:
+### Storage
 
-1. New System B hypertable `battery_cell_samples (time, device_id, unit,
-   cell, voltage_v, temperature_c, current_a)` — raw SQL migration,
-   TimescaleDB `create_hypertable`, compression policy at 7 days, retention
-   drop at 90 days. Analogous to `telemetry_raw`.
-2. Continuous aggregate `battery_cell_hourly` — hourly `min/max/mean/first/
-   last/delta` per (device, unit, cell). 5-year retention.
-3. Extend `TelemetryService.ingest_telemetry` to insert into
-   `battery_cell_samples` when `battery_bank.cells` is present.
-4. Add `detect_timeseries(cell_id, window)` in `cell_health_service.py` —
-   segment history into charge/discharge phases (pack current threshold),
-   compute per-cell dV/dt per phase, rank against siblings, require
-   persistence across ≥ 3 phases (hysteresis) before flagging.
-5. Expose as `GET /api/v1/devices/{id}/battery/cell-health/timeseries?window=7d`.
-6. Extend the frontend panel with a per-candidate mini-sparkline of charge-phase
-   dV/dt across recent cycles.
+New hypertable + continuous aggregate provisioned by Alembic migration
+`20260701_0012_add_battery_cell_hypertable.py`:
 
-Storage budget check (100 devices, 16 cells, 60 s cadence): ~2.3 M raw
-rows/day, ~66 MB/day uncompressed. After 7-day compression window and 90-day
-retention: ~500 MB steady-state. Well within existing operational envelopes.
+- `battery_cell_samples` — `(time, device_id, unit, cell)` PK.
+  `voltage_v`, `current_a`, `temperature`, `soc_pct` nullable. 1-day chunks,
+  compressed after 2 days segmented by `(device_id, unit, cell)`, retention
+  drop at 7 days. Matches the `telemetry_raw` policy family.
+- `battery_cell_hourly` — continuous aggregate with `FIRST(voltage_v, time)`
+  and `LAST(voltage_v, time)` per bucket — the two values `dV/dt` needs.
+  Refresh every hour with a 3-hour window. Retention drop at 90 days.
 
-Phase 2 requires an explicit go-ahead — the raw-SQL migration touches System
-B's hot ingestion path and needs coordinated rollout with `TelemetryService`.
+Both created with the standard `USE_TIMESCALEDB` guard so local Postgres
+dev environments still boot.
+
+### Ingestion
+
+`CellSamplesWriter` (`system_b/device_server/storage/cell_samples_writer.py`)
+runs alongside `TimescaleWriter` in the `_on_telemetry` callback. It owns its
+own asyncpg pool and batch buffer — a failure here does not block Redis or
+the main telemetry write. It reads `telemetry.get("battery_cells")`, handles
+both `unit` (JK BMS) and `module` (Pylontech) grouping keys, and inserts with
+`ON CONFLICT DO NOTHING` on the composite PK. `site_id` is resolved per-flush
+via a single batched `device_registry` lookup, mirroring
+`TimescaleWriter._flush_batch`.
+
+### Detection algorithm
+
+`detect_timeseries(cell_hourly, bank_current_by_bucket, window_hours)` in
+`system_a/app/application/services/cell_health_service.py`:
+
+1. Group `cell_hourly` rows by bucket.
+2. For each bucket, look up bank current from `bank_current_by_bucket`.
+   Classify as **charge** if `≥ +3 A`, **discharge** if `≤ -3 A`, else skip.
+3. Per active bucket, compute `dV = last_v - first_v` per cell. Skip cells
+   with `sample_count < 6` or `|dV| < 5 mV`.
+4. Rank within the bucket:
+   - Charge: top-2 highest dV (fastest climbers → reach cutoff first).
+   - Discharge: top-2 most-negative dV (fastest fallers → empty first).
+5. Hysteresis: a cell must appear in the top-2 in **≥ 3 phases** before it
+   surfaces as a candidate. Kills BMS-balancing noise, which flips rankings
+   sporadically.
+6. Two symptoms: `fast_full` (charge) and `fast_empty` (discharge).
+   Severity by ratio (`flagged / phases_in_direction`):
+   `≥ 0.8` critical · `≥ 0.5` warning · else `watch`.
+
+### API
+
+`GET /api/v1/devices/{device_id}/battery/cell-health/timeseries?window_hours=168`
+
+Response wraps a `cell_health_timeseries` block:
+
+```jsonc
+{
+  "device_id": "…", "serial_number": "…",
+  "cell_health_timeseries": {
+    "algorithm": "timeseries_v1",
+    "generated_at": "…+00:00",
+    "available": true,
+    "reason": null,
+    "window_hours": 168,
+    "phases_analysed": {"charge": 42, "discharge": 38},
+    "total_candidates": 1,
+    "units": [
+      {
+        "unit_index": 1,
+        "candidates": [
+          {
+            "cell_index": 7,
+            "score": 2.4,
+            "confidence": "high",
+            "symptoms": [
+              {"type": "fast_full", "severity": "critical", "source": "computed",
+               "evidence": {"flagged_phases": 38, "charge_phases": 42, "ratio": 0.90}}
+            ],
+            "phase_history": [{"symptom": "fast_full", "dv_v": 0.032}, ...]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Unavailable states:
+
+| Case | `available` | `reason` |
+|---|---|---|
+| No rows in `battery_cell_hourly` for the window | `false` | `"no_history"` |
+| Rows exist but bank was idle every bucket | `false` | `"no_active_phases"` |
+| Device serial not registered in System B | `false` | `"device_not_registered"` |
+
+### Frontend
+
+`CellHealthTimeseriesPanel.tsx` mounts inside `BatteryCellGrid` right after
+the snapshot `CellHealthPanel`. Fetches via `useQuery` with a 5-minute
+refetch interval (the CAgg only refreshes hourly on the backend — no point
+polling faster). Each candidate row shows: unit, cell, symptom badges,
+score, confidence, and a small recharts sparkline of `|dV|` (mV) across
+the flagged phases in the analysis window.
+
+### Storage budget (verified)
+
+10 banks × 16 cells × 60 s poll = 230 K rows/day raw. After the 2-day
+compression window (~10× ratio) and 7-day retention: ~30 MB steady state
+per bank. Hourly aggregate: ~4 K rows/day × 90 days ≈ 360 K rows across
+the fleet — negligible.
 
 ---
 

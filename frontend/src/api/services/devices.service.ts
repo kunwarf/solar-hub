@@ -207,6 +207,27 @@ class DevicesService {
     }
   }
 
+  /**
+   * Get the time-series cell-health report for a battery bank (Phase 2 detector).
+   * Independent of the battery-bank snapshot fetch so slow queries never block
+   * the live dashboard.
+   */
+  async getBatteryCellHealthTimeseries(
+    deviceId: string,
+    windowHours: number = 168,
+  ): Promise<any> {
+    try {
+      const response = await apiClient.get(
+        `/devices/${deviceId}/battery/cell-health/timeseries`,
+        { params: { window_hours: windowHours } },
+      );
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch battery cell-health timeseries:', error);
+      return null;
+    }
+  }
+
   // ============================================================================
   // Device Claiming Methods (via System A auth endpoints)
   // ============================================================================
