@@ -270,28 +270,67 @@ async def get_aggregated_telemetry(
     telemetry_repo = TelemetryRepository(session)
     service = TelemetryService(telemetry_repo)
 
-    aggregates = await service.get_aggregated_telemetry(
-        device_id=device_id,
-        metric_name=metric_name,
-        start_time=start_time,
-        end_time=end_time,
-        bucket_interval=bucket_interval,
-    )
-
-    return [
-        TelemetryAggregateResponse(
-            bucket=datetime.fromisoformat(a["bucket"]),
-            avg=a["avg"],
-            min=a["min"],
-            max=a["max"],
-            first=a["first"],
-            last=a["last"],
-            delta=a["delta"],
-            sample_count=a["sample_count"],
-            quality_percent=a["quality_percent"],
+    # TEMP DEBUG: this endpoint has been 500'ing universally; the global
+    # exception handler masks the real error in production (debug=False).
+    # Catch here and surface the class name + message + one-frame traceback
+    # so we can see what's actually breaking. REMOVE after diagnosing.
+    import traceback
+    try:
+        aggregates = await service.get_aggregated_telemetry(
+            device_id=device_id,
+            metric_name=metric_name,
+            start_time=start_time,
+            end_time=end_time,
+            bucket_interval=bucket_interval,
         )
-        for a in aggregates
-    ]
+    except Exception as exc:
+        tb = traceback.format_exc().splitlines()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "debug_probe": True,
+                "exc_type": type(exc).__name__,
+                "exc_msg": str(exc),
+                "traceback_tail": tb[-8:],
+                "params": {
+                    "device_id": str(device_id),
+                    "metric_name": metric_name,
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "bucket_interval": bucket_interval,
+                },
+            },
+        )
+
+    try:
+        return [
+            TelemetryAggregateResponse(
+                bucket=datetime.fromisoformat(a["bucket"]),
+                avg=a["avg"],
+                min=a["min"],
+                max=a["max"],
+                first=a["first"],
+                last=a["last"],
+                delta=a["delta"],
+                sample_count=a["sample_count"],
+                quality_percent=a["quality_percent"],
+            )
+            for a in aggregates
+        ]
+    except Exception as exc:
+        tb = traceback.format_exc().splitlines()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "debug_probe": True,
+                "stage": "response_build",
+                "exc_type": type(exc).__name__,
+                "exc_msg": str(exc),
+                "traceback_tail": tb[-8:],
+                "row_count": len(aggregates),
+                "first_row": aggregates[0] if aggregates else None,
+            },
+        )
 
 
 @router.get(
