@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Thermometer, Zap, Battery, Activity, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import CellHealthPanel, { CellHealthReport } from "./CellHealthPanel";
 import {
   Tooltip,
   TooltipContent,
@@ -82,6 +83,7 @@ interface BatteryBankResponse {
   bank: BankData;
   units: UnitData[];
   cells: RawCellData[];
+  cell_health?: CellHealthReport | null;
 }
 
 interface DeviceTelemetry {
@@ -369,6 +371,9 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
           </ul>
         </motion.div>
       )}
+
+      {/* Candidate cells for inspection (snapshot detector) */}
+      <CellHealthPanel report={bankResponse?.cell_health ?? null} />
 
       {/* Battery Pack Summary */}
       <motion.div

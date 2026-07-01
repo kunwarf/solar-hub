@@ -43,6 +43,7 @@ from ...domain.entities.device import (
     DeviceMetrics,
 )
 from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
+from ...application.services.cell_health_service import detect_snapshot as detect_cell_health_snapshot
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -914,10 +915,13 @@ async def get_device_battery_bank(
             "serial_number": device.serial_number,
             "available": False,
             "battery_bank": None,
+            "cell_health": detect_cell_health_snapshot(None),
         }
 
     battery_bank = telemetry.get("battery_bank")
     battery = telemetry.get("battery", {})
+
+    raw_cells = battery_bank.get("cells", []) if battery_bank else []
 
     return {
         "device_id": str(device_id),
@@ -956,8 +960,14 @@ async def get_device_battery_bank(
                 "soc": c.get("soc"),
                 "basic_st": c.get("basic_st"),
             }
-            for c in (battery_bank.get("cells", []) if battery_bank else [])
+            for c in raw_cells
         ],
+        # Candidate cells for inspection (snapshot detector, see
+        # docs/CELL_HEALTH_ANALYSIS.md). Uses the raw cell array from Redis
+        # so vendor status flags (volt_st/curr_st/temp_st) and per-cell
+        # current are visible to the detector even though they are stripped
+        # from the ``cells`` field above.
+        "cell_health": detect_cell_health_snapshot(raw_cells if battery_bank else None),
     }
 
 
