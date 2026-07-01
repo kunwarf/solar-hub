@@ -34,7 +34,9 @@ _spec = importlib.util.spec_from_file_location(
 _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 ALGORITHM_VERSION = _module.ALGORITHM_VERSION
+TIMESERIES_ALGORITHM_VERSION = _module.TIMESERIES_ALGORITHM_VERSION
 detect_snapshot = _module.detect_snapshot
+detect_timeseries = _module.detect_timeseries
 
 
 # ─── Fixture builders ────────────────────────────────────────────────────────
@@ -330,3 +332,251 @@ def test_report_shape_available():
 def test_generated_at_is_utc():
     report = detect_snapshot(_healthy_pytes_pack())
     assert report["generated_at"].endswith("+00:00")
+
+
+# ─── Time-series detector (Phase 2) ──────────────────────────────────────────
+
+
+def _hourly(
+    bucket: int,
+    unit: int,
+    cell: int,
+    first_v: float,
+    last_v: float,
+    sample_count: int = 60,
+) -> Dict[str, Any]:
+    """Build a battery_cell_hourly row for tests."""
+    return {
+        "bucket": bucket,
+        "unit": unit,
+        "cell": cell,
+        "first_v": first_v,
+        "last_v": last_v,
+        "sample_count": sample_count,
+    }
+
+
+def _cell_jitter(bucket: int, cell: int, amplitude: float = 0.003) -> float:
+    """Deterministic per-(bucket, cell) noise so healthy fixtures aren't rigid.
+
+    Real packs have per-cycle randomness — a fixture where the same cell
+    always tops the ranking would spuriously flag it. This produces
+    reproducible pseudo-random dV drift of ± ``amplitude``.
+    """
+    seed = (bucket * 10_007 + cell * 31) & 0xFFFFFFFF
+    # xorshift-like fold to a float in [-1, 1].
+    x = ((seed ^ (seed >> 13)) * 2654435761) & 0xFFFFFFFF
+    x = ((x ^ (x >> 17)) * 2654435761) & 0xFFFFFFFF
+    return ((x / 0xFFFFFFFF) * 2 - 1) * amplitude
+
+
+def _charge_phase(
+    bucket: int,
+    cells: int = 16,
+    bad_cell: int | None = None,
+    bad_cell_dv: float = 0.030,
+    baseline_dv: float = 0.012,
+) -> List[Dict[str, Any]]:
+    """One charge bucket. If ``bad_cell`` given, that cell rises noticeably faster."""
+    rows = []
+    base_start = 3.20
+    for c in range(1, cells + 1):
+        if c == bad_cell:
+            dv = bad_cell_dv
+        else:
+            dv = baseline_dv + _cell_jitter(bucket, c)
+        rows.append(_hourly(bucket, 1, c, base_start, base_start + dv))
+    return rows
+
+
+def _discharge_phase(
+    bucket: int,
+    cells: int = 16,
+    bad_cell: int | None = None,
+    bad_cell_dv: float = -0.030,
+    baseline_dv: float = -0.012,
+) -> List[Dict[str, Any]]:
+    rows = []
+    base_start = 3.32
+    for c in range(1, cells + 1):
+        if c == bad_cell:
+            dv = bad_cell_dv
+        else:
+            dv = baseline_dv + _cell_jitter(bucket, c)
+        rows.append(_hourly(bucket, 1, c, base_start, base_start + dv))
+    return rows
+
+
+def test_ts_empty_history():
+    r = detect_timeseries([], {}, window_hours=168)
+    assert r["available"] is False
+    assert r["reason"] == "no_history"
+    assert r["algorithm"] == TIMESERIES_ALGORITHM_VERSION
+
+
+def test_ts_no_active_phases():
+    # Rows exist but bank current is idle for every bucket.
+    rows = _charge_phase(bucket=1)
+    r = detect_timeseries(rows, {1: 0.1}, window_hours=24)
+    assert r["available"] is False
+    assert r["reason"] == "no_active_phases"
+
+
+def test_ts_healthy_pack_no_candidates():
+    rows = []
+    for b in range(1, 6):
+        rows.extend(_charge_phase(bucket=b))
+    bank_current = {b: 5.0 for b in range(1, 6)}
+    r = detect_timeseries(rows, bank_current, window_hours=24)
+    assert r["available"] is True
+    # No injected outlier, so no cell exceeds the hysteresis threshold.
+    assert r["total_candidates"] == 0
+
+
+def test_ts_fast_full_flagged_after_hysteresis():
+    rows = []
+    for b in range(1, 6):  # 5 charge phases; cell 7 always fastest
+        rows.extend(_charge_phase(bucket=b, bad_cell=7))
+    bank_current = {b: 5.0 for b in range(1, 6)}
+    r = detect_timeseries(rows, bank_current, window_hours=24)
+    assert r["available"] is True
+    assert r["phases_analysed"] == {"charge": 5, "discharge": 0}
+    assert r["total_candidates"] >= 1
+    c = r["units"][0]["candidates"][0]
+    assert c["cell_index"] == 7
+    assert any(s["type"] == "fast_full" for s in c["symptoms"])
+
+
+def test_ts_below_hysteresis_not_flagged():
+    rows = []
+    # Only 2 charge phases with the bad cell — under _MIN_FLAGGED_PHASES.
+    for b in range(1, 3):
+        rows.extend(_charge_phase(bucket=b, bad_cell=7))
+    bank_current = {b: 5.0 for b in range(1, 3)}
+    r = detect_timeseries(rows, bank_current, window_hours=24)
+    assert r["total_candidates"] == 0
+
+
+def test_ts_fast_empty_flagged():
+    rows = []
+    for b in range(1, 5):
+        rows.extend(_discharge_phase(bucket=b, bad_cell=3))
+    bank_current = {b: -5.0 for b in range(1, 5)}
+    r = detect_timeseries(rows, bank_current, window_hours=24)
+    assert r["available"] is True
+    assert r["phases_analysed"] == {"charge": 0, "discharge": 4}
+    c = r["units"][0]["candidates"][0]
+    assert c["cell_index"] == 3
+    assert any(s["type"] == "fast_empty" for s in c["symptoms"])
+
+
+def test_ts_both_symptoms_higher_score():
+    rows = []
+    for b in range(1, 5):
+        rows.extend(_charge_phase(bucket=b, bad_cell=5))
+    for b in range(10, 14):
+        rows.extend(_discharge_phase(bucket=b, bad_cell=5))
+    bank_current = {**{b: 5.0 for b in range(1, 5)},
+                    **{b: -5.0 for b in range(10, 14)}}
+    r = detect_timeseries(rows, bank_current, window_hours=48)
+    c = r["units"][0]["candidates"][0]
+    assert c["cell_index"] == 5
+    symptom_types = {s["type"] for s in c["symptoms"]}
+    assert symptom_types == {"fast_full", "fast_empty"}
+    # Higher-confidence expected: >=80% ratio each, both directions.
+    assert c["confidence"] in {"medium", "high"}
+
+
+def test_ts_missing_bank_current_bucket_skipped():
+    rows = []
+    for b in range(1, 5):
+        rows.extend(_charge_phase(bucket=b, bad_cell=7))
+    # Only 3 of 4 buckets have bank current data.
+    bank_current = {1: 5.0, 2: 5.0, 3: 5.0}  # bucket 4 missing
+    r = detect_timeseries(rows, bank_current, window_hours=24)
+    assert r["phases_analysed"]["charge"] == 3
+
+
+def test_ts_low_sample_count_bucket_ignored():
+    rows = _charge_phase(bucket=1)
+    # Drop sample_count under threshold for every row → no cells ranked.
+    for row in rows:
+        row["sample_count"] = 2
+    r = detect_timeseries(rows, {1: 5.0}, window_hours=24)
+    assert r["total_candidates"] == 0
+
+
+def test_ts_flat_bucket_below_dv_floor_ignored():
+    # All cells barely move within the bucket.
+    rows = _charge_phase(bucket=1, baseline_dv=0.001, bad_cell=7, bad_cell_dv=0.002)
+    r = detect_timeseries(rows, {1: 5.0}, window_hours=24)
+    # DV magnitude for every cell is below _MIN_BUCKET_DV_V (0.005).
+    assert r["total_candidates"] == 0
+
+
+def test_ts_report_shape():
+    rows = []
+    for b in range(1, 5):
+        rows.extend(_charge_phase(bucket=b, bad_cell=7))
+    bank_current = {b: 5.0 for b in range(1, 5)}
+    r = detect_timeseries(rows, bank_current, window_hours=168)
+    assert set(r.keys()) == {
+        "algorithm", "generated_at", "available", "reason",
+        "window_hours", "phases_analysed", "units", "total_candidates",
+    }
+    assert r["algorithm"] == TIMESERIES_ALGORITHM_VERSION
+    assert r["window_hours"] == 168
+    assert r["generated_at"].endswith("+00:00")
+    assert r["units"][0]["candidates"][0]["phase_history"]  # non-empty
+
+
+@pytest.mark.parametrize(
+    "flagged,phases,expected_severity",
+    [
+        (3, 3, "critical"),   # 3/3 = 100 %
+        (4, 5, "critical"),   # 4/5 = 80 %
+        (3, 5, "warning"),    # 3/5 = 60 %
+        (3, 10, "watch"),     # 3/10 = 30 %
+    ],
+)
+def test_ts_severity_thresholds(flagged, phases, expected_severity):
+    """Verify severity boundaries by finding cell 7 in the candidate list.
+
+    Constructing phases where cell 7 is *exactly* flagged N/M times is
+    tricky under jitter — bad phases where cell 7 isn't the outlier can
+    still put it in the top-2 by chance. So instead of asserting the
+    winner's severity, we search the candidate list for cell 7 and assert
+    its ``fast_full`` symptom severity is at least ``expected_severity``.
+    """
+    rows: List[Dict[str, Any]] = []
+    for b in range(1, phases + 1):
+        # In "bad" phases cell 7 gets the elevated dv; in "good" phases
+        # cell 2 is the injected outlier (kept away from cell 7 to
+        # decorrelate). Cell 7 in good phases uses baseline + jitter.
+        bad = 7 if b <= flagged else 2
+        rows.extend(_charge_phase(bucket=b, bad_cell=bad))
+    bank_current = {b: 5.0 for b in range(1, phases + 1)}
+    r = detect_timeseries(rows, bank_current, window_hours=48)
+
+    if flagged < 3:
+        assert r["total_candidates"] == 0
+        return
+
+    cell7 = next(
+        (
+            c
+            for u in r["units"]
+            for c in u["candidates"]
+            if c["cell_index"] == 7
+        ),
+        None,
+    )
+    assert cell7 is not None, "cell 7 should be a candidate at this hysteresis"
+    v = next(s for s in cell7["symptoms"] if s["type"] == "fast_full")
+    ratio = flagged / phases
+    if ratio >= 0.8:
+        assert v["severity"] == "critical"
+    elif ratio >= 0.5:
+        assert v["severity"] == "warning"
+    else:
+        assert v["severity"] == "watch"

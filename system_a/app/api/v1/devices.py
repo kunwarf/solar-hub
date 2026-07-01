@@ -1,7 +1,7 @@
 """
 Device management API endpoints.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -43,7 +43,11 @@ from ...domain.entities.device import (
     DeviceMetrics,
 )
 from ...infrastructure.external.system_b_client import SystemBClient, SystemBClientError
-from ...application.services.cell_health_service import detect_snapshot as detect_cell_health_snapshot
+from ...application.services.cell_health_service import (
+    detect_snapshot as detect_cell_health_snapshot,
+    detect_timeseries as detect_cell_health_timeseries,
+    TIMESERIES_ALGORITHM_VERSION,
+)
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -968,6 +972,112 @@ async def get_device_battery_bank(
         # current are visible to the detector even though they are stripped
         # from the ``cells`` field above.
         "cell_health": detect_cell_health_snapshot(raw_cells if battery_bank else None),
+    }
+
+
+@router.get(
+    "/{device_id}/battery/cell-health/timeseries",
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_device_cell_health_timeseries(
+    device_id: UUID,
+    window_hours: int = Query(default=168, ge=24, le=720),
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
+):
+    """
+    Time-series cell-health report for a battery bank.
+
+    Analyses per-cell hourly buckets (from System B's ``battery_cell_hourly``
+    continuous aggregate) plus bank-level hourly current to detect cells
+    that consistently charge faster (``fast_full``) or discharge faster
+    (``fast_empty``) than their siblings — the "quick full / quick empty"
+    signal we couldn't get from a single Redis snapshot.
+
+    Independent of ``/battery/bank`` so slow queries never block the live
+    dashboard. See ``docs/CELL_HEALTH_ANALYSIS.md`` for the algorithm.
+    """
+    import logging
+    logger = logging.getLogger("system_a")
+
+    device = await uow.devices.get_by_id(device_id)
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
+        )
+    await check_site_access(device.site_id, current_user, uow)
+
+    # Resolve the System B device_id via serial number lookup.
+    try:
+        system_b_device = await system_b_client.get_device_by_serial(
+            device.serial_number
+        )
+    except SystemBClientError as exc:
+        logger.warning(
+            "cell-health timeseries: System B lookup failed for %s: %s",
+            device.serial_number, exc,
+        )
+        system_b_device = None
+    if not system_b_device:
+        return {
+            "device_id": str(device_id),
+            "serial_number": device.serial_number,
+            "cell_health_timeseries": {
+                "algorithm": TIMESERIES_ALGORITHM_VERSION,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "available": False,
+                "reason": "device_not_registered",
+                "window_hours": window_hours,
+                "phases_analysed": {"charge": 0, "discharge": 0},
+                "units": [],
+                "total_candidates": 0,
+            },
+        }
+
+    system_b_device_id = system_b_device.device_id
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=window_hours)
+
+    # Fetch the two inputs the detector needs in parallel.
+    import asyncio as _asyncio  # local import — avoids ordering churn above
+    cell_rows_task = system_b_client.get_battery_cell_hourly(
+        system_b_device_id, window_hours=window_hours
+    )
+    current_task = system_b_client.get_device_aggregates(
+        device_id=system_b_device_id,
+        metric_name="battery_current_a",
+        start_time=start_time,
+        end_time=end_time,
+        bucket_interval="1 hour",
+    )
+    try:
+        cell_rows, current_aggregates = await _asyncio.gather(
+            cell_rows_task, current_task, return_exceptions=False,
+        )
+    except SystemBClientError as exc:
+        logger.warning(
+            "cell-health timeseries: aggregate fetch failed for %s: %s",
+            device.serial_number, exc,
+        )
+        cell_rows, current_aggregates = [], []
+
+    # Key both inputs by bucket ISO string — cheap common denominator.
+    bank_current_by_bucket: dict = {}
+    for agg in current_aggregates or []:
+        # avg is the hourly mean; positive = charging, negative = discharging.
+        bucket_key = agg.bucket.isoformat() if agg.bucket else None
+        if bucket_key is not None and agg.avg is not None:
+            bank_current_by_bucket[bucket_key] = float(agg.avg)
+
+    report = detect_cell_health_timeseries(
+        cell_rows or [], bank_current_by_bucket, window_hours=window_hours,
+    )
+
+    return {
+        "device_id": str(device_id),
+        "serial_number": device.serial_number,
+        "cell_health_timeseries": report,
     }
 
 

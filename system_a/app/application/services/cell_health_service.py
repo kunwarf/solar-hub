@@ -1,25 +1,27 @@
 """
 Cell Health Service.
 
-Snapshot-based detector that flags candidate cells for inspection in a
-Pylontech / Pytes or JK BMS pack, using the per-cell array already
-present in the Redis ``device:{serial}:telemetry`` blob under
-``battery_bank.cells``.
+Two detectors flag candidate cells for inspection in a Pylontech / Pytes
+or JK BMS pack. Both are pure Python — no SQLAlchemy, FastAPI, Redis, or
+Pydantic imports at runtime.
 
-Consumes the raw cells list from System B's Redis cache (via the
-battery-bank endpoint handler) and returns a report structure safe to
-merge into the endpoint response. Pure Python — no SQLAlchemy, FastAPI,
-Redis, or Pydantic imports at runtime.
+**Snapshot detector** (:func:`detect_snapshot`) — Phase 1. Consumes a
+single Redis snapshot's per-cell array (``battery_bank.cells``) and
+surfaces four symptoms:
 
-Four symptoms are surfaced:
 - ``vendor_flag``      : BMS-reported per-cell status is non-benign (Pytes)
 - ``voltage_outlier``  : robust Z-score of cell voltage vs. unit median
 - ``temp_outlier``     : robust Z-score of cell temperature vs. unit median
 - ``current_mismatch`` : cell current deviates from unit median (Pytes)
 
-This is Phase 1 (snapshot-only). "Charges quickly / discharges quickly"
-detection requires per-cell time-series which is planned for Phase 2
-(new ``battery_cell_samples`` hypertable in System B).
+**Time-series detector** (:func:`detect_timeseries`) — Phase 2. Consumes
+hourly buckets from ``battery_cell_hourly`` plus bank-level current from
+``telemetry_hourly`` and surfaces two symptoms:
+
+- ``fast_full``   : cell reaches upper cutoff faster than siblings during
+  charge phases (top-2 dV/hour across ≥3 phases)
+- ``fast_empty``  : cell drops faster than siblings during discharge
+  phases (bottom-2 dV/hour across ≥3 phases)
 
 Wording note: candidates are labelled "candidates for inspection", not
 "faulty" — the heuristic is diagnostic, not a warranty claim.
@@ -34,6 +36,32 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 ALGORITHM_VERSION = "snapshot_v1"
+TIMESERIES_ALGORITHM_VERSION = "timeseries_v1"
+
+# ── Time-series detection tuning ─────────────────────────────────────────────
+
+# A bucket is a "charge" or "discharge" phase only when the bank current
+# magnitude exceeds this threshold — below it the pack is essentially idle
+# and per-cell dV signals are dominated by relaxation noise.
+_PHASE_CURRENT_THRESHOLD_A = 3.0
+
+# Ignore per-cell buckets where the sample count is too low — CAgg buckets
+# with < this many raw samples don't have a reliable FIRST/LAST voltage span.
+_MIN_SAMPLES_PER_BUCKET = 6
+
+# Hysteresis: a cell must be flagged in at least this many phases inside the
+# analysis window before it becomes a candidate. Kills BMS-balancing false
+# positives, which show up sporadically.
+_MIN_FLAGGED_PHASES = 3
+
+# Per phase, we flag the top-2 fastest / bottom-2 slowest cells. Higher values
+# surface more borderline cells; lower values require a starker outlier.
+_PHASE_RANK_DEPTH = 2
+
+# Minimum absolute dV magnitude (V) inside a bucket for the row to count as
+# a meaningful data point. Filters out flat buckets where nothing happened
+# (e.g. shallow-current bucket that passed the phase threshold briefly).
+_MIN_BUCKET_DV_V = 0.005
 
 # Vendor status strings we treat as normal / operational (Pytes vocabulary).
 # Anything outside this set is surfaced as a vendor_flag.
@@ -381,3 +409,260 @@ def detect_snapshot(cells: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
         "units": units,
         "total_candidates": total_candidates,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Time-series detector — Phase 2
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _empty_timeseries_report(reason: str, window_hours: int) -> Dict[str, Any]:
+    return {
+        "algorithm": TIMESERIES_ALGORITHM_VERSION,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "available": False,
+        "reason": reason,
+        "window_hours": window_hours,
+        "phases_analysed": {"charge": 0, "discharge": 0},
+        "units": [],
+        "total_candidates": 0,
+    }
+
+
+def _classify_phase(bank_current_a: Optional[float]) -> Optional[str]:
+    if bank_current_a is None:
+        return None
+    if bank_current_a >= _PHASE_CURRENT_THRESHOLD_A:
+        return "charge"
+    if bank_current_a <= -_PHASE_CURRENT_THRESHOLD_A:
+        return "discharge"
+    return None
+
+
+def _dv_per_bucket(row: Dict[str, Any]) -> Optional[float]:
+    first_v = row.get("first_v")
+    last_v = row.get("last_v")
+    if first_v is None or last_v is None:
+        return None
+    dv = float(last_v) - float(first_v)
+    if abs(dv) < _MIN_BUCKET_DV_V:
+        return None
+    return dv
+
+
+def _rank_cells_in_phase(
+    cell_rows: List[Dict[str, Any]], phase: str
+) -> List[Tuple[int, int, float]]:
+    """Return the top / bottom cells for one bucket.
+
+    Charge phases surface the top-K highest dV (fastest climbers → cells that
+    reach cutoff first). Discharge phases surface the top-K most-negative dV
+    (fastest fallers → cells that empty first).
+
+    Returns tuples of ``(unit, cell, dv_v)``.
+    """
+    scored: List[Tuple[int, int, float]] = []
+    for row in cell_rows:
+        dv = _dv_per_bucket(row)
+        if dv is None:
+            continue
+        if row.get("sample_count", 0) < _MIN_SAMPLES_PER_BUCKET:
+            continue
+        try:
+            scored.append((int(row["unit"]), int(row["cell"]), dv))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if not scored:
+        return []
+    # Descending for charge, ascending for discharge.
+    reverse = phase == "charge"
+    scored.sort(key=lambda t: t[2], reverse=reverse)
+    return scored[:_PHASE_RANK_DEPTH]
+
+
+def _score_timeseries(flag_counts: Dict[str, int], phases_observed: int) -> float:
+    """Score a candidate cell by fraction of phases it was flagged."""
+    if phases_observed <= 0:
+        return 0.0
+    total = 0.0
+    for symptom_type, count in flag_counts.items():
+        total += 3.0 * (count / phases_observed)
+    return round(total, 2)
+
+
+def _timeseries_confidence(
+    flag_counts: Dict[str, int], phases_observed: int
+) -> str:
+    if phases_observed <= 0:
+        return "low"
+    max_ratio = max(
+        (c / phases_observed for c in flag_counts.values()),
+        default=0.0,
+    )
+    if max_ratio >= 0.8 and phases_observed >= 5:
+        return "high"
+    if max_ratio >= 0.5 and phases_observed >= 3:
+        return "medium"
+    return "low"
+
+
+def detect_timeseries(
+    cell_hourly: List[Dict[str, Any]],
+    bank_current_by_bucket: Dict[Any, float],
+    window_hours: int = 168,
+) -> Dict[str, Any]:
+    """Analyse per-cell hourly buckets to flag fast-charging / fast-discharging cells.
+
+    Args:
+        cell_hourly: Rows from ``battery_cell_hourly`` for a single device
+            over the analysis window. Each row must carry ``bucket`` (any
+            hashable that also keys ``bank_current_by_bucket``), ``unit``,
+            ``cell``, ``first_v``, ``last_v``, ``sample_count``.
+        bank_current_by_bucket: Map from the same ``bucket`` key to the
+            hourly-average bank-level current in amps (positive = charging,
+            negative = discharging).
+        window_hours: Analysis window, used for reporting only. Defaults to
+            168 (7 days).
+
+    Returns:
+        A dict compatible with the ``cell_health_timeseries`` block of the
+        ``/api/v1/devices/{id}/battery/cell-health/timeseries`` response.
+    """
+    if not cell_hourly:
+        return _empty_timeseries_report("no_history", window_hours)
+
+    # Group rows by bucket.
+    by_bucket: Dict[Any, List[Dict[str, Any]]] = {}
+    for row in cell_hourly:
+        if not isinstance(row, dict):
+            continue
+        bucket = row.get("bucket")
+        if bucket is None:
+            continue
+        by_bucket.setdefault(bucket, []).append(row)
+
+    if not by_bucket:
+        return _empty_timeseries_report("no_history", window_hours)
+
+    charge_phases = 0
+    discharge_phases = 0
+    # Nested dict: (unit, cell) -> {"fast_full": n, "fast_empty": n}
+    per_cell_flags: Dict[Tuple[int, int], Dict[str, int]] = {}
+    # Evidence rolls up to a phase list per cell so the frontend can sparkline.
+    per_cell_phase_dv: Dict[Tuple[int, int], List[Tuple[str, float]]] = {}
+
+    for bucket, rows in sorted(by_bucket.items()):
+        phase = _classify_phase(bank_current_by_bucket.get(bucket))
+        if phase is None:
+            continue
+        if phase == "charge":
+            charge_phases += 1
+        else:
+            discharge_phases += 1
+        flagged = _rank_cells_in_phase(rows, phase)
+        for unit, cell, dv in flagged:
+            key = (unit, cell)
+            counts = per_cell_flags.setdefault(key, {"fast_full": 0, "fast_empty": 0})
+            symptom = "fast_full" if phase == "charge" else "fast_empty"
+            counts[symptom] += 1
+            per_cell_phase_dv.setdefault(key, []).append((symptom, dv))
+
+    phases_observed = charge_phases + discharge_phases
+    if phases_observed == 0:
+        return _empty_timeseries_report("no_active_phases", window_hours)
+
+    # Assemble candidate list. A cell must clear _MIN_FLAGGED_PHASES on at
+    # least one symptom type to be surfaced (hysteresis).
+    by_unit: Dict[int, List[Dict[str, Any]]] = {}
+    for (unit, cell), counts in per_cell_flags.items():
+        max_count = max(counts.values())
+        if max_count < _MIN_FLAGGED_PHASES:
+            continue
+
+        symptoms: List[Dict[str, Any]] = []
+        if counts["fast_full"] >= _MIN_FLAGGED_PHASES:
+            symptoms.append(
+                {
+                    "type": "fast_full",
+                    "severity": _severity_for_ratio(counts["fast_full"], charge_phases),
+                    "source": "computed",
+                    "evidence": {
+                        "flagged_phases": counts["fast_full"],
+                        "charge_phases": charge_phases,
+                        "ratio": _safe_ratio(counts["fast_full"], charge_phases),
+                    },
+                }
+            )
+        if counts["fast_empty"] >= _MIN_FLAGGED_PHASES:
+            symptoms.append(
+                {
+                    "type": "fast_empty",
+                    "severity": _severity_for_ratio(
+                        counts["fast_empty"], discharge_phases
+                    ),
+                    "source": "computed",
+                    "evidence": {
+                        "flagged_phases": counts["fast_empty"],
+                        "discharge_phases": discharge_phases,
+                        "ratio": _safe_ratio(counts["fast_empty"], discharge_phases),
+                    },
+                }
+            )
+        if not symptoms:
+            continue
+
+        candidate = {
+            "cell_index": cell,
+            "score": _score_timeseries(counts, phases_observed),
+            "confidence": _timeseries_confidence(counts, phases_observed),
+            "symptoms": symptoms,
+            "phase_history": [
+                {"symptom": s, "dv_v": round(dv, 4)}
+                for s, dv in per_cell_phase_dv.get((unit, cell), [])
+            ],
+        }
+        by_unit.setdefault(unit, []).append(candidate)
+
+    # Rank + cap per unit.
+    units: List[Dict[str, Any]] = []
+    total_candidates = 0
+    for unit_index in sorted(by_unit.keys()):
+        candidates = sorted(
+            by_unit[unit_index], key=lambda c: c["score"], reverse=True
+        )[:_MAX_CANDIDATES_PER_UNIT]
+        total_candidates += len(candidates)
+        units.append(
+            {
+                "unit_index": unit_index,
+                "candidates": candidates,
+            }
+        )
+
+    return {
+        "algorithm": TIMESERIES_ALGORITHM_VERSION,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "available": True,
+        "reason": None,
+        "window_hours": window_hours,
+        "phases_analysed": {"charge": charge_phases, "discharge": discharge_phases},
+        "units": units,
+        "total_candidates": total_candidates,
+    }
+
+
+def _safe_ratio(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 2)
+
+
+def _severity_for_ratio(flagged: int, phases: int) -> str:
+    """Higher flagged-phase ratio → higher severity."""
+    if phases <= 0:
+        return "watch"
+    ratio = flagged / phases
+    if ratio >= 0.8:
+        return "critical"
+    if ratio >= 0.5:
+        return "warning"
+    return "watch"

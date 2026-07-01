@@ -608,3 +608,59 @@ async def check_data_gaps(
         expected_interval_seconds=expected_interval_seconds,
         hours=hours,
     )
+
+
+@router.get(
+    "/battery-cells/{device_id}/hourly",
+    summary="Per-cell hourly aggregates for a battery bank",
+    description=(
+        "Returns rows from the ``battery_cell_hourly`` continuous aggregate "
+        "for a specific battery device. Used by the System A cell-health "
+        "time-series detector (fast_full / fast_empty symptoms)."
+    ),
+)
+async def get_battery_cell_hourly(
+    device_id: UUID,
+    window_hours: int = Query(default=168, ge=1, le=720),
+    session: AsyncSession = Depends(get_db_session),
+) -> List[dict]:
+    """Per-cell hourly aggregates for the last ``window_hours``.
+
+    Rows are ordered by ``(bucket, unit, cell)``. Only rows where all of
+    ``first_v`` and ``last_v`` are non-null are returned — those are the
+    only ones useful for dV/dt analysis.
+    """
+    start_ts = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+    result = await session.execute(
+        text(
+            """
+            SELECT bucket, unit, cell,
+                   first_v, last_v, avg_v, min_v, max_v,
+                   avg_current_a, avg_temp, sample_count
+            FROM battery_cell_hourly
+            WHERE device_id = :device_id
+              AND bucket >= :start_ts
+              AND first_v IS NOT NULL
+              AND last_v  IS NOT NULL
+            ORDER BY bucket ASC, unit ASC, cell ASC
+            """
+        ),
+        {"device_id": device_id, "start_ts": start_ts},
+    )
+    rows = result.mappings().all()
+    return [
+        {
+            "bucket": r["bucket"].isoformat() if r["bucket"] else None,
+            "unit": r["unit"],
+            "cell": r["cell"],
+            "first_v": r["first_v"],
+            "last_v": r["last_v"],
+            "avg_v": r["avg_v"],
+            "min_v": r["min_v"],
+            "max_v": r["max_v"],
+            "avg_current_a": r["avg_current_a"],
+            "avg_temp": r["avg_temp"],
+            "sample_count": r["sample_count"],
+        }
+        for r in rows
+    ]

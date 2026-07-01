@@ -924,6 +924,47 @@ class SystemBClient:
         except httpx.RequestError as e:
             raise SystemBClientError(f"Connection error: {str(e)}")
 
+    async def get_battery_cell_hourly(
+        self,
+        device_id: UUID,
+        window_hours: int = 168,
+    ) -> List[Dict[str, Any]]:
+        """Fetch per-cell hourly buckets for a battery bank device.
+
+        Used by the cell-health time-series detector. Returns raw rows from
+        System B's ``battery_cell_hourly`` continuous aggregate — the caller
+        does not need to worry about the underlying schema.
+
+        Args:
+            device_id: System B UUID of the battery device.
+            window_hours: How far back to look (default 168 = 7 days).
+
+        Returns:
+            List of dicts, each carrying ``bucket``, ``unit``, ``cell``,
+            ``first_v``, ``last_v``, ``avg_v``, ``avg_current_a``,
+            ``avg_temp``, ``sample_count``. Empty list on error or when no
+            history exists — callers should treat that as "no data".
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/battery-cells/{device_id}/hourly"
+            params = {"window_hours": window_hours}
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json() or []
+        except httpx.HTTPStatusError as e:
+            logger.warning(
+                "System B battery_cell_hourly returned %d for %s: %s",
+                e.response.status_code, device_id, e.response.text[:200],
+            )
+            return []
+        except httpx.RequestError as e:
+            logger.warning(
+                "System B battery_cell_hourly connection error for %s: %s",
+                device_id, e,
+            )
+            return []
+
 
 # Singleton instance for dependency injection
 _system_b_client: Optional[SystemBClient] = None
