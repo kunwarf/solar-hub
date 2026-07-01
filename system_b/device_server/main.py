@@ -25,6 +25,7 @@ from .devices.device_manager import DeviceManager
 from .devices.device_state import DeviceStatus
 from .polling.scheduler import PollingScheduler
 from .storage.timescale_writer import TimescaleWriter
+from .storage.cell_samples_writer import CellSamplesWriter
 from .storage.system_a_client import SystemAClient
 from .storage.redis_cache import TelemetryCacheWriter
 from .storage.device_registry_client import DeviceRegistryClient
@@ -73,6 +74,7 @@ class DeviceServer:
         self.device_manager: Optional[DeviceManager] = None
         self.polling_scheduler: Optional[PollingScheduler] = None
         self.timescale_writer: Optional[TimescaleWriter] = None
+        self.cell_samples_writer: Optional[CellSamplesWriter] = None
         self.system_a_client: Optional[SystemAClient] = None
         self.redis_cache: Optional[TelemetryCacheWriter] = None
         self.device_registry_client: Optional[DeviceRegistryClient] = None
@@ -123,11 +125,13 @@ class DeviceServer:
 
         # Initialize storage
         self.timescale_writer = TimescaleWriter(self.settings)
+        self.cell_samples_writer = CellSamplesWriter(self.settings)
         self.system_a_client = SystemAClient(self.settings)
         self.redis_cache = TelemetryCacheWriter(self.settings)
         self.device_registry_client = DeviceRegistryClient(self.settings)
 
         await self.timescale_writer.connect()
+        await self.cell_samples_writer.connect()
         await self.system_a_client.connect()
         await self.redis_cache.connect()
 
@@ -224,6 +228,9 @@ class DeviceServer:
         # Disconnect storage
         if self.timescale_writer:
             await self.timescale_writer.disconnect()
+
+        if self.cell_samples_writer:
+            await self.cell_samples_writer.disconnect()
 
         if self.system_a_client:
             await self.system_a_client.disconnect()
@@ -467,6 +474,12 @@ class DeviceServer:
         # via the Redis Stream — skip here to avoid double-writing to TimescaleDB.
         if self.timescale_writer and not self.settings.storage_worker_enabled:
             await self.timescale_writer.write(storage_device_id, telemetry.copy())
+
+        # Per-cell samples land in their own hypertable (Phase 2 of the
+        # candidate-faulty-cell detector). No-op for non-battery devices —
+        # writer just returns 0 when telemetry has no ``battery_cells`` list.
+        if self.cell_samples_writer:
+            await self.cell_samples_writer.write(storage_device_id, telemetry)
 
         # Write to Redis cache for real-time access by System A
         # Use data_logger_serial (the serial printed on the device that users see)
