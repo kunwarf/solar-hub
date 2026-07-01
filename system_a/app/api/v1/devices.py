@@ -1074,11 +1074,22 @@ async def get_device_cell_health_timeseries(
     else:
         current_aggregates = current_raw or []
 
-    # Prefer bank-level hourly current from telemetry_hourly. If it's missing
-    # (some parsers don't publish battery_current_a as a standard metric name),
-    # fall back to averaging the per-cell ``avg_current_a`` inside each bucket
-    # of ``battery_cell_hourly`` — for a series pack every cell carries the
-    # same current, so the average is a valid stand-in for bank current.
+    # Build bank_current_by_bucket in falling order of preference:
+    #   1. Bank-level hourly current from telemetry_hourly (most direct).
+    #   2. Per-cell avg_current_a averaged across cells in the bucket
+    #      (valid for series packs — every cell carries the same current).
+    #   3. Synthesized proxy from the sign of median per-cell dV in the
+    #      bucket. For a series pack, if the majority of cell voltages
+    #      rise together it IS a charge phase (physics — no external
+    #      driver could raise cell voltage at rest without current flow).
+    #      We map the sign to a sentinel magnitude that clears the phase
+    #      threshold in the detector; the exact number doesn't matter as
+    #      long as it's above _PHASE_CURRENT_THRESHOLD_A (3.0 A).
+    #
+    # Necessary because System B's /telemetry/aggregate/{id}/{metric}
+    # 500s on the deployed battery devices for every metric name we've
+    # tried, and the current adapters don't publish per-cell current_a
+    # into ``battery_cells``.
     bank_current_by_bucket: dict = {}
     for agg in current_aggregates:
         bucket_key = agg.bucket.isoformat() if agg.bucket else None
@@ -1086,7 +1097,7 @@ async def get_device_cell_health_timeseries(
             bank_current_by_bucket[bucket_key] = float(agg.avg)
 
     if not bank_current_by_bucket and cell_rows:
-        # Derive per-bucket current from per-cell CAgg samples.
+        # Tier 2: derive per-bucket current from per-cell CAgg samples.
         by_bucket_current: dict = {}
         for row in cell_rows:
             bucket_key = row.get("bucket")
@@ -1097,6 +1108,27 @@ async def get_device_cell_health_timeseries(
         for bucket_key, samples in by_bucket_current.items():
             if samples:
                 bank_current_by_bucket[bucket_key] = sum(samples) / len(samples)
+
+    if not bank_current_by_bucket and cell_rows:
+        # Tier 3: synthesize charge/discharge signal from median per-cell dV.
+        by_bucket_dv: dict = {}
+        for row in cell_rows:
+            bucket_key = row.get("bucket")
+            first_v = row.get("first_v")
+            last_v = row.get("last_v")
+            if bucket_key is None or first_v is None or last_v is None:
+                continue
+            by_bucket_dv.setdefault(bucket_key, []).append(float(last_v) - float(first_v))
+        for bucket_key, dvs in by_bucket_dv.items():
+            if not dvs:
+                continue
+            median_dv = sorted(dvs)[len(dvs) // 2]
+            # 5 mV floor to avoid classifying relaxation noise as a phase.
+            if median_dv > 0.005:
+                bank_current_by_bucket[bucket_key] = 10.0    # synthetic charge
+            elif median_dv < -0.005:
+                bank_current_by_bucket[bucket_key] = -10.0   # synthetic discharge
+            # else: leave unset — bucket is treated as idle
 
     report = detect_cell_health_timeseries(
         cell_rows, bank_current_by_bucket, window_hours=window_hours,

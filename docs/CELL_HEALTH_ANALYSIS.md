@@ -270,6 +270,19 @@ via a single batched `device_registry` lookup, mirroring
 1. Group `cell_hourly` rows by bucket.
 2. For each bucket, look up bank current from `bank_current_by_bucket`.
    Classify as **charge** if `≥ +3 A`, **discharge** if `≤ -3 A`, else skip.
+   The endpoint builds this map with three tiers of fallback (each used
+   only if the previous yielded no rows):
+   1. Hourly bank current from `telemetry_hourly` for the `battery_current_a`
+      metric (most direct).
+   2. Per-cell `avg_current_a` from `battery_cell_hourly`, averaged across
+      cells in each bucket. Valid because a series pack carries the same
+      current through every cell.
+   3. Synthetic signal from the sign of median per-cell dV in each bucket.
+      If most cell voltages rose together, it *is* a charge phase (physics
+      — no external driver could raise cell voltage without current flow).
+      Only the *sign* is used; the exact synthetic magnitude just needs to
+      clear the ±3 A threshold. A 5 mV floor on |median dV| avoids classifying
+      relaxation noise as a phase.
 3. Per active bucket, compute `dV = last_v - first_v` per cell. Skip cells
    with `sample_count < 6` or `|dV| < 5 mV`.
 4. Rank within the bucket:
