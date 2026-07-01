@@ -365,10 +365,21 @@ class TelemetryRepository:
         if not site_id:
             return []
 
-        # Use TimescaleDB time_bucket for aggregation
+        # Use TimescaleDB time_bucket for aggregation.
+        #
+        # Two type-cast tweaks vs. the obvious binding:
+        # - CAST(:interval AS INTERVAL): asyncpg sends strings as TEXT, but
+        #   time_bucket(bucket_width, TIMESTAMPTZ) needs bucket_width to be
+        #   INTERVAL. Without the cast Postgres fails to resolve the function
+        #   ("function time_bucket(text, timestamp with time zone) does not
+        #   exist") and the whole endpoint 500s.
+        # - device_id passed as a UUID object, not str(...). asyncpg binds
+        #   raw strings as TEXT and Postgres won't implicitly cast to UUID
+        #   on the WHERE clause. Same class of bug that commit 252fb50 fixed
+        #   for the daily-peaks endpoint.
         query = text("""
             SELECT
-                time_bucket(:interval, time) AS bucket,
+                time_bucket(CAST(:interval AS INTERVAL), time) AS bucket,
                 AVG(metric_value) AS avg_value,
                 MIN(metric_value) AS min_value,
                 MAX(metric_value) AS max_value,
@@ -389,7 +400,7 @@ class TelemetryRepository:
             query,
             {
                 "interval": bucket_interval,
-                "device_id": str(device_id),
+                "device_id": device_id,
                 "metric_name": metric_name,
                 "start_time": start_time,
                 "end_time": end_time,
