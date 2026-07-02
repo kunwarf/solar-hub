@@ -16,10 +16,12 @@
  *   prog{i}_voltage_v       number  40..62 V (step 0.1)
  *   prog{i}_capacity_pct    number  0..100 %
  *
- * "Add program" activates the next inactive slot by setting its charge
- * mode to "1" (charge) as a sensible default. "Delete row" sets that
- * slot's charge mode back to "0". No hardware slots are added or
- * destroyed — the schema stays authoritative.
+ * All six hardware slots always render as fully-editable rows — the
+ * mode dropdown is the ground truth for "active". Setting a row to
+ * "No charge/discharge" (0) is how operators disable a slot on the
+ * hardware. No enable/disable buttons, no dimming, no derived End Time
+ * (Powdrive is start-time-only; each active program runs until the
+ * next active program's start).
  */
 import { useMemo, useState } from "react";
 import {
@@ -28,10 +30,8 @@ import {
   Copy,
   Info,
   Plug,
-  Plus,
   RotateCcw,
   Save,
-  Trash2,
   Zap,
 } from "lucide-react";
 
@@ -147,27 +147,12 @@ export const PowdriveTouSchedule = ({
   const [draft, setDraft] = useState<Program[]>(initial);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Powdrive has 6 fixed hardware slots. Always render all six so
-  // operators can see the whole schedule at a glance — inactive slots
-  // (charge_mode = "0") are dimmed but still editable, so clicking a
-  // mode into "1"/"2"/"3" is the equivalent of "add program".
+  // Powdrive has 6 fixed hardware slots. Always render all six as
+  // fully-editable rows — the mode dropdown is the ground truth for
+  // "active": setting a row to "No charge/discharge" (0) is how the
+  // operator disables it on the hardware. No visual dimming; every
+  // field on every row is always editable.
   const allByRowOrder = draft;
-  const activePrograms = draft.filter((p) => p.chargeMode !== "0");
-
-  // End time for each *active* row = the next active program's start
-  // time (24 h cycle). Inactive rows show a dash. This encodes the
-  // Powdrive rule: each program runs from its start until the next
-  // program's start, and disabled slots are skipped entirely.
-  const activeSorted = [...activePrograms].sort((a, b) => a.time - b.time);
-  const endTimeMap = new Map<number, number | null>();
-  activeSorted.forEach((p, idx) => {
-    const nxt = activeSorted[(idx + 1) % activeSorted.length];
-    endTimeMap.set(p.index, activeSorted.length > 1 ? nxt.time : p.time);
-  });
-  // Inactive slots have no end time.
-  draft.forEach((p) => {
-    if (!endTimeMap.has(p.index)) endTimeMap.set(p.index, null);
-  });
 
   const changeSet = useMemo(() => {
     const changes: Record<string, string | number> = {};
@@ -182,34 +167,12 @@ export const PowdriveTouSchedule = ({
     );
   };
 
-  const enableProgram = (index: number) => {
-    // Enabling a previously inactive slot: pick sensible defaults so the
-    // sliders don't sit at zero and confuse the operator.
-    const target = draft.find((p) => p.index === index);
-    if (!target || target.chargeMode !== "0") return;
-    let nextStart = 600;
-    if (activePrograms.length > 0) {
-      const last = activePrograms.reduce((a, b) => (a.time > b.time ? a : b));
-      const nextHour = (Math.floor(last.time / 100) + 1) % 24;
-      nextStart = nextHour * 100 + (last.time % 100);
-    }
-    updateProgram(index, {
-      chargeMode: "1",
-      time: target.time || nextStart,
-      powerW: target.powerW || 2000,
-      voltageV: target.voltageV || 49,
-      capacityPct: target.capacityPct || 80,
-    });
-  };
-
-  const disableProgram = (index: number) => {
-    updateProgram(index, { chargeMode: "0" });
-  };
-
   const duplicateProgram = (source: Program) => {
-    const target = draft.find((p) => p.chargeMode === "0" && p.index !== source.index);
-    if (!target) return;
-    updateProgram(target.index, {
+    // Copy this row's values into the next row (wrapping at the last
+    // slot). No "is this slot free" gating — the previous target's
+    // values are overwritten and the operator can undo via Reset.
+    const nextIdx = (source.index % PROGRAM_SLOT_COUNT) + 1;
+    updateProgram(nextIdx, {
       chargeMode: source.chargeMode,
       time: source.time,
       powerW: source.powerW,
@@ -259,35 +222,24 @@ export const PowdriveTouSchedule = ({
       </div>
 
       {/* Column headers (desktop) */}
-      <div className="hidden lg:grid grid-cols-[48px_140px_120px_1fr_1fr_1fr_72px] items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="hidden lg:grid grid-cols-[48px_140px_1fr_1fr_1fr_56px] items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">
         <div>Program</div>
         <div>Start Time</div>
-        <div>End Time</div>
         <div>Mode</div>
         <div>Power Limit</div>
         <div>Voltage / SOC</div>
-        <div className="text-right">Actions</div>
+        <div className="text-right">Copy</div>
       </div>
 
-      {/* Rows — all 6 hardware slots, always. Inactive ones are dimmed
-          but still editable so the operator sees the whole schedule. */}
+      {/* Rows — all 6 hardware slots, always, all fully editable. */}
       <div className="space-y-2">
         {allByRowOrder.map((p) => (
           <TouRow
             key={p.index}
             program={p}
             displayIndex={p.index}
-            endTime={endTimeMap.get(p.index) ?? null}
-            isActive={p.chargeMode !== "0"}
             onChange={(patch) => updateProgram(p.index, patch)}
-            onEnable={() => enableProgram(p.index)}
-            onDisable={() => disableProgram(p.index)}
             onDuplicate={() => duplicateProgram(p)}
-            canDuplicate={
-              draft.some(
-                (q) => q.chargeMode === "0" && q.index !== p.index,
-              )
-            }
           />
         ))}
       </div>
@@ -296,10 +248,10 @@ export const PowdriveTouSchedule = ({
       <div className="glass-card p-3 border border-border/40 flex items-start gap-2">
         <Info className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Programs execute in order of their start time each day. Each program
-          runs from its start time until the next program's start time; the
-          last program wraps around to the first. If no programs are active,
-          the inverter uses the default self-consumption mode.
+          Set a program's mode to "No charge/discharge" to disable it on
+          the hardware. Programs execute in order of their start time each
+          day; each active program runs from its start time until the next
+          active program's start time (wrapping at 24 h).
         </p>
       </div>
 
@@ -335,38 +287,22 @@ export const PowdriveTouSchedule = ({
 interface RowProps {
   program: Program;
   displayIndex: number;
-  endTime: number | null;
-  isActive: boolean;
   onChange: (patch: Partial<Program>) => void;
-  onEnable: () => void;
-  onDisable: () => void;
   onDuplicate: () => void;
-  canDuplicate: boolean;
 }
 
-const TouRow = ({
-  program,
-  displayIndex,
-  endTime,
-  isActive,
-  onChange,
-  onEnable,
-  onDisable,
-  onDuplicate,
-  canDuplicate,
-}: RowProps) => {
+const TouRow = ({ program, displayIndex, onChange, onDuplicate }: RowProps) => {
   const Icon = MODE_META[program.chargeMode]?.icon ?? Zap;
   const modeClass = MODE_META[program.chargeMode]?.className ?? "text-foreground";
 
   return (
     <div
       className={cn(
-        "glass-card p-3 sm:p-3 rounded-lg border border-border/40 transition-opacity",
+        "glass-card p-3 rounded-lg border border-border/40",
         // Below lg: single column with labels visible.
-        // At lg+: 7-column row with column headers above providing labels.
-        "grid grid-cols-1 lg:grid-cols-[44px_100px_100px_1fr_1fr_1fr_64px]",
+        // At lg+: 6-column row with column headers above providing labels.
+        "grid grid-cols-1 lg:grid-cols-[44px_100px_1fr_1fr_1fr_56px]",
         "gap-2 sm:gap-3 items-start lg:items-center",
-        !isActive && "opacity-60",
       )}
     >
       {/* Number badge — full-width band on mobile so the row is obvious */}
@@ -374,42 +310,24 @@ const TouRow = ({
         <div className="flex items-center gap-2">
           <Badge
             variant="outline"
-            className={cn(
-              "h-7 min-w-[28px] flex items-center justify-center font-mono font-semibold text-xs",
-              isActive && "border-emerald-500/50 text-emerald-400",
-            )}
+            className="h-7 min-w-[28px] flex items-center justify-center font-mono font-semibold text-xs"
           >
             {displayIndex.toString().padStart(2, "0")}
           </Badge>
           <span className="text-xs text-muted-foreground lg:hidden">
             Program {displayIndex}
-            {!isActive && " · disabled"}
           </span>
         </div>
-        {/* On mobile, quick enable/disable toggle at the top of the row */}
-        <div className="flex items-center gap-1 lg:hidden">
-          {!isActive ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onEnable}
-              className="h-7 text-xs gap-1"
-            >
-              <Plus className="w-3 h-3" />
-              Enable
-            </Button>
-          ) : (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 text-destructive hover:text-destructive"
-              onClick={onDisable}
-              title="Disable"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
-          )}
-        </div>
+        {/* Duplicate action lives at the top of the row on mobile */}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 lg:hidden"
+          onClick={onDuplicate}
+          title="Copy to the next program slot"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </Button>
       </div>
 
       {/* Start Time */}
@@ -421,30 +339,8 @@ const TouRow = ({
           type="time"
           value={hhmmToDisplay(program.time)}
           onChange={(e) => onChange({ time: displayToHhmm(e.target.value) })}
-          disabled={!isActive}
           className="h-9 font-mono text-sm w-full"
         />
-      </div>
-
-      {/* End Time (derived) */}
-      <div className="space-y-1 min-w-0">
-        <label className="text-[10px] uppercase tracking-wider text-muted-foreground lg:hidden">
-          End Time
-        </label>
-        {endTime !== null ? (
-          <Input
-            type="time"
-            value={hhmmToDisplay(endTime)}
-            readOnly
-            disabled
-            className="h-9 font-mono text-sm cursor-not-allowed opacity-70 w-full"
-            title="End time is the next active program's start time"
-          />
-        ) : (
-          <div className="h-9 flex items-center px-2 text-xs text-muted-foreground">
-            —
-          </div>
-        )}
       </div>
 
       {/* Mode */}
@@ -493,7 +389,6 @@ const TouRow = ({
           max={20000}
           step={100}
           unit="W"
-          disabled={!isActive}
         />
       </div>
 
@@ -511,7 +406,6 @@ const TouRow = ({
             step={0.1}
             unit="V"
             decimals={1}
-            disabled={!isActive}
           />
           <NumberWithSlider
             value={program.capacityPct}
@@ -520,44 +414,21 @@ const TouRow = ({
             max={100}
             step={1}
             unit="%"
-            disabled={!isActive}
           />
         </div>
       </div>
 
-      {/* Actions — desktop only; mobile has enable/disable near the badge */}
+      {/* Copy action — desktop only (mobile has it next to the number badge) */}
       <div className="hidden lg:flex items-center justify-end gap-1">
         <Button
           size="icon"
           variant="ghost"
           className="h-8 w-8"
           onClick={onDuplicate}
-          disabled={!canDuplicate || !isActive}
-          title="Duplicate to a free slot"
+          title="Copy to the next program slot"
         >
           <Copy className="w-3.5 h-3.5" />
         </Button>
-        {isActive ? (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 text-destructive hover:text-destructive"
-            onClick={onDisable}
-            title="Disable this program (set to No charge/discharge)"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        ) : (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 text-emerald-400 hover:text-emerald-400"
-            onClick={onEnable}
-            title="Enable this program"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </Button>
-        )}
       </div>
     </div>
   );
