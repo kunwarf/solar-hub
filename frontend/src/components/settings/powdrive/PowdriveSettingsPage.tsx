@@ -108,7 +108,7 @@ export const PowdriveSettingsPage = ({
         </div>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
         {/* Sidebar */}
         <nav className="hidden md:flex flex-col gap-1 w-44 flex-shrink-0">
           {POWDRIVE_SCHEMA.map((group) => {

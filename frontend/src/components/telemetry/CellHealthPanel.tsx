@@ -184,7 +184,63 @@ const CellHealthPanel = ({ report }: CellHealthPanelProps) => {
       </div>
 
       <TooltipProvider delayDuration={150}>
-        <div className="overflow-x-auto">
+        {/* Mobile: candidate cards stacked vertically */}
+        <div className="sm:hidden space-y-2">
+          {allCandidates.map((c, idx) => (
+            <div
+              key={`${c.unit_index}-${c.cell_index}-${idx}-mobile`}
+              className="rounded-md border border-border/30 p-2.5 bg-background/40"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+                    Unit {c.unit_index}
+                  </Badge>
+                  <span className="text-xs font-mono font-semibold truncate">
+                    Cell {c.cell_index}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    score {c.score.toFixed(1)}
+                  </span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {confidenceLabel(c.confidence)}
+                  </Badge>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {c.symptoms.map((s, i) => (
+                  <Tooltip key={i}>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className={
+                          "flex items-center gap-1 border text-[10px] " +
+                          severityBadgeClass(s.severity)
+                        }
+                      >
+                        {SYMPTOM_ICON[s.type]}
+                        <span>{SYMPTOM_LABEL[s.type]}</span>
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                      <div className="font-semibold mb-1 capitalize">
+                        {s.severity} · {s.source}
+                      </div>
+                      <div className="text-muted-foreground break-words">
+                        {formatEvidence(s.evidence)}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop: table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-muted-foreground text-left border-b border-border/30">
