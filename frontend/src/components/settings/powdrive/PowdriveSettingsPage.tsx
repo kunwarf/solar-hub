@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { SettingsSection } from "../shared/SettingsSection";
 import { POWDRIVE_SCHEMA } from "./schema";
+import { PowdriveTouSchedule } from "./PowdriveTouSchedule";
 
 const ACCENT = "#10B981";
 
@@ -155,15 +156,28 @@ export const PowdriveSettingsPage = ({
           animate={{ opacity: 1, x: 0 }}
           className="flex-1 min-w-0"
         >
-          <h3 className="text-base font-semibold text-foreground mb-4">{currentGroup.label}</h3>
-          <SettingsSection
-            group={currentGroup}
-            settings={settings}
-            deviceSerial={deviceSerial}
-            lastSyncedAt={lastSyncedAt}
-            accentColor={ACCENT}
-            onApply={handleFieldApply}
-          />
+          {currentGroup.id === "schedule" ? (
+            // Specialised row-per-program TOU editor.
+            <PowdriveTouSchedule
+              settings={settings}
+              lastSyncedAt={lastSyncedAt}
+              onApplyBulk={onApply}
+            />
+          ) : (
+            <>
+              <h3 className="text-base font-semibold text-foreground mb-4">
+                {currentGroup.label}
+              </h3>
+              <SettingsSection
+                group={currentGroup}
+                settings={settings}
+                deviceSerial={deviceSerial}
+                lastSyncedAt={lastSyncedAt}
+                accentColor={ACCENT}
+                onApply={handleFieldApply}
+              />
+            </>
+          )}
         </motion.div>
       </div>
     </div>
