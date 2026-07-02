@@ -12,8 +12,11 @@ export const API_CONFIG = {
   // WebSocket URL for real-time telemetry
   wsUrl: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws',
 
-  // Request timeout in milliseconds
-  timeout: 30000,
+  // Request timeout in milliseconds.
+  // 120 s covers the 90 s waitForCommand poll budget used by useDeviceSettings
+  // for query_settings on slow Modbus RTU chains (Powdrive over ESP32 can
+  // legitimately take 60+ s round-trip when the RS485 chain is busy).
+  timeout: 120000,
 
   // Token storage keys
   tokenKeys: {

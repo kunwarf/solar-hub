@@ -121,20 +121,38 @@ export function useDeviceSettings(
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         console.log(`[useDeviceSettings] Query attempt ${attempt}/${MAX_ATTEMPTS} for device:`, deviceId);
-        const response = await deviceCommandsService.querySettings(deviceId);
-        console.log('[useDeviceSettings] Command created:', response.command_id, 'status:', response.status);
 
-        console.log('[useDeviceSettings] Polling for command completion...');
-        // Settings queries can legitimately take 60+ seconds on a healthy but
-        // slow Modbus RTU chain (ESP32 uplink + 80–90 register reads). Give
-        // the roundtrip real headroom; the UI shows cached settings from
-        // localStorage immediately so this doesn't block the user's view.
-        const status = await deviceCommandsService.waitForCommand(
-          deviceId,
-          response.command_id,
-          90000, // 90s timeout (was 30s — too tight for Powdrive Modbus RTU)
-          2000,  // 2s poll interval
-        );
+        // Wrap the whole per-attempt roundtrip in try/catch so a mid-attempt
+        // network error (axios timeout, backend hiccup) still gets the retry
+        // treatment instead of skipping straight to the "Device Offline"
+        // banner. Errors on the final attempt are re-thrown to the outer
+        // catch.
+        let status: any;
+        try {
+          const response = await deviceCommandsService.querySettings(deviceId);
+          console.log('[useDeviceSettings] Command created:', response.command_id, 'status:', response.status);
+
+          console.log('[useDeviceSettings] Polling for command completion...');
+          // Settings queries can legitimately take 60+ seconds on a slow
+          // Modbus RTU chain (ESP32 uplink + 80–90 register reads). Give
+          // the roundtrip real headroom; the UI shows cached settings from
+          // localStorage immediately so this doesn't block the user's view.
+          status = await deviceCommandsService.waitForCommand(
+            deviceId,
+            response.command_id,
+            90000, // 90s timeout (was 30s — too tight for slow Modbus RTU)
+            2000,  // 2s poll interval
+          );
+        } catch (attemptErr) {
+          const msg = attemptErr instanceof Error ? attemptErr.message : String(attemptErr);
+          console.warn(`[useDeviceSettings] Attempt ${attempt} failed:`, msg);
+          lastError = msg;
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+            continue;
+          }
+          throw attemptErr;
+        }
 
         console.log('[useDeviceSettings] Command completed with status:', status.status);
         const settings = status.result?.settings;
@@ -146,34 +164,45 @@ export function useDeviceSettings(
           break;
         }
 
-        if (status.status === 'completed' && keyCount === 0 && attempt < MAX_ATTEMPTS) {
-          // Empty-success: probably a transient Modbus failure. Wait briefly
-          // and try one more time before giving up.
-          console.warn('[useDeviceSettings] success=true but 0 settings — retrying in %dms', RETRY_DELAY_MS);
+        // Both explicit-failure ('failed' from Fix A) and queue-timeout
+        // ('timeout' if the command expired in System B) trigger the same
+        // treatment: retry once, then bubble up. Not distinguishing 'timeout'
+        // was the original Fix B bug that made a single flaky poll flip
+        // the UI straight to offline.
+        const isFailure =
+          status.status === 'failed' ||
+          status.status === 'timeout' ||
+          (status.status === 'completed' && keyCount === 0);
+
+        if (isFailure && attempt < MAX_ATTEMPTS) {
+          console.warn(
+            `[useDeviceSettings] Attempt ${attempt} not usable (status=${status.status}, keys=${keyCount}) — retrying in ${RETRY_DELAY_MS}ms`,
+          );
+          lastError = status.error || `Device query returned status=${status.status}`;
           await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
           continue;
         }
 
-        if (status.status === 'failed') {
-          console.error('[useDeviceSettings] Command failed:', status.error);
-          lastError = status.error || 'Device query failed';
-          if (attempt < MAX_ATTEMPTS) {
-            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-            continue;
+        if (isFailure) {
+          // Ran out of attempts. Accept an empty settings dict so the UI
+          // doesn't spin forever, and flag the whole thing as stale — the
+          // outer state also flips isDeviceOffline via the catch path when
+          // status was 'failed'/'timeout'.
+          console.warn(
+            `[useDeviceSettings] Accepting empty result after ${MAX_ATTEMPTS} attempts (last status=${status.status})`,
+          );
+          deviceSettings = settings ?? {};
+          if (status.status !== 'completed') {
+            // Force the catch path so the UI shows the offline banner.
+            throw new Error(lastError || `Device query returned status=${status.status}`);
           }
-          throw new Error(lastError);
+          break;
         }
 
-        if (status.status !== 'completed') {
-          console.error('[useDeviceSettings] Command timed out or invalid status:', status.status);
-          throw new Error('Device query timed out');
-        }
-
-        // Fell through: completed with 0 keys after all retries — accept the
-        // empty result so the UI doesn't spin forever, but flag it as stale.
-        console.warn('[useDeviceSettings] Accepting empty settings after %d attempts', MAX_ATTEMPTS);
-        deviceSettings = settings ?? {};
-        break;
+        // Any other non-final status shouldn't be possible (waitForCommand
+        // only returns on completed/failed/timeout) but guard anyway.
+        console.error('[useDeviceSettings] Unexpected status:', status.status);
+        throw new Error(`Device query returned unexpected status=${status.status}`);
       }
 
       if (deviceSettings === null) {
