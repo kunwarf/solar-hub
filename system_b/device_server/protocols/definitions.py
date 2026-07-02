@@ -94,7 +94,11 @@ class PollingConfig:
 class ModbusConfig:
     """Modbus-specific configuration."""
     unit_id: int = 1
-    timeout: float = 5.0
+    # 10 s per Modbus TCP transaction. Was 5 s but read_all_configurable
+    # for an 80–90 register RW map on a slow RS485 chain (Powdrive over
+    # ESP32) legitimately needs headroom — a tight per-op timeout was
+    # causing bulk-read failures that surfaced as "settings blank".
+    timeout: float = 10.0
     retries: int = 3
     retry_delay: float = 0.5
 

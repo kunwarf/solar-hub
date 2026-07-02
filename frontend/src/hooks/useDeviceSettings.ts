@@ -125,10 +125,14 @@ export function useDeviceSettings(
         console.log('[useDeviceSettings] Command created:', response.command_id, 'status:', response.status);
 
         console.log('[useDeviceSettings] Polling for command completion...');
+        // Settings queries can legitimately take 60+ seconds on a healthy but
+        // slow Modbus RTU chain (ESP32 uplink + 80–90 register reads). Give
+        // the roundtrip real headroom; the UI shows cached settings from
+        // localStorage immediately so this doesn't block the user's view.
         const status = await deviceCommandsService.waitForCommand(
           deviceId,
           response.command_id,
-          30000, // 30s timeout
+          90000, // 90s timeout (was 30s — too tight for Powdrive Modbus RTU)
           2000,  // 2s poll interval
         );
 

@@ -247,7 +247,7 @@ class ProtocolLoader:
         """Parse Modbus configuration."""
         return ModbusConfig(
             unit_id=data.get("unit_id", 1),
-            timeout=data.get("timeout", 5.0),
+            timeout=data.get("timeout", 10.0),
             retries=data.get("retries", 3),
             retry_delay=data.get("retry_delay", 0.5),
             baudrate=data.get("baudrate", 9600),

@@ -151,7 +151,7 @@ async def query_device_settings(
         logger.info("[query-settings]   - site_id: %s", device.site_id)
         logger.info("[query-settings]   - command_type: query_settings")
         logger.info("[query-settings]   - priority: 7")
-        logger.info("[query-settings]   - expires_in: 5 minutes")
+        logger.info("[query-settings]   - expires_in: 15 minutes")
 
         command_response = await system_b_client.send_command(
             device_id=device_id,
@@ -162,7 +162,10 @@ async def query_device_settings(
             } if request.setting_keys else None,
             device_serial=device.serial_number,
             priority=7,
-            expires_in_minutes=5,
+            # 15 min queue lifetime — leaves room for command_worker to pick
+            # up a slow device without the command silently expiring while a
+            # frontend retry is still in flight.
+            expires_in_minutes=15,
         )
 
         logger.info("-" * 100)
