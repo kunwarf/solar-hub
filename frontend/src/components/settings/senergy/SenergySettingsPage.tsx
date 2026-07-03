@@ -25,6 +25,7 @@ import { toast } from "@/hooks/use-toast";
 import { BatteryCharging, Globe2, Sun, Shield, Settings2, Check, RefreshCw, Loader2 } from "lucide-react";
 import { SettingsSection } from "../shared/SettingsSection";
 import { SENERGY_SCHEMA } from "./schema";
+import { SenergyTouSchedule } from "./SenergyTouSchedule";
 
 const ACCENT = "#3B82F6";
 
@@ -219,15 +220,35 @@ export const SenergySettingsPage = ({
             </div>
           )}
 
-          <h3 className="text-base font-semibold text-foreground mb-4">{currentGroup.label}</h3>
-          <SettingsSection
-            group={currentGroup}
-            settings={settings}
-            deviceSerial={deviceSerial}
-            lastSyncedAt={lastSyncedAt}
-            accentColor={ACCENT}
-            onApply={handleFieldApply}
-          />
+          {currentGroup.id === "tou_charge" ? (
+            <SenergyTouSchedule
+              settings={settings}
+              direction="charge"
+              lastSyncedAt={lastSyncedAt}
+              onApplyBulk={onApply}
+            />
+          ) : currentGroup.id === "tou_discharge" ? (
+            <SenergyTouSchedule
+              settings={settings}
+              direction="discharge"
+              lastSyncedAt={lastSyncedAt}
+              onApplyBulk={onApply}
+            />
+          ) : (
+            <>
+              <h3 className="text-base font-semibold text-foreground mb-4">
+                {currentGroup.label}
+              </h3>
+              <SettingsSection
+                group={currentGroup}
+                settings={settings}
+                deviceSerial={deviceSerial}
+                lastSyncedAt={lastSyncedAt}
+                accentColor={ACCENT}
+                onApply={handleFieldApply}
+              />
+            </>
+          )}
         </motion.div>
       </div>
     </div>
