@@ -72,6 +72,34 @@ class TCPModbusAdapter:
         self._transaction_id = (self._transaction_id + 1) & 0xFFFF
         return self._transaction_id
 
+    async def _drain_stale_bytes(self) -> int:
+        """
+        Drain any late/stale bytes sitting in the socket receive buffer.
+
+        Called on any Modbus operation failure. Prevents the classic
+        Modbus-TCP-over-poor-network cascade where a single timeout leaves
+        the device's (late) response in the TCP buffer, causing every
+        subsequent request to see the stale response as its own header
+        (Transaction ID mismatch) — corrupting the socket state until
+        reconnection.
+
+        Returns:
+            Number of bytes drained (for logging / diagnostics).
+        """
+        try:
+            drained = await self.connection.read_available(
+                max_bytes=8192, timeout=0.1,
+            )
+            if drained:
+                logger.warning(
+                    "[MODBUS] Drained %d stale byte(s) from socket after error",
+                    len(drained),
+                )
+            return len(drained)
+        except Exception as exc:
+            logger.debug("[MODBUS] Drain attempt failed harmlessly: %s", exc)
+            return 0
+
     async def _read_holding_regs(
         self,
         addr: int,
@@ -109,27 +137,35 @@ class TCPModbusAdapter:
 
             request = mbap + pdu
 
-            # Send and receive
-            await self.connection.write(request, timeout=self.timeout)
+            try:
+                # Send and receive
+                await self.connection.write(request, timeout=self.timeout)
 
-            # Read response header
-            header = await self.connection.read(9, timeout=self.timeout)
+                # Read response header
+                header = await self.connection.read(9, timeout=self.timeout)
 
-            # Parse MBAP
-            resp_trans_id, _, length, resp_unit_id = struct.unpack(">HHHB", header[:7])
+                # Parse MBAP
+                resp_trans_id, _, length, resp_unit_id = struct.unpack(">HHHB", header[:7])
 
-            if resp_trans_id != transaction_id:
-                raise ValueError(f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}")
+                if resp_trans_id != transaction_id:
+                    raise ValueError(
+                        f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}"
+                    )
 
-            # Check function code
-            function_code = header[7]
-            if function_code & 0x80:
-                # Exception response
-                raise ValueError(f"Modbus exception: {header[8]}")
+                # Check function code
+                function_code = header[7]
+                if function_code & 0x80:
+                    # Exception response
+                    raise ValueError(f"Modbus exception: {header[8]}")
 
-            # Read data
-            byte_count = header[8]
-            data = await self.connection.read(byte_count, timeout=self.timeout)
+                # Read data
+                byte_count = header[8]
+                data = await self.connection.read(byte_count, timeout=self.timeout)
+            except Exception:
+                # Drain any late response before re-raising so the next call
+                # doesn't inherit a corrupted framing state.
+                await self._drain_stale_bytes()
+                raise
 
             # Parse registers
             registers = []
@@ -166,19 +202,25 @@ class TCPModbusAdapter:
 
             request = mbap + pdu
 
-            await self.connection.write(request, timeout=self.timeout)
+            try:
+                await self.connection.write(request, timeout=self.timeout)
 
-            # Read response (should echo back)
-            response = await self.connection.read(12, timeout=self.timeout)
+                # Read response (should echo back)
+                response = await self.connection.read(12, timeout=self.timeout)
 
-            # Verify response
-            resp_trans_id = struct.unpack(">H", response[:2])[0]
-            if resp_trans_id != transaction_id:
-                raise ValueError(f"Transaction ID mismatch")
+                # Verify response
+                resp_trans_id = struct.unpack(">H", response[:2])[0]
+                if resp_trans_id != transaction_id:
+                    raise ValueError(
+                        f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}"
+                    )
 
-            function_code = response[7]
-            if function_code & 0x80:
-                raise ValueError(f"Modbus exception: {response[8]}")
+                function_code = response[7]
+                if function_code & 0x80:
+                    raise ValueError(f"Modbus exception: {response[8]}")
+            except Exception:
+                await self._drain_stale_bytes()
+                raise
 
             logger.info(f"[SERVER<-DEVICE] WRITE SINGLE response: OK")
 
@@ -217,18 +259,24 @@ class TCPModbusAdapter:
 
             request = mbap + pdu
 
-            await self.connection.write(request, timeout=self.timeout)
+            try:
+                await self.connection.write(request, timeout=self.timeout)
 
-            # Read response
-            response = await self.connection.read(12, timeout=self.timeout)
+                # Read response
+                response = await self.connection.read(12, timeout=self.timeout)
 
-            resp_trans_id = struct.unpack(">H", response[:2])[0]
-            if resp_trans_id != transaction_id:
-                raise ValueError(f"Transaction ID mismatch")
+                resp_trans_id = struct.unpack(">H", response[:2])[0]
+                if resp_trans_id != transaction_id:
+                    raise ValueError(
+                        f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}"
+                    )
 
-            function_code = response[7]
-            if function_code & 0x80:
-                raise ValueError(f"Modbus exception: {response[8]}")
+                function_code = response[7]
+                if function_code & 0x80:
+                    raise ValueError(f"Modbus exception: {response[8]}")
+            except Exception:
+                await self._drain_stale_bytes()
+                raise
 
             logger.info(f"[SERVER<-DEVICE] WRITE MULTIPLE response: OK")
 
