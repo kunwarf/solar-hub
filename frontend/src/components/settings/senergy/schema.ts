@@ -1,90 +1,128 @@
 /**
  * Senergy inverter settings schema.
  *
- * Mirrors system_b/device_server/settings_schema.py → SENERGY_SCHEMA.
+ * Field keys match the raw register IDs produced by System B's Senergy
+ * register map (system_b/device_server/register_maps/senergy_registers.json).
+ * Do not rename keys here without also updating the register map — the
+ * backend uses these strings verbatim as the ``id`` of each writable
+ * register.
+ *
  * Key differences from Powdrive:
- *  - Some voltage fields have scale = 0.1 (register stores tenths of volts)
- *  - Battery sign convention: positive = discharging
+ *  - Senergy stores time-of-use start/end times as ``hour * 256 + minute``
+ *    (max ≈ 6047), NOT the ``hour * 100 + minute`` HHMM format Powdrive uses.
+ *    Fields are exposed as raw numbers here; a dedicated TOU editor can
+ *    format them for humans later.
+ *  - Battery sign convention: positive battery power = discharging.
  */
 
 import type { SettingGroup } from "../shared/types";
+
+const CHARGE_WINDOWS = [1, 2, 3] as const;
+const DISCHARGE_WINDOWS = [1, 2, 3] as const;
+
+const TIME_MAX = 6047; // 23 * 256 + 59
+
+const FREQUENCY_OPTIONS = {
+  "0": "Off",
+  "1": "Once",
+  "2": "Everyday",
+  "3": "Weekdays",
+  "4": "Weekends",
+} as const;
+
+const BATTERY_TYPE_OPTIONS = {
+  "0": "Lead-acid",
+  "1": "Lithium (generic)",
+  "2": "Pylon",
+  "3": "Other",
+} as const;
+
+const HYBRID_WORK_MODE_OPTIONS = {
+  "0": "Self-Consumption",
+  "1": "Backup Priority",
+  "2": "Feed-in Priority",
+  "3": "Time-of-Use",
+} as const;
+
+const OFF_GRID_MODE_OPTIONS = {
+  "0": "Disabled",
+  "1": "Enabled",
+} as const;
+
+const POWER_LIMIT_MODE_OPTIONS = {
+  "0": "Disabled",
+  "1": "Soft limit",
+  "2": "Hard limit",
+} as const;
 
 export const SENERGY_SCHEMA: SettingGroup[] = [
   {
     id: "battery",
     label: "Battery",
     sign_note:
-      "Senergy sign convention: positive battery power = discharging, negative = charging. " +
-      "This is the opposite of Powdrive/Deye.",
+      "Senergy sign convention: positive battery power = discharging, " +
+      "negative = charging. This is the opposite of Powdrive / Deye.",
     fields: [
-      { key: "battery_capacity_ah", label: "Battery Capacity", type: "number", unit: "Ah", min: 10, max: 2000, step: 1 },
-      { key: "battery_max_charge_current_a", label: "Max Charge Current", type: "number", unit: "A", min: 0, max: 200, step: 1 },
-      { key: "battery_max_discharge_current_a", label: "Max Discharge Current", type: "number", unit: "A", min: 0, max: 200, step: 1 },
-      { key: "battery_bulk_voltage_v", label: "Bulk Charge Voltage", type: "number", unit: "V", min: 40, max: 62, step: 0.1, scale: 0.1, description: "Target absorption charge voltage" },
-      { key: "battery_float_voltage_v", label: "Float Charge Voltage", type: "number", unit: "V", min: 40, max: 62, step: 0.1, scale: 0.1 },
-      { key: "battery_low_voltage_v", label: "Low Battery Alarm Voltage", type: "number", unit: "V", min: 20, max: 55, step: 0.1, scale: 0.1 },
-      { key: "battery_shutdown_voltage_v", label: "Shutdown Voltage", type: "number", unit: "V", min: 20, max: 50, step: 0.1, scale: 0.1, description: "Battery voltage at which inverter shuts down" },
-      { key: "battery_restart_voltage_v", label: "Restart Voltage", type: "number", unit: "V", min: 20, max: 52, step: 0.1, scale: 0.1 },
-      { key: "battery_shutdown_capacity_pct", label: "Shutdown SOC", type: "number", unit: "%", min: 0, max: 30, step: 1 },
-      { key: "battery_restart_capacity_pct", label: "Restart SOC", type: "number", unit: "%", min: 0, max: 50, step: 1 },
-      {
-        key: "battery_type", label: "Battery Chemistry", type: "enum",
-        options: { "0": "Lead-acid", "1": "Lithium (generic)", "2": "Pylon", "3": "BYD", "4": "Other" },
-        destructive: true,
-      },
-    ],
-  },
-  {
-    id: "grid_code",
-    label: "Grid Code",
-    fields: [
-      {
-        key: "grid_standard", label: "Grid Standard / Country Code", type: "enum",
-        options: { "0": "VDE0126 (DE)", "1": "AS4777 (AU)", "2": "G83 (UK)", "3": "CEI0-21 (IT)", "4": "NRS097 (ZA)", "5": "Custom" },
-        destructive: true,
-        description: "Inverter may restart when changing grid code. Only change if required by local regulations.",
-      },
-      { key: "grid_frequency_set", label: "Grid Nominal Frequency", type: "enum", options: { "50": "50 Hz", "60": "60 Hz" } },
-      { key: "grid_voltage_set", label: "Grid Nominal Voltage", type: "enum", options: { "220": "220 V", "230": "230 V", "240": "240 V" } },
-      { key: "anti_island_enable", label: "Anti-Islanding", type: "bool", description: "Enable anti-islanding protection (required by most grid codes)" },
+      { key: "battery_ah_ah_", label: "Battery Capacity", type: "number", unit: "Ah", min: 10, max: 2000, step: 1 },
+      { key: "battery_type_selection", label: "Battery Chemistry", type: "enum", options: BATTERY_TYPE_OPTIONS, destructive: true },
+      { key: "max_charger_current", label: "Max Charge Current", type: "number", unit: "A", min: 0, max: 200, step: 1 },
+      { key: "max_discharge_current", label: "Max Discharge Current", type: "number", unit: "A", min: 0, max: 200, step: 1 },
+      { key: "stop_charge_voltage", label: "Stop Charge Voltage", type: "number", unit: "V", min: 40, max: 62, step: 0.1, description: "Battery voltage at which charging stops" },
+      { key: "stop_discharge_voltage", label: "Stop Discharge Voltage", type: "number", unit: "V", min: 20, max: 55, step: 0.1, description: "Battery voltage at which discharge stops" },
+      { key: "capacity_of_charger_end_soc_", label: "Charger End SOC", type: "number", unit: "%", min: 0, max: 100, step: 1, description: "Target SOC when charging is considered complete" },
+      { key: "capacity_of_discharger_end_eod_", label: "Discharger End SOC (EOD)", type: "number", unit: "%", min: 0, max: 100, step: 1, description: "End-of-discharge SOC floor" },
+      { key: "off_grid_start_up_battery_capacity", label: "Off-Grid Startup SOC", type: "number", unit: "%", min: 0, max: 100, step: 1, description: "SOC required to start inverter in off-grid mode" },
     ],
   },
   {
     id: "charger",
-    label: "Charger",
+    label: "Charger & Grid",
     fields: [
-      { key: "ac_charge_enable", label: "AC Charge Enable", type: "bool", description: "Allow grid to charge battery" },
-      { key: "ac_charge_current_a", label: "AC Charge Max Current", type: "number", unit: "A", min: 0, max: 120, step: 1 },
-      { key: "ac_charge_start_soc_pct", label: "AC Charge Start SOC", type: "number", unit: "%", min: 0, max: 100, step: 1 },
-      { key: "ac_charge_end_soc_pct", label: "AC Charge End SOC", type: "number", unit: "%", min: 0, max: 100, step: 1 },
+      { key: "grid_charge", label: "Grid Charge Enable", type: "enum", options: { "0": "Disabled", "1": "Enabled" }, description: "Allow the grid to charge the battery" },
+      { key: "max_charge_power", label: "Max Charge Power", type: "number", unit: "W", min: 0, max: 20000, step: 100 },
+      { key: "max_discharge_power", label: "Max Discharge Power", type: "number", unit: "W", min: 0, max: 20000, step: 100 },
+      { key: "maximum_grid_charge_power", label: "Max Grid Charge Power", type: "number", unit: "W", min: 0, max: 20000, step: 100 },
+      { key: "capacity_of_grid_charger_end", label: "Grid Charger End SOC", type: "number", unit: "%", min: 0, max: 100, step: 1, description: "SOC at which grid-charging stops" },
     ],
   },
   {
     id: "work_mode",
     label: "Work Mode",
     fields: [
-      {
-        key: "work_mode", label: "Work Mode", type: "enum",
-        options: {
-          "0": "Self-Consumption",
-          "1": "Backup Priority",
-          "2": "Feed-in Priority",
-          "3": "Time-of-Use",
-        },
-        description: "Determines how the inverter balances solar, battery, and grid",
-      },
-      { key: "export_limit_enable", label: "Export Limit", type: "bool", description: "Limit power fed to grid" },
-      { key: "export_limit_power_w", label: "Export Limit Power", type: "number", unit: "W", min: 0, max: 20000, step: 100 },
-      { key: "priority_load_soc_pct", label: "Priority Load SOC", type: "number", unit: "%", min: 0, max: 100, step: 1, description: "SOC below which load is powered from grid" },
+      { key: "hybrid_work_mode", label: "Hybrid Work Mode", type: "enum", options: HYBRID_WORK_MODE_OPTIONS, description: "How the inverter balances solar / battery / grid" },
+      { key: "off_grid_mode", label: "Off-Grid Mode", type: "enum", options: OFF_GRID_MODE_OPTIONS },
+      { key: "inverter_control", label: "Inverter Control", type: "number", min: 0, max: 65535, step: 1, description: "Vendor control-word (see Senergy manual)" },
+      { key: "power_limit_mode", label: "Power Limit Mode", type: "enum", options: POWER_LIMIT_MODE_OPTIONS },
     ],
   },
   {
-    id: "protection",
-    label: "Protection",
+    id: "tou_charge",
+    label: "TOU — Charge Windows",
+    fields: CHARGE_WINDOWS.flatMap((i) => [
+      { key: `charge_start_time_${i}`, label: `Window ${i} Start Time`, type: "number" as const, min: 0, max: TIME_MAX, step: 1, description: "Encoded as (hour × 256 + minute)" },
+      { key: `charge_end_time_${i}`, label: `Window ${i} End Time`, type: "number" as const, min: 0, max: TIME_MAX, step: 1, description: "Encoded as (hour × 256 + minute)" },
+      { key: `charge_frequency_${i}`, label: `Window ${i} Frequency`, type: "enum" as const, options: FREQUENCY_OPTIONS },
+      { key: `charge_power_${i}`, label: `Window ${i} Power`, type: "number" as const, unit: "W", min: 0, max: 20000, step: 100 },
+      { key: `charger_end_soc_${i}`, label: `Window ${i} End SOC`, type: "number" as const, unit: "%", min: 0, max: 100, step: 1 },
+    ]),
+  },
+  {
+    id: "tou_discharge",
+    label: "TOU — Discharge Windows",
+    fields: DISCHARGE_WINDOWS.flatMap((i) => [
+      { key: `discharge_start_time_${i}`, label: `Window ${i} Start Time`, type: "number" as const, min: 0, max: TIME_MAX, step: 1, description: "Encoded as (hour × 256 + minute)" },
+      { key: `discharge_end_time_${i}`, label: `Window ${i} End Time`, type: "number" as const, min: 0, max: TIME_MAX, step: 1, description: "Encoded as (hour × 256 + minute)" },
+      { key: `discharge_frequency_${i}`, label: `Window ${i} Frequency`, type: "enum" as const, options: FREQUENCY_OPTIONS },
+      { key: `discharge_power_${i}`, label: `Window ${i} Power`, type: "number" as const, unit: "W", min: 0, max: 20000, step: 100 },
+      { key: `discharge_end_soc_${i}`, label: `Window ${i} End SOC`, type: "number" as const, unit: "%", min: 0, max: 100, step: 1 },
+    ]),
+  },
+  {
+    id: "system",
+    label: "System",
     fields: [
-      { key: "over_load_restart", label: "Overload Auto Restart", type: "bool" },
-      { key: "over_temp_restart", label: "Over-Temperature Auto Restart", type: "bool" },
-      { key: "backflow_protect", label: "Backflow Protection", type: "bool", description: "Prevent power from flowing back into PV panels" },
+      { key: "modbus_address", label: "Modbus Address", type: "number", min: 1, max: 247, step: 1, destructive: true, description: "Changing this will disconnect the datalogger until the address is updated on the ESP32 too" },
+      { key: "bms_comm_address", label: "BMS Comm Address", type: "number", min: 0, max: 255, step: 1 },
     ],
   },
 ];
