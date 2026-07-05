@@ -112,8 +112,13 @@ export function useDeviceSettings(
     setIsQuerying(true);
     setError(null);
 
-    const MAX_ATTEMPTS = 2;
-    const RETRY_DELAY_MS = 2000;
+    // Mobile networks flap. A single 30-second stretch of poor signal can
+    // take out one attempt (dispatch or a mid-flight poll). Bumped from 2
+    // to 3 so users on cellular don't see "Device Offline" after one
+    // transient hiccup. Backoff grows so the third attempt lands after a
+    // realistic network-recovery window.
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAYS_MS = [2000, 5000];
 
     try {
       let deviceSettings: Record<string, any> | null = null;
@@ -148,7 +153,8 @@ export function useDeviceSettings(
           console.warn(`[useDeviceSettings] Attempt ${attempt} failed:`, msg);
           lastError = msg;
           if (attempt < MAX_ATTEMPTS) {
-            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+            const delay = RETRY_DELAYS_MS[attempt - 1] ?? 5000;
+            await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
           throw attemptErr;
@@ -175,11 +181,12 @@ export function useDeviceSettings(
           (status.status === 'completed' && keyCount === 0);
 
         if (isFailure && attempt < MAX_ATTEMPTS) {
+          const delay = RETRY_DELAYS_MS[attempt - 1] ?? 5000;
           console.warn(
-            `[useDeviceSettings] Attempt ${attempt} not usable (status=${status.status}, keys=${keyCount}) — retrying in ${RETRY_DELAY_MS}ms`,
+            `[useDeviceSettings] Attempt ${attempt} not usable (status=${status.status}, keys=${keyCount}) — retrying in ${delay}ms`,
           );
           lastError = status.error || `Device query returned status=${status.status}`;
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
 

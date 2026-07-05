@@ -475,6 +475,7 @@ const NumberWithSlider = ({
         {icon}
         <Input
           type="number"
+          inputMode="decimal"
           value={value}
           onChange={(e) => {
             const n = parseFloat(e.target.value);
@@ -483,7 +484,7 @@ const NumberWithSlider = ({
           min={min}
           max={max}
           step={step}
-          className="h-8 font-mono text-xs sm:text-sm px-2 min-w-0"
+          className="h-8 w-full font-mono text-xs sm:text-sm px-2 min-w-0"
         />
         {unit && (
           <span className="text-[10px] text-muted-foreground min-w-[16px] shrink-0">

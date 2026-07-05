@@ -123,8 +123,9 @@ export const SettingFieldCard = ({
           appliedOk && "ring-1 ring-success/40"
         )}
       >
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-2">
+        {/* Header row — stacks on narrow phones so the sync-time label
+            doesn't eat horizontal space next to a long field name. */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-semibold text-foreground truncate">{label}</p>
@@ -136,7 +137,7 @@ export const SettingFieldCard = ({
               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{description}</p>
             )}
           </div>
-          <p className="text-xs text-muted-foreground whitespace-nowrap">{syncLabel}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{syncLabel}</p>
         </div>
 
         {/* Control */}
@@ -176,12 +177,13 @@ export const SettingFieldCard = ({
             <div className="flex items-center gap-2">
               <Input
                 type="number"
+                inputMode="decimal"
                 value={displayValue}
                 min={min !== undefined ? min * scale : undefined}
                 max={max !== undefined ? max * scale : undefined}
                 step={step * scale}
                 onChange={(e) => handleChange(e.target.value)}
-                className="w-28 font-mono bg-secondary/30 text-right"
+                className="flex-1 sm:flex-none sm:w-28 font-mono bg-secondary/30 text-right"
               />
               {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
               {scale !== 1 && (

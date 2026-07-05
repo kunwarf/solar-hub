@@ -123,18 +123,18 @@ export const SenergySettingsPage = ({
 
   return (
     <div className="space-y-4">
-      {/* Top bar */}
+      {/* Top bar — inner rows wrap so Work Mode + FW + serial don't overflow narrow phones. */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 w-full sm:w-auto">
           {/* Work mode quick-switcher */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-0">
             <span className="text-xs text-muted-foreground whitespace-nowrap">Work Mode</span>
             <Select
               value={settings.work_mode !== undefined ? String(settings.work_mode) : undefined}
               onValueChange={handleWorkModeChange}
               disabled={workModeApplying}
             >
-              <SelectTrigger className="w-40 h-8 text-xs" style={{ borderColor: ACCENT }}>
+              <SelectTrigger className="flex-1 sm:flex-none sm:w-40 h-8 text-xs" style={{ borderColor: ACCENT }}>
                 {workModeApplying ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 ) : workModeOk ? (
@@ -151,9 +151,9 @@ export const SenergySettingsPage = ({
             </Select>
           </div>
           {firmwareVersion && <span className="text-xs text-muted-foreground">FW {firmwareVersion}</span>}
-          <span className="text-xs text-muted-foreground">{deviceSerial}</span>
+          <span className="text-xs text-muted-foreground truncate">{deviceSerial}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {Object.keys(pendingChanges).length > 0 && (
             <Button size="sm" onClick={handleApplyAll} style={{ backgroundColor: ACCENT }} className="gap-2">
               <Check className="w-4 h-4" />
