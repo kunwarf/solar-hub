@@ -70,6 +70,12 @@ export function useDeviceSettings(
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
   const initializedRef = useRef(false);
+  // Track the current state values in refs so the visibilitychange effect
+  // can read them without re-subscribing on every state change.
+  const isQueryingRef = useRef(false);
+  const isDeviceOfflineRef = useRef(false);
+  useEffect(() => { isQueryingRef.current = isQuerying; }, [isQuerying]);
+  useEffect(() => { isDeviceOfflineRef.current = isDeviceOffline; }, [isDeviceOffline]);
 
   /**
    * Load settings from localStorage
@@ -422,27 +428,50 @@ export function useDeviceSettings(
   }, [deviceId, enabled]);
 
   /**
-   * Handle page visibility changes
-   * DISABLED: Automatic query on visibility change was causing unwanted refreshes
-   * User can manually refresh using the "Refresh from Device" button
+   * Handle page visibility changes — mobile-critical.
+   *
+   * On mobile, the app is backgrounded frequently and setInterval polling
+   * is throttled/paused by the browser. Without this handler, one bad
+   * initial load (cellular flap during the ~90s waitForCommand) leaves
+   * the offline banner stuck until the user taps Refresh manually.
+   *
+   * This was previously disabled because it caused burst-queries on
+   * desktop when users tab-flipped between two tabs of the same device.
+   * The staleness gate below fixes that: only re-query if the last sync
+   * is older than STALE_AFTER_MS, or the device is currently offline.
    */
-  // useEffect(() => {
-  //   if (!enabled) return;
+  useEffect(() => {
+    if (!enabled) return;
 
-  //   const handleVisibilityChange = () => {
-  //     if (document.visibilityState === 'visible') {
-  //       // Page became visible, query device immediately
-  //       queryDevice();
-  //     }
-  //   };
+    const STALE_AFTER_MS = 30_000;
 
-  //   document.addEventListener('visibilitychange', handleVisibilityChange);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
 
-  //   return () => {
-  //     document.removeEventListener('visibilitychange', handleVisibilityChange);
-  //   };
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [enabled]);
+      // Skip if we're already fetching — avoids racing the current attempt.
+      if (isQueryingRef.current) return;
+
+      const cached = loadDeviceSettings(deviceId);
+      const syncedAtIso = cached?.lastSyncedAt;
+      const isFresh =
+        syncedAtIso &&
+        Date.now() - new Date(syncedAtIso).getTime() < STALE_AFTER_MS;
+
+      // Only re-query if the data is actually stale, or we lost the device.
+      // Tab-flips between two tabs of the same device stay quiet as long as
+      // one of them synced recently.
+      if (!isFresh || isDeviceOfflineRef.current) {
+        queryDevice();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, deviceId]);
 
   /**
    * Multi-tab synchronization with BroadcastChannel
