@@ -167,7 +167,10 @@ export const SenergySettingsPage = ({
         </div>
       </div>
 
-      <div className="flex gap-4">
+      {/* Stack vertically on mobile so the tab bar sits above the pane
+          instead of stealing 100% width in a horizontal flex row (which
+          collapsed the settings pane to zero width). */}
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
         {/* Sidebar */}
         <nav className="hidden md:flex flex-col gap-1 w-44 flex-shrink-0">
           {SENERGY_SCHEMA.map((group) => {
