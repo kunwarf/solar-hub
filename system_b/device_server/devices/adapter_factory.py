@@ -909,20 +909,36 @@ class TCPCommandAdapter:
             # Step 1 — get all module summaries in one shot
             pwr_resp = await self.send_command("pwr")
             if pwr_resp:
+                # Diagnostic: dump the raw pwr text so we can see the
+                # actual column layout on this firmware. Live devices in
+                # the wild return varying column sets (some have RemainCap
+                # / TotalCap, some don't). This log lets us tune the
+                # parser without a code round-trip.
+                logger.info(
+                    "Pylontech pwr raw response (first 600 chars): %r",
+                    pwr_resp[:600],
+                )
                 parsed = _parse_pylontech_pwr(pwr_resp)
                 values.update(parsed)
 
-            # Step 2 — per-cell voltages + per-module SOH.
-            # `bat N` returns cell voltages for module N; `soh N` returns
-            # a single tabular row with SOHCount + CycleCount for that
-            # module. Both use the same per-module command pattern.
+            # Step 2 — per-cell voltages for each module.
+            # `bat N` may also carry a per-cell Coulomb column (remaining
+            # mAh) which is where capacity really lives on firmwares that
+            # don't expose it in `pwr`.
             modules = values.get("battery_units", [])
             all_cells: List[Dict[str, Any]] = []
-            now_ts = time.time()
             for unit_data in modules:
                 module_num = unit_data["unit"]
                 bat_resp = await self.send_command(f"bat {module_num}")
                 if bat_resp:
+                    # Diagnostic: dump raw bat text (once per module) so
+                    # we can see the Coulomb column layout and wire up
+                    # per-module remaining capacity from it.
+                    logger.info(
+                        "Pylontech bat %s raw response (first 400 chars): %r",
+                        module_num,
+                        bat_resp[:400],
+                    )
                     cells = _parse_pylontech_bat_cells(bat_resp, module_num)
                     all_cells.extend(cells)
                     # Derive per-module power from voltage × current
@@ -931,39 +947,34 @@ class TCPCommandAdapter:
                         * unit_data.get("current_a", 0)
                     )
 
-                # SOH: refresh once every PYTES_SOH_REFRESH_S per module
-                # and serve from cache in between. First poll after boot
-                # fires for every module since the cache is empty.
-                last_soh_ts = self._pytes_soh_last_fetch.get(module_num, 0.0)
-                if now_ts - last_soh_ts > 1800.0:
-                    soh_resp = await self.send_command(f"soh {module_num}")
-                    if soh_resp:
-                        parsed_soh = _parse_pylontech_soh(soh_resp)
-                        # `soh N` returns one tabular row for that module.
-                        # Attribute it to module_num regardless of any
-                        # G:X label the device happens to use — pwr and
-                        # soh may not agree on numbering (1-based vs
-                        # 0-based) but we asked about module_num, so we
-                        # trust that.
-                        if parsed_soh:
-                            self._pytes_soh_cache[module_num] = next(
-                                iter(parsed_soh.values())
-                            )
-                        logger.info(
-                            "Pylontech soh %s response=%r parsed=%r",
-                            module_num,
-                            soh_resp[:200],
-                            parsed_soh,
-                        )
-                    else:
-                        logger.info(
-                            "Pylontech soh %s returned no response",
-                            module_num,
-                        )
-                    # Always update the timestamp so a broken/silent
-                    # response doesn't retry every poll and swamp the bus.
-                    self._pytes_soh_last_fetch[module_num] = now_ts
+            # Step 3 — whole-stack SOH + cycle count via bare `soh` (no arg).
+            # The live console showed that `soh N` returns per-cell voltages
+            # with SOHCount=0 (an event counter, not a percentage). The bare
+            # `soh` command returns the actual per-module summary with SOH%
+            # and CycleCount. Refresh once per PYTES_SOH_REFRESH_S and fan
+            # the values back out to each unit_data.
+            now_ts = time.time()
+            # Cache key 0 == whole-stack fetch timestamp
+            last_soh_ts = self._pytes_soh_last_fetch.get(0, 0.0)
+            if now_ts - last_soh_ts > 1800.0:
+                soh_resp = await self.send_command("soh")
+                if soh_resp:
+                    parsed_soh = _parse_pylontech_soh(soh_resp)
+                    if parsed_soh:
+                        self._pytes_soh_cache = parsed_soh
+                    logger.info(
+                        "Pylontech soh (stack) response=%r parsed=%r",
+                        soh_resp[:400],
+                        parsed_soh,
+                    )
+                else:
+                    logger.info("Pylontech soh (stack) returned no response")
+                # Always update the timestamp so a broken/silent response
+                # doesn't retry every poll and swamp the bus.
+                self._pytes_soh_last_fetch[0] = now_ts
 
+            for unit_data in modules:
+                module_num = unit_data["unit"]
                 cache_entry = self._pytes_soh_cache.get(module_num)
                 if cache_entry:
                     if "soh_pct" in cache_entry:
