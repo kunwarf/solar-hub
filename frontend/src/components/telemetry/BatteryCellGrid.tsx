@@ -37,6 +37,11 @@ interface CellData {
   status: "normal" | "warning" | "critical" | "balancing";
 }
 
+interface UnitHealth {
+  status: "healthy" | "watch" | "degraded" | "critical";
+  concerns: string[];
+}
+
 interface UnitData {
   unit: number;
   voltage_v?: number;
@@ -51,6 +56,9 @@ interface UnitData {
   // do not surface this per-unit today, so both fields are optional.
   total_ah?: number;
   remaining_ah?: number;
+  // Per-module health assessment from the Pytes stat counters plus
+  // cell imbalance. Emitted by the Pytes/Pylontech text-command adapter.
+  health?: UnitHealth;
   basic_status?: string;
   has_alarm?: boolean;
   has_fault?: boolean;
@@ -477,6 +485,47 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
 
                   {/* Right-side unit stats */}
                   <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+                    {/* Health status badge — colored dot + label; hover
+                        shows the specific concerns detected. Fires only
+                        for adapters that emit health data (Pytes today). */}
+                    {u.health && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={cn(
+                              "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold border",
+                              u.health.status === "healthy" && "bg-success/10 text-success border-success/20",
+                              u.health.status === "watch" && "bg-warning/10 text-warning border-warning/20",
+                              u.health.status === "degraded" && "bg-orange-500/10 text-orange-500 border-orange-500/20",
+                              u.health.status === "critical" && "bg-destructive/10 text-destructive border-destructive/20",
+                            )}>
+                              <span className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                u.health.status === "healthy" && "bg-success",
+                                u.health.status === "watch" && "bg-warning",
+                                u.health.status === "degraded" && "bg-orange-500",
+                                u.health.status === "critical" && "bg-destructive",
+                              )} />
+                              {u.health.status.charAt(0).toUpperCase() + u.health.status.slice(1)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            {u.health.concerns.length === 0 ? (
+                              <p className="text-xs">No issues detected.</p>
+                            ) : (
+                              <div className="space-y-1">
+                                <p className="text-xs font-semibold">Health concerns:</p>
+                                <ul className="text-xs space-y-0.5 list-disc list-inside">
+                                  {u.health.concerns.map((c, i) => (
+                                    <li key={i}>{c}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     {/* Charge / Discharge badge */}
                     {u.current_a != null && (
                       <span className={cn(
