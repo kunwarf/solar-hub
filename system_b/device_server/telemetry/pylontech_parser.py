@@ -39,13 +39,15 @@ class PylontechParser(TelemetryParser):
     # Per-unit metric mappings: unit_dict_key -> (metric_name_template, unit, category)
     # metric_name_template uses {unit} as placeholder for unit number (1-indexed)
     UNIT_METRIC_MAPPINGS: List[tuple] = [
-        ("voltage_v",   ("battery_unit_{unit}_voltage_v",  "V", "battery_unit")),
-        ("current_a",   ("battery_unit_{unit}_current_a",  "A", "battery_unit")),
-        ("power_w",     ("battery_unit_{unit}_power_w",    "W", "battery_unit")),
-        ("soc_pct",     ("battery_unit_{unit}_soc_pct",    "%", "battery_unit")),
-        ("temp_c",      ("battery_unit_{unit}_temp_c",     "C", "battery_unit")),
-        ("soh_pct",     ("battery_unit_{unit}_soh_pct",    "%", "battery_unit")),
-        ("cycle_count", ("battery_unit_{unit}_cycles",     "",  "battery_unit")),
+        ("voltage_v",   ("battery_unit_{unit}_voltage_v",  "V",  "battery_unit")),
+        ("current_a",   ("battery_unit_{unit}_current_a",  "A",  "battery_unit")),
+        ("power_w",     ("battery_unit_{unit}_power_w",    "W",  "battery_unit")),
+        ("soc_pct",     ("battery_unit_{unit}_soc_pct",    "%",  "battery_unit")),
+        ("temp_c",      ("battery_unit_{unit}_temp_c",     "C",  "battery_unit")),
+        ("soh_pct",     ("battery_unit_{unit}_soh_pct",    "%",  "battery_unit")),
+        ("cycle_count", ("battery_unit_{unit}_cycles",     "",   "battery_unit")),
+        ("total_ah",    ("battery_unit_{unit}_total_ah",   "Ah", "battery_unit")),
+        ("remaining_ah",("battery_unit_{unit}_remaining_ah","Ah","battery_unit")),
     ]
 
     def parse(

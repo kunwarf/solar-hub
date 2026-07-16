@@ -8,7 +8,9 @@ import asyncio
 import importlib
 import json
 import logging
+import re
 import struct
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
@@ -521,6 +523,12 @@ class TCPCommandAdapter:
         # Counter used to poll QPIWS/QPIRI at reduced frequency.
         self._voltronic_poll_count: int = 0
 
+        # Pytes/Pylontech: per-module SOH cache. SOH changes very slowly
+        # (weeks/months) so we don't hit the `soh N` console command every
+        # poll — refresh once per PYTES_SOH_REFRESH_S. Map: module_num -> soh_pct.
+        self._pytes_soh_cache: Dict[int, float] = {}
+        self._pytes_soh_last_fetch: Dict[int, float] = {}
+
     async def _keepalive_loop(self) -> None:
         """
         Respond to PING frames from the ESP32 during idle periods between polls.
@@ -906,6 +914,7 @@ class TCPCommandAdapter:
             # bat N uses space-separated format: "bat 1", "bat 2", ...
             modules = values.get("battery_units", [])
             all_cells: List[Dict[str, Any]] = []
+            now_ts = time.time()
             for unit_data in modules:
                 module_num = unit_data["unit"]
                 bat_resp = await self.send_command(f"bat {module_num}")
@@ -917,6 +926,23 @@ class TCPCommandAdapter:
                         unit_data.get("voltage_v", 0)
                         * unit_data.get("current_a", 0)
                     )
+
+                # Step 3 — per-module SOH. Very slow-moving metric so poll
+                # once every PYTES_SOH_REFRESH_S (30 min) per module and
+                # serve from cache in between. First poll after boot fires
+                # for every module since the cache is empty.
+                last_soh_ts = self._pytes_soh_last_fetch.get(module_num, 0.0)
+                if now_ts - last_soh_ts > 1800.0:
+                    soh_resp = await self.send_command(f"soh {module_num}")
+                    if soh_resp:
+                        soh_val = _parse_pylontech_soh(soh_resp)
+                        if soh_val is not None:
+                            self._pytes_soh_cache[module_num] = soh_val
+                    # Mark timestamp regardless — a no-response device
+                    # shouldn't retry on every poll and swamp the console.
+                    self._pytes_soh_last_fetch[module_num] = now_ts
+                if module_num in self._pytes_soh_cache:
+                    unit_data["soh_pct"] = self._pytes_soh_cache[module_num]
 
             if all_cells:
                 values["battery_cells"] = all_cells
@@ -1236,17 +1262,23 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
 
         # SOC: new firmware encodes as "81%" somewhere in cols 8+
         # Old firmware has a plain integer at col 10.
+        # Track the SOC column index so the capacity heuristic below can
+        # anchor on it (RemainCap and TotalCap live immediately before
+        # SOC on firmware that exposes them).
         soc_pct = None
+        soc_col_idx: Optional[int] = None
         for i in range(8, min(len(parts), 20)):
             if parts[i].endswith('%'):
                 try:
                     soc_pct = int(parts[i].rstrip('%'))
+                    soc_col_idx = i
                     break
                 except ValueError:
                     pass
         if soc_pct is None and len(parts) > 10:
             try:
                 soc_pct = int(parts[10])  # old format: plain SOC integer
+                soc_col_idx = 10
             except (ValueError, IndexError):
                 pass
 
@@ -1261,6 +1293,27 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
         }
         if soc_pct is not None:
             unit_data["soc_pct"] = soc_pct
+
+        # Heuristic capacity extraction. Newer Pylontech / Pytes firmware
+        # exposes ``RemainCap (mAh)`` and ``TotalCap (mAh)`` columns
+        # immediately before the SOC column on each ``pwr`` row. Anchor
+        # on the SOC column index so we don't accidentally match earlier
+        # mV columns (e.g. BaseVolt=48000) that share the same numeric
+        # magnitude as capacity in mAh. Silently skip if the columns
+        # aren't present (older firmware).
+        if soc_col_idx is not None and soc_col_idx >= 6:
+            try:
+                cap_a = int(parts[soc_col_idx - 2])  # RemainCap (mAh)
+                cap_b = int(parts[soc_col_idx - 1])  # TotalCap (mAh)
+                if (
+                    1_000 <= cap_a <= 500_000
+                    and 1_000 <= cap_b <= 500_000
+                    and cap_b >= cap_a
+                ):
+                    unit_data["remaining_ah"] = round(cap_a / 1000.0, 2)
+                    unit_data["total_ah"] = round(cap_b / 1000.0, 2)
+            except (ValueError, IndexError):
+                pass
         units.append(unit_data)
 
     if not units:
@@ -1287,6 +1340,33 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
         result["battery_soc_pct"] = min(socs)
 
     return result
+
+
+_PYTES_SOH_PCT_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*%")
+
+
+def _parse_pylontech_soh(soh_text: str) -> Optional[float]:
+    """
+    Parse Pylontech / Pytes ``soh N`` command response.
+
+    Firmware output varies but always includes a percentage value
+    somewhere (e.g. ``Module 1 SOH: 92%`` or bare ``92%``). We take
+    the first plausible percentage (0-100) as the SOH.
+
+    Args:
+        soh_text: Raw response string from ``soh N``.
+
+    Returns:
+        SOH percentage as float, or None if no plausible value found.
+    """
+    for match in _PYTES_SOH_PCT_RE.finditer(soh_text):
+        try:
+            val = float(match.group(1))
+        except (ValueError, IndexError):
+            continue
+        if 0.0 <= val <= 100.0:
+            return round(val, 1)
+    return None
 
 
 def _parse_pylontech_bat_cells(
