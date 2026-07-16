@@ -24,6 +24,7 @@ import Devices from "./pages/Devices";
 import DeviceDetails from "./pages/DeviceDetails";
 import DeviceSettings from "./pages/DeviceSettings";
 import DeviceSettingsHybrid from "./pages/DeviceSettingsHybrid";
+import BatteryUnitDetail from "./pages/BatteryUnitDetail";
 import DeviceManagement from "./pages/DeviceManagement";
 import Telemetry from "./pages/Telemetry";
 import SmartScheduler from "./pages/SmartScheduler";
@@ -94,6 +95,7 @@ const App = () => (
                               <Route path="/devices/manage" element={<ProtectedRoute><DeviceManagement /></ProtectedRoute>} />
                               <Route path="/devices/:deviceId" element={<ProtectedRoute><DeviceDetails /></ProtectedRoute>} />
                               <Route path="/devices/:deviceId/settings" element={<ProtectedRoute><DeviceSettingsHybrid /></ProtectedRoute>} />
+                              <Route path="/devices/:deviceId/battery/unit/:unitNum" element={<ProtectedRoute><BatteryUnitDetail /></ProtectedRoute>} />
                               <Route path="/telemetry" element={<ProtectedRoute><Telemetry /></ProtectedRoute>} />
                               <Route path="/scheduler" element={<ProtectedRoute><SmartScheduler /></ProtectedRoute>} />
                               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

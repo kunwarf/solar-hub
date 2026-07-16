@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Thermometer, Zap, Battery, Activity, AlertTriangle, TrendingUp, TrendingDown, BatteryFull } from "lucide-react";
@@ -310,6 +311,7 @@ const PackStats = ({ cells }: { cells: CellData[] }) => {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
+  const navigate = useNavigate();
   // ── SOC history for chart (accumulate last 24 points) ──────────────────────
   const [socHistory, setSocHistory] = useState<
     { time: string; soc: number; power: number; temperature: number }[]
@@ -485,20 +487,30 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
 
                   {/* Right-side unit stats */}
                   <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
-                    {/* Health status badge — colored dot + label; hover
-                        shows the specific concerns detected. Fires only
-                        for adapters that emit health data (Pytes today). */}
-                    {u.health && (
+                    {/* Health status badge — colored dot + label. Click
+                        opens the full module detail page. Hover shows the
+                        specific concerns detected. Fires only for
+                        adapters that emit health data (Pytes today). */}
+                    {u.health && device?.id && (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className={cn(
-                              "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold border",
-                              u.health.status === "healthy" && "bg-success/10 text-success border-success/20",
-                              u.health.status === "watch" && "bg-warning/10 text-warning border-warning/20",
-                              u.health.status === "degraded" && "bg-orange-500/10 text-orange-500 border-orange-500/20",
-                              u.health.status === "critical" && "bg-destructive/10 text-destructive border-destructive/20",
-                            )}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(
+                                  `/devices/${device.id}/battery/unit/${u.unit}`,
+                                )
+                              }
+                              className={cn(
+                                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold border transition-all hover:brightness-110 cursor-pointer",
+                                u.health.status === "healthy" && "bg-success/10 text-success border-success/20",
+                                u.health.status === "watch" && "bg-warning/10 text-warning border-warning/20",
+                                u.health.status === "degraded" && "bg-orange-500/10 text-orange-500 border-orange-500/20",
+                                u.health.status === "critical" && "bg-destructive/10 text-destructive border-destructive/20",
+                              )}
+                              aria-label={`View unit ${u.unit} details`}
+                            >
                               <span className={cn(
                                 "w-1.5 h-1.5 rounded-full",
                                 u.health.status === "healthy" && "bg-success",
@@ -507,14 +519,21 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                                 u.health.status === "critical" && "bg-destructive",
                               )} />
                               {u.health.status.charAt(0).toUpperCase() + u.health.status.slice(1)}
-                            </span>
+                            </button>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs">
                             {u.health.concerns.length === 0 ? (
-                              <p className="text-xs">No issues detected.</p>
+                              <p className="text-xs">
+                                No issues detected.{" "}
+                                <span className="opacity-70">
+                                  Click for full details.
+                                </span>
+                              </p>
                             ) : (
                               <div className="space-y-1">
-                                <p className="text-xs font-semibold">Health concerns:</p>
+                                <p className="text-xs font-semibold">
+                                  Health concerns (click for details):
+                                </p>
                                 <ul className="text-xs space-y-0.5 list-disc list-inside">
                                   {u.health.concerns.map((c, i) => (
                                     <li key={i}>{c}</li>
