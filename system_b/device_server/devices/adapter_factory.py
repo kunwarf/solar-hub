@@ -523,13 +523,13 @@ class TCPCommandAdapter:
         # Counter used to poll QPIWS/QPIRI at reduced frequency.
         self._voltronic_poll_count: int = 0
 
-        # Pytes/Pylontech: whole-stack SOH cache. SOH changes very slowly
-        # (weeks/months) so we don't hit the `soh` console command every
-        # poll — refresh once per PYTES_SOH_REFRESH_S. Map is populated
-        # from a single ``soh`` call which returns one row per module:
+        # Pytes/Pylontech: per-module SOH cache. SOH changes very slowly
+        # (weeks/months) so the `soh N` console command is called at most
+        # once every PYTES_SOH_REFRESH_S per module and the result is
+        # served from the cache in between. Each entry:
         #   {module_num: {"soh_pct": float, "cycle_count": int?}}
         self._pytes_soh_cache: Dict[int, Dict[str, float]] = {}
-        self._pytes_soh_last_fetch_ts: float = 0.0
+        self._pytes_soh_last_fetch: Dict[int, float] = {}
 
     async def _keepalive_loop(self) -> None:
         """
@@ -912,10 +912,13 @@ class TCPCommandAdapter:
                 parsed = _parse_pylontech_pwr(pwr_resp)
                 values.update(parsed)
 
-            # Step 2 — per-cell voltages for each module in the stack
-            # bat N uses space-separated format: "bat 1", "bat 2", ...
+            # Step 2 — per-cell voltages + per-module SOH.
+            # `bat N` returns cell voltages for module N; `soh N` returns
+            # a single tabular row with SOHCount + CycleCount for that
+            # module. Both use the same per-module command pattern.
             modules = values.get("battery_units", [])
             all_cells: List[Dict[str, Any]] = []
+            now_ts = time.time()
             for unit_data in modules:
                 module_num = unit_data["unit"]
                 bat_resp = await self.send_command(f"bat {module_num}")
@@ -928,33 +931,34 @@ class TCPCommandAdapter:
                         * unit_data.get("current_a", 0)
                     )
 
-            # Step 3 — SOH + cycle count for the whole stack in one call.
-            # The `soh` command (no arg) returns one row per module on
-            # Pytes firmware, so we refresh the cache ~every 30 min and
-            # then fan the values back out to each unit_data below.
-            now_ts = time.time()
-            if now_ts - self._pytes_soh_last_fetch_ts > 1800.0:
-                soh_resp = await self.send_command("soh")
-                if soh_resp:
-                    parsed_soh = _parse_pylontech_soh(soh_resp)
-                    if parsed_soh:
-                        self._pytes_soh_cache = parsed_soh
-                # Update the timestamp regardless — a silent/malformed
-                # response shouldn't retry on every poll and swamp the
-                # RS485 console.
-                self._pytes_soh_last_fetch_ts = now_ts
+                # SOH: refresh once every PYTES_SOH_REFRESH_S per module
+                # and serve from cache in between. First poll after boot
+                # fires for every module since the cache is empty.
+                last_soh_ts = self._pytes_soh_last_fetch.get(module_num, 0.0)
+                if now_ts - last_soh_ts > 1800.0:
+                    soh_resp = await self.send_command(f"soh {module_num}")
+                    if soh_resp:
+                        parsed_soh = _parse_pylontech_soh(soh_resp)
+                        # `soh N` returns one tabular row for that module.
+                        # Attribute it to module_num regardless of any
+                        # G:X label the device happens to use — pwr and
+                        # soh may not agree on numbering (1-based vs
+                        # 0-based) but we asked about module_num, so we
+                        # trust that.
+                        if parsed_soh:
+                            self._pytes_soh_cache[module_num] = next(
+                                iter(parsed_soh.values())
+                            )
+                    # Always update the timestamp so a broken/silent
+                    # response doesn't retry every poll and swamp the bus.
+                    self._pytes_soh_last_fetch[module_num] = now_ts
 
-            for unit_data in modules:
-                module_num = unit_data["unit"]
-                entry = self._pytes_soh_cache.get(module_num)
-                if not entry:
-                    continue
-                if "soh_pct" in entry:
-                    unit_data["soh_pct"] = entry["soh_pct"]
-                # Prefer cycle_count from soh (authoritative) over any
-                # value that happened to come from pwr / bat.
-                if "cycle_count" in entry:
-                    unit_data["cycle_count"] = entry["cycle_count"]
+                cache_entry = self._pytes_soh_cache.get(module_num)
+                if cache_entry:
+                    if "soh_pct" in cache_entry:
+                        unit_data["soh_pct"] = cache_entry["soh_pct"]
+                    if "cycle_count" in cache_entry:
+                        unit_data["cycle_count"] = cache_entry["cycle_count"]
 
             if all_cells:
                 values["battery_cells"] = all_cells
