@@ -530,11 +530,16 @@ class TCPCommandAdapter:
         #   {module_num: {"soh_pct": float, "cycle_count": int?}}
         self._pytes_soh_cache: Dict[int, Dict[str, float]] = {}
         self._pytes_soh_last_fetch: Dict[int, float] = {}
-        # Pytes/Pylontech: one-shot diagnostic flag. When False, the next
-        # poll runs bare `stat` + per-module `stat N` and logs raw output
-        # so we can see whether SOH/cycles live there. Flipped to True
-        # after the dump fires once per adapter lifetime.
-        self._pytes_stat_logged: bool = False
+        # Pytes/Pylontech: cache of per-module rated capacity + model from
+        # `info N`. Refreshed rarely — capacity is truly static per unit.
+        #   {module_num: {"rated_ah": float, "model": str, "cell_count": int}}
+        self._pytes_info_cache: Dict[int, Dict[str, Any]] = {}
+        self._pytes_info_last_fetch: Dict[int, float] = {}
+        # Pytes/Pylontech: cache of per-module SOH + cycle count parsed
+        # from `stat N`. Refreshed every 30 min per module.
+        #   {module_num: {"soh_pct": float, "cycle_count": int, ...}}
+        self._pytes_stat_cache: Dict[int, Dict[str, Any]] = {}
+        self._pytes_stat_last_fetch: Dict[int, float] = {}
 
     async def _keepalive_loop(self) -> None:
         """
@@ -917,64 +922,75 @@ class TCPCommandAdapter:
                 parsed = _parse_pylontech_pwr(pwr_resp)
                 values.update(parsed)
 
-            # Step 2 — per-cell voltages + per-module capacity from `bat N`.
-            # The `bat N` response is the canonical source for remaining
-            # capacity on this firmware: each cell row carries a Coulomb
-            # column in mAh. All cells in a series module share the same
-            # coulomb count so the module summary uses the median.
-            # `pwr` doesn't carry absolute capacity on this firmware and
-            # `soh` doesn't carry SOH%/CycleCount, so both are skipped.
+            # Step 2 — per-cell voltages from `bat N`, plus per-module
+            # health metrics from `stat N` and `info N`.
+            #
+            # Sources on this firmware (verified via live console output):
+            #   - `info N` → Specification field ("48V/100AH") gives the
+            #     rated capacity in Ah per module. Static — cached 24 h.
+            #   - `stat N` → "SOH" (0-100) and "CYCLE Times" fields give
+            #     per-module SOH% and cycle count. Cached 30 min.
+            #   - Remaining Ah is computed as ``rated_ah × soc_pct / 100``
+            #     which tracks the BMS-reported SOC and avoids the drift
+            #     seen when averaging per-cell coulomb counts.
             modules = values.get("battery_units", [])
             all_cells: List[Dict[str, Any]] = []
+            now_ts = time.time()
             for unit_data in modules:
                 module_num = unit_data["unit"]
                 bat_resp = await self.send_command(f"bat {module_num}")
-                if not bat_resp:
-                    continue
-                cells = _parse_pylontech_bat_cells(bat_resp, module_num)
-                all_cells.extend(cells)
-                # Derive per-module power from voltage × current
-                unit_data["power_w"] = (
-                    unit_data.get("voltage_v", 0)
-                    * unit_data.get("current_a", 0)
-                )
-                # Per-module capacity from Coulomb column
-                summary = _parse_pylontech_bat_summary(bat_resp)
-                if "remaining_ah" in summary:
-                    unit_data["remaining_ah"] = summary["remaining_ah"]
-                if "total_ah" in summary:
-                    unit_data["total_ah"] = summary["total_ah"]
+                if bat_resp:
+                    cells = _parse_pylontech_bat_cells(bat_resp, module_num)
+                    all_cells.extend(cells)
+                    # Derive per-module power from voltage × current
+                    unit_data["power_w"] = (
+                        unit_data.get("voltage_v", 0)
+                        * unit_data.get("current_a", 0)
+                    )
+
+                # `info N`: refresh at most once per 24 h. Capacity spec
+                # doesn't change; hitting the console every poll is waste.
+                last_info_ts = self._pytes_info_last_fetch.get(module_num, 0.0)
+                if now_ts - last_info_ts > 86400.0:
+                    info_resp = await self.send_command(f"info {module_num}")
+                    if info_resp:
+                        parsed_info = _parse_pylontech_info(info_resp)
+                        if parsed_info:
+                            self._pytes_info_cache[module_num] = parsed_info
+                    self._pytes_info_last_fetch[module_num] = now_ts
+
+                # `stat N`: refresh every 30 min per module. SOH and cycle
+                # count move on the scale of weeks, no need to poll faster.
+                last_stat_ts = self._pytes_stat_last_fetch.get(module_num, 0.0)
+                if now_ts - last_stat_ts > 1800.0:
+                    stat_resp = await self.send_command(f"stat {module_num}")
+                    if stat_resp:
+                        parsed_stat = _parse_pylontech_stat(stat_resp)
+                        if parsed_stat:
+                            self._pytes_stat_cache[module_num] = parsed_stat
+                    self._pytes_stat_last_fetch[module_num] = now_ts
+
+                # Apply cached info + stat to this unit's data
+                info = self._pytes_info_cache.get(module_num, {})
+                stat = self._pytes_stat_cache.get(module_num, {})
+
+                rated_ah = info.get("rated_ah")
+                if rated_ah is not None:
+                    unit_data["total_ah"] = float(rated_ah)
+                    # Compute remaining from BMS-reported SOC.
+                    soc = unit_data.get("soc_pct")
+                    if soc is not None and 0 <= soc <= 100:
+                        unit_data["remaining_ah"] = round(
+                            float(rated_ah) * float(soc) / 100.0, 2
+                        )
+
+                if "soh_pct" in stat:
+                    unit_data["soh_pct"] = stat["soh_pct"]
+                if "cycle_count" in stat:
+                    unit_data["cycle_count"] = stat["cycle_count"]
 
             if all_cells:
                 values["battery_cells"] = all_cells
-
-            # One-shot diagnostic: dump `help`, `stat`, `stat N`, `data`,
-            # `data N`, `info`, `info N` so we can see everything this
-            # firmware exposes. Fires once per adapter lifetime (i.e.
-            # per boot / reconnect) then goes quiet. Long log lines
-            # (up to 2500 chars) so the full response is captured rather
-            # than truncated at the tail where SOH/capacity might live.
-            if not self._pytes_stat_logged and modules:
-                try:
-                    for cmd in ("help", "stat", "data", "info"):
-                        resp = await self.send_command(cmd)
-                        logger.info(
-                            "Pylontech %s (bare) raw response: %r",
-                            cmd,
-                            (resp or "")[:2500],
-                        )
-                    for unit_data in modules:
-                        module_num = unit_data["unit"]
-                        for cmd_base in ("stat", "data", "info"):
-                            resp = await self.send_command(f"{cmd_base} {module_num}")
-                            logger.info(
-                                "Pylontech %s %s raw response: %r",
-                                cmd_base,
-                                module_num,
-                                (resp or "")[:2500],
-                            )
-                finally:
-                    self._pytes_stat_logged = True
 
             logger.debug(
                 f"Pylontech stack: {len(modules)} module(s), "
@@ -1403,6 +1419,96 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
 
 
 _PYTES_SOH_PCT_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*%")
+_PYTES_SPEC_AH_RE = re.compile(r"(\d+(?:\.\d+)?)\s*A[Hh]")
+
+
+def _parse_pylontech_stat(stat_text: str) -> Dict[str, Any]:
+    """
+    Parse a Pylontech ``stat`` / ``stat N`` response.
+
+    The response is a ``Key : Value`` block containing event counters
+    plus a few useful health metrics buried near the end::
+
+        CYCLE Times     :      169
+        SOH             :       99
+        Pwr Percent     :      100
+        LifeWarn Times  :        0
+        LifeAlarm Times :        0
+
+    Only extracts the metrics that map onto per-unit UI fields:
+
+        soh_pct         from ``SOH``
+        cycle_count     from ``CYCLE Times``
+        life_warn       from ``LifeWarn Times``     (diagnostic)
+        life_alarm      from ``LifeAlarm Times``    (diagnostic)
+
+    Returns empty dict if the response is empty or unrecognisable.
+    """
+    result: Dict[str, Any] = {}
+    for line in stat_text.splitlines():
+        line = line.strip()
+        if ':' not in line:
+            continue
+        key, _, value = line.partition(':')
+        key = key.strip().rstrip('.')
+        value = value.strip()
+        try:
+            num = int(value)
+        except ValueError:
+            continue
+        if key == 'SOH':
+            if 0 <= num <= 100:
+                result['soh_pct'] = float(num)
+        elif key == 'CYCLE Times':
+            if num >= 0:
+                result['cycle_count'] = num
+        elif key == 'LifeWarn Times':
+            if num >= 0:
+                result['life_warn'] = num
+        elif key == 'LifeAlarm Times':
+            if num >= 0:
+                result['life_alarm'] = num
+    return result
+
+
+def _parse_pylontech_info(info_text: str) -> Dict[str, Any]:
+    """
+    Parse a Pylontech ``info`` / ``info N`` response.
+
+    Returns dict with any of the following keys that could be parsed:
+
+        rated_ah    float, from ``Specification : 48V/100AH``
+        model       str,   from ``Device name``
+        cell_count  int,   from ``Cell Number``
+    """
+    result: Dict[str, Any] = {}
+    for line in info_text.splitlines():
+        line = line.strip()
+        if ':' not in line:
+            continue
+        key, _, value = line.partition(':')
+        key = key.strip()
+        value = value.strip()
+        if key == 'Specification':
+            match = _PYTES_SPEC_AH_RE.search(value)
+            if match:
+                try:
+                    ah = float(match.group(1))
+                    if 0 < ah <= 5000:
+                        result['rated_ah'] = ah
+                except ValueError:
+                    pass
+        elif key == 'Device name':
+            if value:
+                result['model'] = value
+        elif key == 'Cell Number':
+            try:
+                cells = int(value)
+                if cells > 0:
+                    result['cell_count'] = cells
+            except ValueError:
+                pass
+    return result
 
 
 def _parse_pylontech_soh(soh_text: str) -> Dict[int, Dict[str, float]]:
