@@ -948,25 +948,31 @@ class TCPCommandAdapter:
             if all_cells:
                 values["battery_cells"] = all_cells
 
-            # One-shot diagnostic: dump `stat` and per-module `stat N` so
-            # we can see whether this firmware exposes SOH% / CycleCount
-            # / rated capacity there. Fires once per adapter lifetime
-            # (i.e. per boot / reconnect) then goes quiet.
+            # One-shot diagnostic: dump `help`, `stat`, `stat N`, `data`,
+            # `data N`, `info`, `info N` so we can see everything this
+            # firmware exposes. Fires once per adapter lifetime (i.e.
+            # per boot / reconnect) then goes quiet. Long log lines
+            # (up to 2500 chars) so the full response is captured rather
+            # than truncated at the tail where SOH/capacity might live.
             if not self._pytes_stat_logged and modules:
                 try:
-                    stat_resp = await self.send_command("stat")
-                    logger.info(
-                        "Pylontech stat (bare) raw response: %r",
-                        (stat_resp or "")[:800],
-                    )
+                    for cmd in ("help", "stat", "data", "info"):
+                        resp = await self.send_command(cmd)
+                        logger.info(
+                            "Pylontech %s (bare) raw response: %r",
+                            cmd,
+                            (resp or "")[:2500],
+                        )
                     for unit_data in modules:
                         module_num = unit_data["unit"]
-                        stat_n_resp = await self.send_command(f"stat {module_num}")
-                        logger.info(
-                            "Pylontech stat %s raw response: %r",
-                            module_num,
-                            (stat_n_resp or "")[:800],
-                        )
+                        for cmd_base in ("stat", "data", "info"):
+                            resp = await self.send_command(f"{cmd_base} {module_num}")
+                            logger.info(
+                                "Pylontech %s %s raw response: %r",
+                                cmd_base,
+                                module_num,
+                                (resp or "")[:2500],
+                            )
                 finally:
                     self._pytes_stat_logged = True
 
