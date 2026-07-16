@@ -989,6 +989,20 @@ class TCPCommandAdapter:
                 if "cycle_count" in stat:
                     unit_data["cycle_count"] = stat["cycle_count"]
 
+                # Per-module health assessment — combines stat counters
+                # with cell-voltage imbalance to produce a status verdict
+                # and a list of specific concerns for the UI.
+                module_cell_mv: List[int] = []
+                if bat_resp:
+                    for cell_row in cells:
+                        v = cell_row.get("voltage_v")
+                        if v is not None:
+                            module_cell_mv.append(int(v * 1000))
+                if stat or module_cell_mv:
+                    unit_data["health"] = _assess_pytes_module_health(
+                        stat, module_cell_mv
+                    )
+
             if all_cells:
                 values["battery_cells"] = all_cells
 
@@ -1427,23 +1441,52 @@ def _parse_pylontech_stat(stat_text: str) -> Dict[str, Any]:
     Parse a Pylontech ``stat`` / ``stat N`` response.
 
     The response is a ``Key : Value`` block containing event counters
-    plus a few useful health metrics buried near the end::
+    and a few direct health metrics. We extract the fields that either
+    map to per-unit UI values or feed the health assessor below:
 
-        CYCLE Times     :      169
-        SOH             :       99
-        Pwr Percent     :      100
-        LifeWarn Times  :        0
-        LifeAlarm Times :        0
+        soh_pct        from ``SOH``
+        cycle_count    from ``CYCLE Times``
+        life_warn      from ``LifeWarn Times``
+        life_alarm     from ``LifeAlarm Times``
+        soh_events     from ``SOH Times``          (BMS-detected SOH drops)
+        sc_times       from ``SC Times``           (short circuit)
+        bat_uv_times   from ``Bat UV Times``       (deep discharge)
+        bat_ov_times   from ``Bat OV Times``       (over-voltage)
+        bat_hv_times   from ``Bat HV Times``       (high voltage — end of charge, high count is normal)
+        bat_lv_times   from ``Bat LV Times``
+        doc_times      from ``DOC Times``          (discharge over-current)
+        doc2_times     from ``DOC2 Times``
+        coc_times      from ``COC Times``          (charge over-current)
+        coc2_times     from ``COC2 Times``
+        coca_times     from ``COCA Times``         (charge over-current alarm)
+        doca_times     from ``DOCA Times``         (discharge over-current alarm)
+        reset_count    from ``Reset Times``
+        shut_count     from ``Shut Times``
 
-    Only extracts the metrics that map onto per-unit UI fields:
-
-        soh_pct         from ``SOH``
-        cycle_count     from ``CYCLE Times``
-        life_warn       from ``LifeWarn Times``     (diagnostic)
-        life_alarm      from ``LifeAlarm Times``    (diagnostic)
-
-    Returns empty dict if the response is empty or unrecognisable.
+    Returns empty dict on unrecognisable output.
     """
+    # Map "Key" (case-sensitive, trailing '.' stripped) → destination field
+    STAT_KEY_MAP: Dict[str, str] = {
+        "SOH":              "soh_pct",
+        "CYCLE Times":      "cycle_count",
+        "LifeWarn Times":   "life_warn",
+        "LifeAlarm Times":  "life_alarm",
+        "SOH Times":        "soh_events",
+        "SC Times":         "sc_times",
+        "Bat UV Times":     "bat_uv_times",
+        "Bat OV Times":     "bat_ov_times",
+        "Bat HV Times":     "bat_hv_times",
+        "Bat LV Times":     "bat_lv_times",
+        "DOC Times":        "doc_times",
+        "DOC2 Times":       "doc2_times",
+        "COC Times":        "coc_times",
+        "COC2 Times":       "coc2_times",
+        "COCA Times":       "coca_times",
+        "DOCA Times":       "doca_times",
+        "Reset Times":      "reset_count",
+        "Shut Times":       "shut_count",
+    }
+
     result: Dict[str, Any] = {}
     for line in stat_text.splitlines():
         line = line.strip()
@@ -1456,19 +1499,144 @@ def _parse_pylontech_stat(stat_text: str) -> Dict[str, Any]:
             num = int(value)
         except ValueError:
             continue
-        if key == 'SOH':
+        if num < 0:
+            continue
+        field = STAT_KEY_MAP.get(key)
+        if not field:
+            continue
+        if field == "soh_pct":
             if 0 <= num <= 100:
-                result['soh_pct'] = float(num)
-        elif key == 'CYCLE Times':
-            if num >= 0:
-                result['cycle_count'] = num
-        elif key == 'LifeWarn Times':
-            if num >= 0:
-                result['life_warn'] = num
-        elif key == 'LifeAlarm Times':
-            if num >= 0:
-                result['life_alarm'] = num
+                result[field] = float(num)
+        else:
+            result[field] = num
     return result
+
+
+def _assess_pytes_module_health(
+    stat: Dict[str, Any],
+    cell_voltages_mv: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Turn raw stat counters + cell voltages into a human-friendly per-
+    module health verdict.
+
+    Returns ``{"status": "healthy" | "watch" | "degraded" | "critical",
+                "concerns": ["...", ...]}``.
+
+    Absolute thresholds are calibrated against a known-good vs known-
+    degraded module in this deployment:
+      * healthy module: SOH≈99, LifeWarn=0, SOH Times=0, SC Times=0
+      * degraded module: SOH=0, LifeWarn=227, SOH Times=1111, SC=28
+
+    Cell imbalance thresholds are standard LiFePO4 rules of thumb
+    (>50 mV = watch, >150 mV = critical).
+    """
+    concerns: List[str] = []
+    status = "healthy"
+
+    def bump(new_status: str) -> None:
+        # Escalate but never de-escalate.
+        nonlocal status
+        order = {"healthy": 0, "watch": 1, "degraded": 2, "critical": 3}
+        if order[new_status] > order[status]:
+            status = new_status
+
+    soh = stat.get("soh_pct")
+    if soh is not None:
+        if soh == 0:
+            concerns.append("SOH reset to 0% — BMS may need recalibration or module is failing")
+            bump("critical")
+        elif soh < 50:
+            concerns.append(f"SOH low: {soh:.0f}% (below 50% is end-of-life)")
+            bump("critical")
+        elif soh < 80:
+            concerns.append(f"SOH degraded: {soh:.0f}%")
+            bump("degraded")
+        elif soh < 90:
+            concerns.append(f"SOH watch: {soh:.0f}%")
+            bump("watch")
+
+    life_alarm = stat.get("life_alarm", 0)
+    if life_alarm > 0:
+        concerns.append(f"{life_alarm} life-alarm event(s)")
+        bump("critical")
+
+    life_warn = stat.get("life_warn", 0)
+    if life_warn > 50:
+        concerns.append(f"{life_warn} life-warning events")
+        bump("degraded")
+    elif life_warn > 0:
+        concerns.append(f"{life_warn} life-warning event(s)")
+        bump("watch")
+
+    soh_events = stat.get("soh_events", 0)
+    if soh_events > 100:
+        concerns.append(f"{soh_events} SOH-drop events recorded")
+        bump("degraded")
+    elif soh_events > 0:
+        concerns.append(f"{soh_events} SOH-drop event(s)")
+        bump("watch")
+
+    sc = stat.get("sc_times", 0)
+    if sc > 0:
+        concerns.append(f"{sc} short-circuit event(s)")
+        bump("critical")
+
+    bat_uv = stat.get("bat_uv_times", 0)
+    if bat_uv > 0:
+        concerns.append(f"{bat_uv} under-voltage event(s) — deep discharge risk")
+        bump("degraded")
+
+    bat_ov = stat.get("bat_ov_times", 0)
+    if bat_ov > 20:
+        concerns.append(f"{bat_ov} over-voltage events — overcharge stress")
+        bump("degraded")
+    elif bat_ov > 0:
+        concerns.append(f"{bat_ov} over-voltage event(s)")
+        bump("watch")
+
+    coc = stat.get("coc_times", 0) + stat.get("coc2_times", 0)
+    doc = stat.get("doc_times", 0) + stat.get("doc2_times", 0)
+    if coc > 0:
+        concerns.append(f"{coc} charge over-current event(s)")
+        bump("watch")
+    if doc > 20:
+        concerns.append(f"{doc} discharge over-current events")
+        bump("degraded")
+    elif doc > 0:
+        concerns.append(f"{doc} discharge over-current event(s)")
+        bump("watch")
+
+    coca = stat.get("coca_times", 0) + stat.get("doca_times", 0)
+    if coca > 100:
+        concerns.append(f"{coca} over-current alarm event(s)")
+        bump("degraded")
+
+    reset = stat.get("reset_count", 0)
+    if reset > 100:
+        concerns.append(f"{reset} BMS resets — unstable")
+        bump("degraded")
+    elif reset > 30:
+        concerns.append(f"{reset} BMS resets")
+        bump("watch")
+
+    # Cell voltage imbalance — max minus min in mV.
+    if cell_voltages_mv:
+        clean = [v for v in cell_voltages_mv if v and v > 0]
+        if len(clean) >= 2:
+            imbalance_mv = max(clean) - min(clean)
+            if imbalance_mv > 150:
+                concerns.append(
+                    f"Cell imbalance {imbalance_mv} mV (>150 mV)"
+                )
+                bump("critical")
+            elif imbalance_mv > 50:
+                concerns.append(
+                    f"Cell imbalance {imbalance_mv} mV (>50 mV)"
+                )
+                bump("watch")
+
+    return {"status": status, "concerns": concerns}
 
 
 def _parse_pylontech_info(info_text: str) -> Dict[str, Any]:
