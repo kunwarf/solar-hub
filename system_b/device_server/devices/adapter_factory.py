@@ -530,6 +530,11 @@ class TCPCommandAdapter:
         #   {module_num: {"soh_pct": float, "cycle_count": int?}}
         self._pytes_soh_cache: Dict[int, Dict[str, float]] = {}
         self._pytes_soh_last_fetch: Dict[int, float] = {}
+        # Pytes/Pylontech: one-shot diagnostic flag. When False, the next
+        # poll runs bare `stat` + per-module `stat N` and logs raw output
+        # so we can see whether SOH/cycles live there. Flipped to True
+        # after the dump fires once per adapter lifetime.
+        self._pytes_stat_logged: bool = False
 
     async def _keepalive_loop(self) -> None:
         """
@@ -942,6 +947,28 @@ class TCPCommandAdapter:
 
             if all_cells:
                 values["battery_cells"] = all_cells
+
+            # One-shot diagnostic: dump `stat` and per-module `stat N` so
+            # we can see whether this firmware exposes SOH% / CycleCount
+            # / rated capacity there. Fires once per adapter lifetime
+            # (i.e. per boot / reconnect) then goes quiet.
+            if not self._pytes_stat_logged and modules:
+                try:
+                    stat_resp = await self.send_command("stat")
+                    logger.info(
+                        "Pylontech stat (bare) raw response: %r",
+                        (stat_resp or "")[:800],
+                    )
+                    for unit_data in modules:
+                        module_num = unit_data["unit"]
+                        stat_n_resp = await self.send_command(f"stat {module_num}")
+                        logger.info(
+                            "Pylontech stat %s raw response: %r",
+                            module_num,
+                            (stat_n_resp or "")[:800],
+                        )
+                finally:
+                    self._pytes_stat_logged = True
 
             logger.debug(
                 f"Pylontech stack: {len(modules)} module(s), "
