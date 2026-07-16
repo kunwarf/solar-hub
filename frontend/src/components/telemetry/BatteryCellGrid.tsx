@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Thermometer, Zap, Battery, Activity, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
+import { Thermometer, Zap, Battery, Activity, AlertTriangle, TrendingUp, TrendingDown, BatteryFull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CellHealthPanel, { CellHealthReport } from "./CellHealthPanel";
 import CellHealthTimeseriesPanel, {
@@ -46,6 +46,11 @@ interface UnitData {
   soh_pct?: number;
   cycle_count?: number;
   power_w?: number;
+  // Per-unit capacity. Emitted by JK BMS (serial + TCP/IP) parser as
+  // total_ah / remaining_ah on each battery_units entry. Pytes/Pylontech
+  // do not surface this per-unit today, so both fields are optional.
+  total_ah?: number;
+  remaining_ah?: number;
   basic_status?: string;
   has_alarm?: boolean;
   has_fault?: boolean;
@@ -502,6 +507,29 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                           ? `${(Math.abs(u.power_w) / 1000).toFixed(2)}kW`
                           : `${Math.abs(u.power_w).toFixed(0)}W`}
                       </span>
+                    )}
+                    {/* Capacity (Ah) — rendered as "remaining / total Ah"
+                        when both are known (JK BMS), or just "total Ah"
+                        when only rated capacity is available. Silent for
+                        Pytes/Pylontech which don't expose per-unit Ah. */}
+                    {u.total_ah != null && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-semibold bg-secondary/50 text-battery border border-border/50">
+                              <BatteryFull className="w-2.5 h-2.5" />
+                              {u.remaining_ah != null
+                                ? `${u.remaining_ah.toFixed(1)}/${u.total_ah.toFixed(0)}Ah`
+                                : `${u.total_ah.toFixed(0)}Ah`}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {u.remaining_ah != null
+                              ? `Remaining ${u.remaining_ah.toFixed(2)} Ah of ${u.total_ah.toFixed(1)} Ah rated`
+                              : `${u.total_ah.toFixed(1)} Ah rated capacity`}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                     {/* SOC / SOH / cycles */}
                     {u.soc_pct != null && (
