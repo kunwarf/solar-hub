@@ -949,6 +949,17 @@ class TCPCommandAdapter:
                             self._pytes_soh_cache[module_num] = next(
                                 iter(parsed_soh.values())
                             )
+                        logger.info(
+                            "Pylontech soh %s response=%r parsed=%r",
+                            module_num,
+                            soh_resp[:200],
+                            parsed_soh,
+                        )
+                    else:
+                        logger.info(
+                            "Pylontech soh %s returned no response",
+                            module_num,
+                        )
                     # Always update the timestamp so a broken/silent
                     # response doesn't retry every poll and swamp the bus.
                     self._pytes_soh_last_fetch[module_num] = now_ts
@@ -1265,11 +1276,21 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
     units = []
     for line in pwr_text.splitlines():
         parts = line.split()
-        if not parts or not parts[0].isdigit():
+        if not parts:
+            continue
+        # First token identifies the module. Two shapes seen so far:
+        #   Older firmware:  "1  50120  12050  25000  ..."  (bare digit)
+        #   Some Pytes:      "G:0  51234  -15200  24500  ..." (G-prefixed)
+        # Support both defensively.
+        first = parts[0]
+        if first.isdigit():
+            unit_num = int(first)
+        elif first.startswith("G:") and first[2:].isdigit():
+            unit_num = int(first[2:])
+        else:
             continue
         # Only the four numeric fields are mandatory
         try:
-            unit_num  = int(parts[0])
             volt_mv   = int(parts[1])
             curr_ma   = int(parts[2])
             temp_mdeg = int(parts[3])
@@ -1336,6 +1357,25 @@ def _parse_pylontech_pwr(pwr_text: str) -> Dict[str, Any]:
 
     if not units:
         return {}
+
+    # Diagnostic — surface the parsed per-unit dict so field debugging
+    # doesn't need a code round-trip. Includes whichever fields the
+    # heuristics captured (or didn't) from this firmware's pwr layout.
+    logger.info(
+        "Pylontech pwr parsed %d unit(s): %s",
+        len(units),
+        [
+            {
+                "unit": u.get("unit"),
+                "v": u.get("voltage_v"),
+                "i": u.get("current_a"),
+                "soc": u.get("soc_pct"),
+                "rem_ah": u.get("remaining_ah"),
+                "tot_ah": u.get("total_ah"),
+            }
+            for u in units
+        ],
+    )
 
     result: Dict[str, Any] = {
         "battery_units":       units,
