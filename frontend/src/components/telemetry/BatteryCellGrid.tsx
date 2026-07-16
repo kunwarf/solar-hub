@@ -325,6 +325,20 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
     refetchInterval: 30_000,
   });
 
+  // ── Fetch today's charge/discharge kWh (bank + per-unit) ──────────────────
+  // Slow-moving value; 60-second refresh is plenty.
+  const { data: energyResponse } = useQuery<{
+    device: { charge_kwh: number; discharge_kwh: number; coverage_pct: number } | null;
+    units: Record<string, { charge_kwh: number; discharge_kwh: number; coverage_pct: number }>;
+    timezone?: string;
+  } | null>({
+    queryKey: ["battery-energy-today", device?.id],
+    queryFn: () => (device?.id ? devicesService.getBatteryEnergy(device.id) : null),
+    enabled: !!device?.id,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   // ── Fetch time-series cell-health (Phase 2, slower refetch) ────────────────
   // The underlying CAgg only refreshes hourly on the backend, so a 5-minute
   // client cadence is plenty and avoids hammering the endpoint.
@@ -471,6 +485,60 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
             </div>
           </div>
 
+          {/* Today's charge/discharge for the whole bank. Silent when
+              the endpoint returns no data (older battery power history
+              or missing timezone config). */}
+          {energyResponse?.device && (
+            <div className="glass-card p-2.5 sm:p-3 rounded-lg border border-border/40 flex flex-wrap items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Activity className="w-3.5 h-3.5 text-solar" />
+                <span className="text-xs font-medium text-foreground">
+                  Bank energy today
+                </span>
+                {energyResponse.device.coverage_pct < 90 && (
+                  <span className="inline-flex items-center gap-1 px-1 py-0 rounded text-[9px] font-semibold bg-warning/10 text-warning border border-warning/20">
+                    partial {energyResponse.device.coverage_pct.toFixed(0)}%
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto text-[10px] sm:text-xs">
+                <span className="inline-flex items-center gap-1 font-mono">
+                  <TrendingUp className="w-3 h-3 text-success" />
+                  <span className="text-muted-foreground">charged</span>
+                  <span className="font-semibold text-success">
+                    {energyResponse.device.charge_kwh.toFixed(2)} kWh
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-1 font-mono">
+                  <TrendingDown className="w-3 h-3 text-warning" />
+                  <span className="text-muted-foreground">discharged</span>
+                  <span className="font-semibold text-warning">
+                    {energyResponse.device.discharge_kwh.toFixed(2)} kWh
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-1 font-mono">
+                  <span className="text-muted-foreground">net</span>
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      energyResponse.device.charge_kwh -
+                        energyResponse.device.discharge_kwh >=
+                        0
+                        ? "text-success"
+                        : "text-warning",
+                    )}
+                  >
+                    {(
+                      energyResponse.device.charge_kwh -
+                      energyResponse.device.discharge_kwh
+                    ).toFixed(2)}{" "}
+                    kWh
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3 sm:space-y-4">
             {cellsByUnit.map(({ unit: u, cells }) => (
               <div key={u.unit} className="border border-border/50 rounded-lg p-2 sm:p-3 bg-secondary/10">
@@ -575,6 +643,37 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                           ? `${(Math.abs(u.power_w) / 1000).toFixed(2)}kW`
                           : `${Math.abs(u.power_w).toFixed(0)}W`}
                       </span>
+                    )}
+                    {/* Today's charge / discharge kWh for this unit.
+                        Silent when the endpoint hasn't returned per-unit
+                        data yet. */}
+                    {energyResponse?.units?.[String(u.unit)] && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-semibold bg-secondary/50 text-solar border border-border/50">
+                              <Activity className="w-2.5 h-2.5" />
+                              {energyResponse.units[String(u.unit)].charge_kwh.toFixed(1)}/
+                              {energyResponse.units[String(u.unit)].discharge_kwh.toFixed(1)} kWh
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="text-xs space-y-0.5">
+                              <p>
+                                Today: charged{" "}
+                                {energyResponse.units[String(u.unit)].charge_kwh.toFixed(2)} kWh /
+                                discharged{" "}
+                                {energyResponse.units[String(u.unit)].discharge_kwh.toFixed(2)} kWh
+                              </p>
+                              {energyResponse.units[String(u.unit)].coverage_pct < 90 && (
+                                <p className="text-warning">
+                                  Partial data — only {energyResponse.units[String(u.unit)].coverage_pct.toFixed(0)}% of the day covered
+                                </p>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                     {/* Capacity (Ah) — rendered as "remaining / total Ah"
                         when both are known (JK BMS), or just "total Ah"

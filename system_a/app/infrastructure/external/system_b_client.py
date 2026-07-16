@@ -410,6 +410,46 @@ class SystemBClient:
             logger.error("System B connection error: %s", e)
             raise SystemBClientError(f"Connection error: {str(e)}")
 
+    async def get_device_battery_energy(
+        self,
+        device_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> dict:
+        """
+        Get charge/discharge kWh for a battery device (bank + per-unit).
+
+        Args:
+            device_id: System B device UUID (battery device).
+            start_time: UTC window start.
+            end_time: UTC window end.
+
+        Returns:
+            Dict with ``device`` (bank totals) and ``units`` (per-unit
+            totals keyed by unit number). See System B endpoint for the
+            exact response shape.
+        """
+        try:
+            client = await self._get_client()
+            url = f"/api/v1/telemetry/battery-energy/{device_id}"
+            params: dict = {
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+            }
+            logger.info("System B request: GET %s%s params=%s", self._base_url, url, params)
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error("System B battery-energy error: %s", e)
+            raise SystemBClientError(
+                f"Failed to get battery energy: {e.response.text}",
+                status_code=e.response.status_code,
+            )
+        except httpx.RequestError as e:
+            logger.error("System B connection error: %s", e)
+            raise SystemBClientError(f"Connection error: {str(e)}")
+
     async def get_site_telemetry(
         self,
         site_id: UUID,

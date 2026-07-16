@@ -567,6 +567,130 @@ async def get_daily_peaks(
 
 
 @router.get(
+    "/battery-energy/{device_id}",
+    summary="Get battery bank + per-unit charge/discharge energy for a window",
+    description=(
+        "Integrates ``battery_power_w`` (bank) and each ``battery_unit_{N}_power_w`` "
+        "metric across the requested UTC window into charge/discharge kWh. "
+        "Positive power → charging, negative → discharging. Buckets samples at "
+        "1 minute, splits by sign, converts Wh → kWh. Returns a coverage "
+        "percentage per metric so the caller can flag results whose window had "
+        "sample gaps."
+    ),
+)
+async def get_battery_energy(
+    device_id: UUID,
+    start_time: datetime,
+    end_time: datetime,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """
+    Compute charge/discharge kWh for a battery device and each of its units
+    over the given window in a single SQL pass.
+    """
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+
+    # Expected sample count if a 1-minute bucket is fully populated.
+    window_minutes = max(
+        1,
+        int((end_time - start_time).total_seconds() // 60),
+    )
+
+    # Fetch bank + all per-unit power metrics in one pass. Grouping by
+    # metric_name lets the caller demux bank vs unit rows. Positive
+    # samples land in charge_wh, negative in discharge_wh. Bucket at
+    # 1 minute so the integral is accurate even when polling drifts
+    # (poll intervals sit around 30–60 s in the field).
+    #
+    # Notes:
+    #   * `~` is Postgres POSIX regex; the anchors keep it from matching
+    #     things like `battery_unit_1_soh_pct`.
+    #   * `battery_w` covers Voltronic; `battery_power_w` covers the
+    #     rest of the fleet.
+    query = text("""
+        WITH minute_avg AS (
+            SELECT
+                metric_name,
+                time_bucket(INTERVAL '1 minute', time) AS bkt,
+                AVG(metric_value) AS p_w
+            FROM telemetry_raw
+            WHERE device_id = :device_id
+              AND time >= :start_time
+              AND time <  :end_time
+              AND (
+                    metric_name IN ('battery_power_w', 'battery_w')
+                    OR metric_name ~ '^battery_unit_[0-9]+_power_w$'
+                  )
+            GROUP BY metric_name, bkt
+        )
+        SELECT
+            metric_name,
+            SUM(CASE WHEN p_w > 0 THEN p_w        ELSE 0 END) / 60.0 / 1000.0 AS charge_kwh,
+            SUM(CASE WHEN p_w < 0 THEN ABS(p_w)   ELSE 0 END) / 60.0 / 1000.0 AS discharge_kwh,
+            COUNT(*) AS bucket_count
+        FROM minute_avg
+        GROUP BY metric_name
+    """)
+
+    logger.info(
+        "[battery-energy] device=%s window=%s → %s (%d min)",
+        device_id, start_time.isoformat(), end_time.isoformat(), window_minutes,
+    )
+    result = await session.execute(
+        query,
+        {
+            "device_id": device_id,
+            "start_time": start_time,
+            "end_time": end_time,
+        },
+    )
+
+    def _pack(charge_kwh, discharge_kwh, buckets):
+        coverage = min(100.0, round(100.0 * buckets / window_minutes, 1)) if window_minutes else 0.0
+        return {
+            "charge_kwh": round(float(charge_kwh or 0.0), 3),
+            "discharge_kwh": round(float(discharge_kwh or 0.0), 3),
+            "coverage_pct": coverage,
+        }
+
+    device_totals = {"charge_kwh": 0.0, "discharge_kwh": 0.0, "coverage_pct": 0.0}
+    units: dict = {}
+
+    import re
+    unit_re = re.compile(r"^battery_unit_(\d+)_power_w$")
+
+    for row in result:
+        name = row.metric_name
+        packed = _pack(row.charge_kwh, row.discharge_kwh, row.bucket_count or 0)
+        if name in ("battery_power_w", "battery_w"):
+            device_totals = packed
+        else:
+            m = unit_re.match(name)
+            if m:
+                units[int(m.group(1))] = packed
+
+    logger.info(
+        "[battery-energy] result: device charge=%s discharge=%s coverage=%s%% · %d unit(s)",
+        device_totals.get("charge_kwh"),
+        device_totals.get("discharge_kwh"),
+        device_totals.get("coverage_pct"),
+        len(units),
+    )
+
+    return {
+        "device_id": str(device_id),
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
+        "window_minutes": window_minutes,
+        "device": device_totals,
+        "units": {str(k): v for k, v in sorted(units.items())},
+    }
+
+
+@router.get(
     "/ingestion-stats",
     summary="Get ingestion statistics",
     description="Get telemetry ingestion statistics for monitoring.",

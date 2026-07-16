@@ -91,6 +91,7 @@ export const API_ENDPOINTS = {
     snapshot: (id: string) => `/devices/${id}/snapshot`,
     status: (id: string) => `/devices/${id}/status`,
     batteryBank: (id: string) => `/devices/${id}/battery/bank`,
+    batteryEnergy: (id: string) => `/devices/${id}/battery/energy`,
     unclaim: (id: string) => `/devices/${id}/unclaim`,
   },
 

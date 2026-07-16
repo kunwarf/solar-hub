@@ -240,6 +240,24 @@ function formatMaybe(
   return `${value.toFixed(digits)}${unit}`;
 }
 
+// ─── Energy response type ──────────────────────────────────────────────────
+
+interface EnergyEntry {
+  charge_kwh: number;
+  discharge_kwh: number;
+  coverage_pct: number;
+}
+
+interface BatteryEnergyResponse {
+  device_id: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  device: EnergyEntry | null;
+  units: Record<string, EnergyEntry>;
+  window_minutes?: number;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function BatteryUnitDetail() {
@@ -256,6 +274,16 @@ export default function BatteryUnitDetail() {
     enabled: !!deviceId,
     refetchInterval: 15_000,
     staleTime: 5_000,
+  });
+
+  // Today's charge/discharge kWh — refreshed less aggressively (60 s)
+  // because the value moves slowly compared to voltage/current.
+  const { data: energy } = useQuery<BatteryEnergyResponse | null>({
+    queryKey: ["battery-energy-today", deviceId],
+    queryFn: () => devicesService.getBatteryEnergy(deviceId!),
+    enabled: !!deviceId,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
   const unit = useMemo(
@@ -626,6 +654,33 @@ export default function BatteryUnitDetail() {
           </motion.section>
         )}
 
+        {/* ─── Today's energy (kWh) ───────────────────────────────────── */}
+        {energy && (energy.units[String(unit.unit)] || energy.device) && (
+          <motion.section
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="glass-card rounded-xl p-4 sm:p-6 border border-border/40 space-y-4"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Activity className="w-4 h-4 text-solar" />
+              <h3 className="text-base sm:text-lg font-semibold text-foreground">
+                Energy today
+              </h3>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {energy.timezone
+                  ? `Local day (${energy.timezone})`
+                  : "Today"}
+              </span>
+            </div>
+            <EnergyCardGroup
+              unitEntry={energy.units[String(unit.unit)]}
+              bankEntry={energy.device}
+              unitLabel={`Unit ${unit.unit}`}
+            />
+          </motion.section>
+        )}
+
         {/* ─── Cell voltage strip ─────────────────────────────────────── */}
         {unitCells.length > 0 && cellStats && (
           <motion.section
@@ -741,6 +796,106 @@ function StatCard({
       {hint && (
         <p className="text-[10px] text-muted-foreground truncate">{hint}</p>
       )}
+    </div>
+  );
+}
+
+function EnergyCardGroup({
+  unitEntry,
+  bankEntry,
+  unitLabel,
+}: {
+  unitEntry?: EnergyEntry;
+  bankEntry?: EnergyEntry | null;
+  unitLabel: string;
+}) {
+  const rows: Array<{ label: string; entry?: EnergyEntry; muted?: boolean }> = [];
+  if (unitEntry) rows.push({ label: unitLabel, entry: unitEntry });
+  if (bankEntry) rows.push({ label: "Whole bank", entry: bankEntry, muted: true });
+
+  return (
+    <div className="space-y-3">
+      {rows.map((r) => (
+        <div key={r.label} className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <p
+              className={cn(
+                "text-xs font-medium",
+                r.muted ? "text-muted-foreground" : "text-foreground",
+              )}
+            >
+              {r.label}
+            </p>
+            {r.entry && r.entry.coverage_pct < 90 && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-warning/10 text-warning border border-warning/20">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                Partial ({r.entry.coverage_pct.toFixed(0)}% coverage)
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <EnergyTile
+              icon={BatteryCharging}
+              iconColor="text-success"
+              label="Charged in"
+              value={r.entry ? r.entry.charge_kwh : undefined}
+            />
+            <EnergyTile
+              icon={BatteryLow}
+              iconColor="text-warning"
+              label="Discharged out"
+              value={r.entry ? r.entry.discharge_kwh : undefined}
+            />
+            <EnergyTile
+              icon={Activity}
+              iconColor="text-primary"
+              label="Net"
+              value={
+                r.entry ? r.entry.charge_kwh - r.entry.discharge_kwh : undefined
+              }
+              signed
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EnergyTile({
+  icon: Icon,
+  iconColor,
+  label,
+  value,
+  signed = false,
+}: {
+  icon: typeof BatteryCharging;
+  iconColor: string;
+  label: string;
+  value?: number;
+  signed?: boolean;
+}) {
+  const text =
+    value == null
+      ? "—"
+      : `${signed && value > 0 ? "+" : ""}${value.toFixed(2)} kWh`;
+  const colourClass =
+    signed && value != null
+      ? value > 0
+        ? "text-success"
+        : value < 0
+        ? "text-warning"
+        : "text-foreground"
+      : "text-foreground";
+  return (
+    <div className="rounded-md border border-border/40 bg-secondary/20 px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <Icon className={cn("w-3.5 h-3.5", iconColor)} />
+        <span className="truncate">{label}</span>
+      </div>
+      <p className={cn("text-lg sm:text-xl font-mono font-semibold", colourClass)}>
+        {text}
+      </p>
     </div>
   );
 }

@@ -208,6 +208,22 @@ class DevicesService {
   }
 
   /**
+   * Get today's charge/discharge kWh for a battery device.
+   * Returns bank-level totals + a map of per-unit totals. The window is
+   * always "today in the site's local timezone" — no client-side date
+   * math needed.
+   */
+  async getBatteryEnergy(deviceId: string): Promise<any> {
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.devices.batteryEnergy(deviceId));
+      return response.data;
+    } catch (error) {
+      console.warn('Failed to fetch battery energy:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get the time-series cell-health report for a battery bank (Phase 2 detector).
    * Independent of the battery-bank snapshot fetch so slow queries never block
    * the live dashboard.

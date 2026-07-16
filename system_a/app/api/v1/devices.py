@@ -976,6 +976,80 @@ async def get_device_battery_bank(
 
 
 @router.get(
+    "/{device_id}/battery/energy",
+    responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
+async def get_device_battery_energy(
+    device_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client = Depends(get_system_b_client_instance),
+):
+    """
+    Daily (site-local) charge/discharge kWh for a battery device.
+
+    Defaults the window to the current calendar day in the site's local
+    timezone so the totals match what a user sees on the "today" energy
+    chart. Delegates the heavy lifting to System B's
+    ``/telemetry/battery-energy`` endpoint which integrates
+    ``battery_power_w`` (and each ``battery_unit_{N}_power_w``) over the
+    window.
+
+    Returns the same shape as System B plus a ``coverage_pct`` per
+    entry so the UI can flag windows with sample gaps.
+    """
+    from ...domain.services.timezone_utils import TimezoneUtils
+
+    device = await uow.devices.get_by_id(device_id)
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+    await check_site_access(device.site_id, current_user, uow)
+
+    # Compute today's window in the site's local timezone (matches the
+    # daily-peaks / stats convention).
+    site = await uow.sites.get_by_id(device.site_id)
+    site_tz = (site.timezone if site and getattr(site, "timezone", None) else "UTC")
+    today_local = TimezoneUtils.get_date_in_timezone(
+        datetime.now(timezone.utc), site_tz
+    )
+    start_utc, end_utc = TimezoneUtils.get_local_date_range(today_local, site_tz)
+
+    # System A and System B share device_id (System A's device.id IS the
+    # System B UUID for HELLO-provisioned devices), so no serial-based
+    # lookup is needed here.
+    try:
+        energy = await system_b_client.get_device_battery_energy(
+            device_id=device_id,
+            start_time=start_utc,
+            end_time=end_utc,
+        )
+    except Exception as exc:
+        # Fail soft — the detail page can render without energy data.
+        return {
+            "device_id": str(device_id),
+            "start_time": start_utc.isoformat(),
+            "end_time": end_utc.isoformat(),
+            "timezone": site_tz,
+            "device": None,
+            "units": {},
+            "error": str(exc),
+        }
+
+    return {
+        "device_id": str(device_id),
+        "start_time": start_utc.isoformat(),
+        "end_time": end_utc.isoformat(),
+        "timezone": site_tz,
+        "device": energy.get("device"),
+        "units": energy.get("units", {}),
+        "window_minutes": energy.get("window_minutes"),
+    }
+
+
+@router.get(
     "/{device_id}/battery/cell-health/timeseries",
     responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
 )
