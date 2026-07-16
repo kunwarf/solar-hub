@@ -909,78 +909,36 @@ class TCPCommandAdapter:
             # Step 1 — get all module summaries in one shot
             pwr_resp = await self.send_command("pwr")
             if pwr_resp:
-                # Diagnostic: dump the raw pwr text so we can see the
-                # actual column layout on this firmware. Live devices in
-                # the wild return varying column sets (some have RemainCap
-                # / TotalCap, some don't). This log lets us tune the
-                # parser without a code round-trip.
-                logger.info(
-                    "Pylontech pwr raw response (first 600 chars): %r",
-                    pwr_resp[:600],
-                )
                 parsed = _parse_pylontech_pwr(pwr_resp)
                 values.update(parsed)
 
-            # Step 2 — per-cell voltages for each module.
-            # `bat N` may also carry a per-cell Coulomb column (remaining
-            # mAh) which is where capacity really lives on firmwares that
-            # don't expose it in `pwr`.
+            # Step 2 — per-cell voltages + per-module capacity from `bat N`.
+            # The `bat N` response is the canonical source for remaining
+            # capacity on this firmware: each cell row carries a Coulomb
+            # column in mAh. All cells in a series module share the same
+            # coulomb count so the module summary uses the median.
+            # `pwr` doesn't carry absolute capacity on this firmware and
+            # `soh` doesn't carry SOH%/CycleCount, so both are skipped.
             modules = values.get("battery_units", [])
             all_cells: List[Dict[str, Any]] = []
             for unit_data in modules:
                 module_num = unit_data["unit"]
                 bat_resp = await self.send_command(f"bat {module_num}")
-                if bat_resp:
-                    # Diagnostic: dump raw bat text (once per module) so
-                    # we can see the Coulomb column layout and wire up
-                    # per-module remaining capacity from it.
-                    logger.info(
-                        "Pylontech bat %s raw response (first 400 chars): %r",
-                        module_num,
-                        bat_resp[:400],
-                    )
-                    cells = _parse_pylontech_bat_cells(bat_resp, module_num)
-                    all_cells.extend(cells)
-                    # Derive per-module power from voltage × current
-                    unit_data["power_w"] = (
-                        unit_data.get("voltage_v", 0)
-                        * unit_data.get("current_a", 0)
-                    )
-
-            # Step 3 — whole-stack SOH + cycle count via bare `soh` (no arg).
-            # The live console showed that `soh N` returns per-cell voltages
-            # with SOHCount=0 (an event counter, not a percentage). The bare
-            # `soh` command returns the actual per-module summary with SOH%
-            # and CycleCount. Refresh once per PYTES_SOH_REFRESH_S and fan
-            # the values back out to each unit_data.
-            now_ts = time.time()
-            # Cache key 0 == whole-stack fetch timestamp
-            last_soh_ts = self._pytes_soh_last_fetch.get(0, 0.0)
-            if now_ts - last_soh_ts > 1800.0:
-                soh_resp = await self.send_command("soh")
-                if soh_resp:
-                    parsed_soh = _parse_pylontech_soh(soh_resp)
-                    if parsed_soh:
-                        self._pytes_soh_cache = parsed_soh
-                    logger.info(
-                        "Pylontech soh (stack) response=%r parsed=%r",
-                        soh_resp[:400],
-                        parsed_soh,
-                    )
-                else:
-                    logger.info("Pylontech soh (stack) returned no response")
-                # Always update the timestamp so a broken/silent response
-                # doesn't retry every poll and swamp the bus.
-                self._pytes_soh_last_fetch[0] = now_ts
-
-            for unit_data in modules:
-                module_num = unit_data["unit"]
-                cache_entry = self._pytes_soh_cache.get(module_num)
-                if cache_entry:
-                    if "soh_pct" in cache_entry:
-                        unit_data["soh_pct"] = cache_entry["soh_pct"]
-                    if "cycle_count" in cache_entry:
-                        unit_data["cycle_count"] = cache_entry["cycle_count"]
+                if not bat_resp:
+                    continue
+                cells = _parse_pylontech_bat_cells(bat_resp, module_num)
+                all_cells.extend(cells)
+                # Derive per-module power from voltage × current
+                unit_data["power_w"] = (
+                    unit_data.get("voltage_v", 0)
+                    * unit_data.get("current_a", 0)
+                )
+                # Per-module capacity from Coulomb column
+                summary = _parse_pylontech_bat_summary(bat_resp)
+                if "remaining_ah" in summary:
+                    unit_data["remaining_ah"] = summary["remaining_ah"]
+                if "total_ah" in summary:
+                    unit_data["total_ah"] = summary["total_ah"]
 
             if all_cells:
                 values["battery_cells"] = all_cells
@@ -1480,6 +1438,76 @@ def _parse_pylontech_soh(soh_text: str) -> Dict[int, Dict[str, float]]:
             if 0.0 <= val <= 100.0:
                 result.setdefault(1, {})["soh_pct"] = round(val, 1)
                 break
+
+    return result
+
+
+def _parse_pylontech_bat_summary(bat_text: str) -> Dict[str, Any]:
+    """
+    Extract per-module summary from a ``bat N`` response.
+
+    Firmware layout (verified from live console):
+
+        Battery Volt  Curr  Tempr  Base.State Volt.State Curr.State Temp.State SOC  Coulomb    BAL
+        0       3436  -44   36800  Dischg     Normal     Normal     Normal     100% 98338 mAH  N
+        1       3444  -44   36800  Dischg     Normal     Normal     Normal     100% 98371 mAH  N
+        ...
+
+    All cells in a series-connected module share the same coulomb count
+    (they see the same current), so we take the median cell's Coulomb
+    as the module's remaining capacity. Total (rated) capacity is
+    derived from ``remaining / (SOC/100)`` and rounded to the nearest
+    5 Ah for a cleaner display value.
+
+    Returns dict with optional keys: ``remaining_ah``, ``total_ah``.
+    Empty dict if no Coulomb column found (older firmware).
+    """
+    coulombs_mah: List[int] = []
+    socs: List[int] = []
+    for line in bat_text.splitlines():
+        parts = line.split()
+        # Layout requires 11+ tokens; the Coulomb value sits at index 9
+        # with the literal "mAH" unit label at index 10.
+        if not parts or not parts[0].isdigit() or len(parts) < 11:
+            continue
+        # SOC at parts[8] like "100%"
+        soc_str = parts[8]
+        if soc_str.endswith('%'):
+            try:
+                soc_val = int(soc_str.rstrip('%'))
+                if 0 <= soc_val <= 100:
+                    socs.append(soc_val)
+            except ValueError:
+                pass
+        # Only accept the Coulomb column if the unit label matches.
+        # Guards against future firmware shuffling column order.
+        if parts[10].lower() not in ("mah", "mah,"):
+            continue
+        try:
+            coulomb_mah = int(parts[9])
+        except (ValueError, IndexError):
+            continue
+        if 0 <= coulomb_mah <= 500_000:
+            coulombs_mah.append(coulomb_mah)
+
+    if not coulombs_mah:
+        return {}
+
+    coulombs_mah.sort()
+    remaining_mah = coulombs_mah[len(coulombs_mah) // 2]
+    result: Dict[str, Any] = {
+        "remaining_ah": round(remaining_mah / 1000.0, 2),
+    }
+
+    if socs:
+        # Highest reported SOC — usually all cells report the same figure.
+        soc = max(socs)
+        if 0 < soc <= 100:
+            inferred_total_ah = remaining_mah / 1000.0 * 100.0 / soc
+            # Round to nearest 5 Ah for display; keeps 98.3->100, 49.9->50.
+            rounded = round(inferred_total_ah / 5) * 5
+            if rounded > 0:
+                result["total_ah"] = float(rounded)
 
     return result
 
