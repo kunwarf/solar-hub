@@ -1003,6 +1003,21 @@ class TCPCommandAdapter:
                         stat, module_cell_mv
                     )
 
+                # Nameplate — model, firmware, mfr date, barcode etc.
+                # Static per module; exposed on every poll so the frontend
+                # detail page has everything in a single fetch.
+                if info:
+                    unit_data["nameplate"] = info
+
+                # Raw event counters — the frontend detail page renders
+                # non-zero counters in a table. Excludes SOH% + cycle
+                # count which are already promoted to first-class fields.
+                if stat:
+                    events = {k: v for k, v in stat.items()
+                              if k not in ("soh_pct", "cycle_count")}
+                    if events:
+                        unit_data["events"] = events
+
             if all_cells:
                 values["battery_cells"] = all_cells
 
@@ -1639,15 +1654,31 @@ def _assess_pytes_module_health(
     return {"status": status, "concerns": concerns}
 
 
+_PYTES_INFO_KEY_MAP: Dict[str, str] = {
+    "Manufacturer":       "manufacturer",
+    "Device name":        "model",
+    "Board version":      "board_version",
+    "Board":              "board",
+    "Main Soft version":  "main_soft_version",
+    "Soft  version":      "soft_version",
+    "Soft version":       "soft_version",
+    "Boot  version":      "boot_version",
+    "Boot version":       "boot_version",
+    "Comm version":       "comm_version",
+    "Release Date":       "release_date",
+    "Barcode":            "barcode",
+    "EPONPort rate":      "epon_rate",
+    "Console Port rate":  "console_rate",
+}
+
+
 def _parse_pylontech_info(info_text: str) -> Dict[str, Any]:
     """
     Parse a Pylontech ``info`` / ``info N`` response.
 
-    Returns dict with any of the following keys that could be parsed:
-
-        rated_ah    float, from ``Specification : 48V/100AH``
-        model       str,   from ``Device name``
-        cell_count  int,   from ``Cell Number``
+    Captures every field the console returns as ``Key : Value`` plus
+    derived values (rated_ah from Specification, max_charge_a and
+    max_discharge_a from the current strings).
     """
     result: Dict[str, Any] = {}
     for line in info_text.splitlines():
@@ -1657,6 +1688,10 @@ def _parse_pylontech_info(info_text: str) -> Dict[str, Any]:
         key, _, value = line.partition(':')
         key = key.strip()
         value = value.strip()
+        if not value:
+            continue
+
+        # Specification → rated_ah + keep original string too
         if key == 'Specification':
             match = _PYTES_SPEC_AH_RE.search(value)
             if match:
@@ -1666,16 +1701,39 @@ def _parse_pylontech_info(info_text: str) -> Dict[str, Any]:
                         result['rated_ah'] = ah
                 except ValueError:
                     pass
-        elif key == 'Device name':
-            if value:
-                result['model'] = value
-        elif key == 'Cell Number':
+            result['specification'] = value
+            continue
+
+        # Cell Number → int
+        if key == 'Cell Number':
             try:
                 cells = int(value)
                 if cells > 0:
                     result['cell_count'] = cells
             except ValueError:
                 pass
+            continue
+
+        # Max charge / discharge current — e.g. "-95000mA" or "95000mA"
+        if key in ('Max Dischg Curr', 'Max Discharge Curr'):
+            try:
+                num = int(''.join(c for c in value if c in '-0123456789'))
+                result['max_discharge_a'] = round(num / 1000.0, 1)
+            except ValueError:
+                pass
+            continue
+        if key in ('Max Charge Curr',):
+            try:
+                num = int(''.join(c for c in value if c in '-0123456789'))
+                result['max_charge_a'] = round(num / 1000.0, 1)
+            except ValueError:
+                pass
+            continue
+
+        # Generic string fields
+        field = _PYTES_INFO_KEY_MAP.get(key)
+        if field:
+            result[field] = value
     return result
 
 
