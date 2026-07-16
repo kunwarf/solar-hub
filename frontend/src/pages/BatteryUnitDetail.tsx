@@ -240,6 +240,54 @@ function formatMaybe(
   return `${value.toFixed(digits)}${unit}`;
 }
 
+/**
+ * Compute a fallback health verdict when the adapter didn't provide one.
+ * Used for JK BMS and any other adapter that doesn't emit `unit.health`
+ * — we can still say something useful based on the SOH% and cell
+ * voltage spread. Returns null when there's not enough signal.
+ */
+function synthesizeHealth(
+  unit: Unit,
+  cellRangeMv?: number,
+): UnitHealth | null {
+  const soh = unit.soh_pct;
+  const range = cellRangeMv;
+  if (soh == null && range == null) return null;
+
+  const concerns: string[] = [];
+  let status: HealthStatus = "healthy";
+  const bump = (s: HealthStatus) => {
+    const order = { healthy: 0, watch: 1, degraded: 2, critical: 3 };
+    if (order[s] > order[status]) status = s;
+  };
+
+  if (soh != null) {
+    if (soh === 0) {
+      concerns.push("SOH reported as 0% — BMS may need recalibration");
+      bump("critical");
+    } else if (soh < 50) {
+      concerns.push(`SOH low: ${soh.toFixed(0)}% (below 50% is end-of-life)`);
+      bump("critical");
+    } else if (soh < 80) {
+      concerns.push(`SOH degraded: ${soh.toFixed(0)}%`);
+      bump("degraded");
+    } else if (soh < 90) {
+      concerns.push(`SOH watch: ${soh.toFixed(0)}%`);
+      bump("watch");
+    }
+  }
+  if (range != null) {
+    if (range > 150) {
+      concerns.push(`Cell imbalance ${range} mV (>150 mV)`);
+      bump("critical");
+    } else if (range > 50) {
+      concerns.push(`Cell imbalance ${range} mV (>50 mV)`);
+      bump("watch");
+    }
+  }
+  return { status, concerns };
+}
+
 // ─── Energy response type ──────────────────────────────────────────────────
 
 interface EnergyEntry {
@@ -375,7 +423,13 @@ export default function BatteryUnitDetail() {
     );
   }
 
-  const status: HealthStatus = unit.health?.status ?? "healthy";
+  // Prefer the adapter-provided health (Pytes has one) and fall back
+  // to a computed status from SOH + cell imbalance (JK BMS + anything
+  // else that doesn't emit a verdict). This keeps the health section
+  // useful across vendors.
+  const health: UnitHealth | null =
+    unit.health ?? synthesizeHealth(unit, cellStats?.range);
+  const status: HealthStatus = health?.status ?? "healthy";
   const statusMeta = STATUS_META[status];
   const StatusIcon = statusMeta.icon;
 
@@ -530,7 +584,7 @@ export default function BatteryUnitDetail() {
         </div>
 
         {/* ─── Health verdict + concerns ─────────────────────────────── */}
-        {unit.health && (
+        {health && (
           <motion.section
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -544,6 +598,11 @@ export default function BatteryUnitDetail() {
               <h3 className="text-base sm:text-lg font-semibold text-foreground">
                 Health assessment
               </h3>
+              {!unit.health && (
+                <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">
+                  computed from SOH + cell balance
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
               <MetricCell
@@ -623,7 +682,7 @@ export default function BatteryUnitDetail() {
               />
             </div>
 
-            {unit.health.concerns.length === 0 ? (
+            {health.concerns.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-success">
                 <CheckCircle2 className="w-4 h-4" />
                 No issues detected — module operating within normal parameters.
@@ -634,7 +693,7 @@ export default function BatteryUnitDetail() {
                   Concerns detected
                 </p>
                 <ul className="space-y-1.5">
-                  {unit.health.concerns.map((c, i) => (
+                  {health.concerns.map((c, i) => (
                     <li
                       key={i}
                       className={cn(

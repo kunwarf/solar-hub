@@ -125,6 +125,50 @@ interface BatteryCellGridProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
+ * Fallback health verdict computed from SOH% + per-cell voltage range.
+ * Used when the adapter doesn't emit one (JK BMS + non-Pytes vendors).
+ * Kept in sync with the equivalent helper on BatteryUnitDetail.tsx.
+ */
+function synthesizeHealthLite(
+  soh?: number,
+  cellVoltageRangeMv?: number,
+): { status: "healthy" | "watch" | "degraded" | "critical"; concerns: string[] } | null {
+  if (soh == null && cellVoltageRangeMv == null) return null;
+  const concerns: string[] = [];
+  let status: "healthy" | "watch" | "degraded" | "critical" = "healthy";
+  const bump = (s: typeof status) => {
+    const order = { healthy: 0, watch: 1, degraded: 2, critical: 3 };
+    if (order[s] > order[status]) status = s;
+  };
+  if (soh != null) {
+    if (soh === 0) {
+      concerns.push("SOH reported as 0%");
+      bump("critical");
+    } else if (soh < 50) {
+      concerns.push(`SOH low: ${soh.toFixed(0)}%`);
+      bump("critical");
+    } else if (soh < 80) {
+      concerns.push(`SOH degraded: ${soh.toFixed(0)}%`);
+      bump("degraded");
+    } else if (soh < 90) {
+      concerns.push(`SOH watch: ${soh.toFixed(0)}%`);
+      bump("watch");
+    }
+  }
+  if (cellVoltageRangeMv != null) {
+    if (cellVoltageRangeMv > 150) {
+      concerns.push(`Cell imbalance ${cellVoltageRangeMv} mV`);
+      bump("critical");
+    } else if (cellVoltageRangeMv > 50) {
+      concerns.push(`Cell imbalance ${cellVoltageRangeMv} mV`);
+      bump("watch");
+    }
+  }
+  return { status, concerns };
+}
+
+
+/**
  * Map a raw cell from the backend to the CellData shape the UI expects.
  * Status is derived from voltage/temperature thresholds and status strings.
  */
@@ -540,7 +584,18 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
           )}
 
           <div className="space-y-3 sm:space-y-4">
-            {cellsByUnit.map(({ unit: u, cells }) => (
+            {cellsByUnit.map(({ unit: u, cells }) => {
+              // Derive effective health verdict — prefer adapter-provided,
+              // fall back to computed from SOH + cell voltage range so JK
+              // BMS gets a badge too.
+              const cellMv = cells
+                .map((c) => c.voltage * 1000)
+                .filter((v) => v > 0);
+              const cellRange =
+                cellMv.length >= 2 ? Math.max(...cellMv) - Math.min(...cellMv) : undefined;
+              const effectiveHealth =
+                u.health ?? synthesizeHealthLite(u.soh_pct, cellRange);
+              return (
               <div key={u.unit} className="border border-border/50 rounded-lg p-2 sm:p-3 bg-secondary/10">
                 {/* Unit header row */}
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -557,9 +612,10 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                   <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
                     {/* Health status badge — colored dot + label. Click
                         opens the full module detail page. Hover shows the
-                        specific concerns detected. Fires only for
-                        adapters that emit health data (Pytes today). */}
-                    {u.health && device?.id && (
+                        specific concerns detected. Falls back to a computed
+                        status (SOH + cell balance) when the adapter didn't
+                        provide one. */}
+                    {effectiveHealth && device?.id && (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -572,25 +628,25 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                               }
                               className={cn(
                                 "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold border transition-all hover:brightness-110 cursor-pointer",
-                                u.health.status === "healthy" && "bg-success/10 text-success border-success/20",
-                                u.health.status === "watch" && "bg-warning/10 text-warning border-warning/20",
-                                u.health.status === "degraded" && "bg-orange-500/10 text-orange-500 border-orange-500/20",
-                                u.health.status === "critical" && "bg-destructive/10 text-destructive border-destructive/20",
+                                effectiveHealth.status === "healthy" && "bg-success/10 text-success border-success/20",
+                                effectiveHealth.status === "watch" && "bg-warning/10 text-warning border-warning/20",
+                                effectiveHealth.status === "degraded" && "bg-orange-500/10 text-orange-500 border-orange-500/20",
+                                effectiveHealth.status === "critical" && "bg-destructive/10 text-destructive border-destructive/20",
                               )}
                               aria-label={`View unit ${u.unit} details`}
                             >
                               <span className={cn(
                                 "w-1.5 h-1.5 rounded-full",
-                                u.health.status === "healthy" && "bg-success",
-                                u.health.status === "watch" && "bg-warning",
-                                u.health.status === "degraded" && "bg-orange-500",
-                                u.health.status === "critical" && "bg-destructive",
+                                effectiveHealth.status === "healthy" && "bg-success",
+                                effectiveHealth.status === "watch" && "bg-warning",
+                                effectiveHealth.status === "degraded" && "bg-orange-500",
+                                effectiveHealth.status === "critical" && "bg-destructive",
                               )} />
-                              {u.health.status.charAt(0).toUpperCase() + u.health.status.slice(1)}
+                              {effectiveHealth.status.charAt(0).toUpperCase() + effectiveHealth.status.slice(1)}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs">
-                            {u.health.concerns.length === 0 ? (
+                            {effectiveHealth.concerns.length === 0 ? (
                               <p className="text-xs">
                                 No issues detected.{" "}
                                 <span className="opacity-70">
@@ -603,7 +659,7 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                                   Health concerns (click for details):
                                 </p>
                                 <ul className="text-xs space-y-0.5 list-disc list-inside">
-                                  {u.health.concerns.map((c, i) => (
+                                  {effectiveHealth.concerns.map((c, i) => (
                                     <li key={i}>{c}</li>
                                   ))}
                                 </ul>
@@ -724,7 +780,8 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                   <p className="text-xs text-muted-foreground">No cell data available for this unit</p>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
       )}

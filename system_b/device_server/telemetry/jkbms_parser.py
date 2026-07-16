@@ -516,6 +516,22 @@ class JKBMSParser(TelemetryParser):
         ("balance_current",    ("battery_balance_a",    "A",   "battery")),
     ]
 
+    # Per-unit metric mappings — identical shape to Pylontech so the
+    # frontend can treat both vendors uniformly. Emitted for each entry
+    # in the `battery_units` array produced by parse_jkbms_bus_dump().
+    # metric_name_template uses {unit} as placeholder for unit number.
+    UNIT_METRIC_MAPPINGS: List[tuple] = [
+        ("voltage_v",   ("battery_unit_{unit}_voltage_v",   "V",  "battery_unit")),
+        ("current_a",   ("battery_unit_{unit}_current_a",   "A",  "battery_unit")),
+        ("power_w",     ("battery_unit_{unit}_power_w",     "W",  "battery_unit")),
+        ("soc_pct",     ("battery_unit_{unit}_soc_pct",     "%",  "battery_unit")),
+        ("soh_pct",     ("battery_unit_{unit}_soh_pct",     "%",  "battery_unit")),
+        ("temp_c",      ("battery_unit_{unit}_temp_c",      "C",  "battery_unit")),
+        ("cycle_count", ("battery_unit_{unit}_cycles",      "",   "battery_unit")),
+        ("remaining_ah",("battery_unit_{unit}_remaining_ah","Ah", "battery_unit")),
+        ("total_ah",    ("battery_unit_{unit}_total_ah",    "Ah", "battery_unit")),
+    ]
+
     def parse(
         self,
         telemetry_data: Dict[str, Any],
@@ -578,6 +594,39 @@ class JKBMSParser(TelemetryParser):
                     source="telemetry",
                     tags={"category": "battery"},
                 ))
+
+        # --- Per-unit summary metrics ---
+        # Multi-unit JK stacks produce a battery_units list (see
+        # parse_jkbms_bus_dump). Emit one metric per (unit, field) so the
+        # battery-energy endpoint and per-unit historical queries have
+        # the same source of truth Pylontech provides. Silent when the
+        # bus dump only carries one logical unit (single JK BMS).
+        battery_units: List = telemetry_data.get("battery_units", [])
+        for unit_dict in battery_units:
+            unit_num = unit_dict.get("unit")
+            if unit_num is None:
+                continue
+            for dict_key, (name_template, unit_str, category) in self.UNIT_METRIC_MAPPINGS:
+                value = unit_dict.get(dict_key)
+                if value is None:
+                    continue
+                try:
+                    metrics.append(TelemetryMetric(
+                        time=timestamp,
+                        device_id=device_id,
+                        site_id=site_id,
+                        metric_name=name_template.format(unit=unit_num),
+                        metric_value=float(value),
+                        quality="good",
+                        unit=unit_str,
+                        source="telemetry",
+                        tags={"category": category, "unit": unit_num},
+                    ))
+                except (ValueError, TypeError):
+                    logger.warning(
+                        "Could not convert unit %s %s=%r to float, skipping",
+                        unit_num, dict_key, value,
+                    )
 
         # --- Per-cell voltage metrics ---
         # Prefer battery_cells (multi-unit, unit-tagged) over cell_voltages (single-unit)
