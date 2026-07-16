@@ -529,42 +529,50 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
             </div>
           </div>
 
-          {/* Today's charge/discharge for the whole bank. Silent when
-              the endpoint returns no data (older battery power history
-              or missing timezone config). */}
+          {/* Today's charge/discharge for the whole bank. Mobile-first:
+              label on its own row, then a 3-column grid of values so
+              nothing wraps awkwardly on narrow screens. */}
           {energyResponse?.device && (
-            <div className="glass-card p-2.5 sm:p-3 rounded-lg border border-border/40 flex flex-wrap items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-1.5 shrink-0">
+            <div className="glass-card p-3 rounded-lg border border-border/40 space-y-2 mb-3">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Activity className="w-3.5 h-3.5 text-solar" />
-                <span className="text-xs font-medium text-foreground">
+                <span className="text-xs sm:text-sm font-medium text-foreground">
                   Bank energy today
                 </span>
                 {energyResponse.device.coverage_pct < 90 && (
-                  <span className="inline-flex items-center gap-1 px-1 py-0 rounded text-[9px] font-semibold bg-warning/10 text-warning border border-warning/20">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-warning/10 text-warning border border-warning/20">
                     partial {energyResponse.device.coverage_pct.toFixed(0)}%
                   </span>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto text-[10px] sm:text-xs">
-                <span className="inline-flex items-center gap-1 font-mono">
-                  <TrendingUp className="w-3 h-3 text-success" />
-                  <span className="text-muted-foreground">charged</span>
-                  <span className="font-semibold text-success">
-                    {energyResponse.device.charge_kwh.toFixed(2)} kWh
-                  </span>
-                </span>
-                <span className="inline-flex items-center gap-1 font-mono">
-                  <TrendingDown className="w-3 h-3 text-warning" />
-                  <span className="text-muted-foreground">discharged</span>
-                  <span className="font-semibold text-warning">
-                    {energyResponse.device.discharge_kwh.toFixed(2)} kWh
-                  </span>
-                </span>
-                <span className="inline-flex items-center gap-1 font-mono">
-                  <span className="text-muted-foreground">net</span>
-                  <span
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-md border border-border/40 bg-secondary/20 px-2 py-1.5">
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <TrendingUp className="w-3 h-3 text-success" />
+                    <span className="truncate">Charged</span>
+                  </div>
+                  <p className="text-sm sm:text-base font-mono font-semibold text-success">
+                    {energyResponse.device.charge_kwh.toFixed(2)}
+                    <span className="text-[10px] text-muted-foreground ml-1">kWh</span>
+                  </p>
+                </div>
+                <div className="rounded-md border border-border/40 bg-secondary/20 px-2 py-1.5">
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <TrendingDown className="w-3 h-3 text-warning" />
+                    <span className="truncate">Discharged</span>
+                  </div>
+                  <p className="text-sm sm:text-base font-mono font-semibold text-warning">
+                    {energyResponse.device.discharge_kwh.toFixed(2)}
+                    <span className="text-[10px] text-muted-foreground ml-1">kWh</span>
+                  </p>
+                </div>
+                <div className="rounded-md border border-border/40 bg-secondary/20 px-2 py-1.5">
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <span className="truncate">Net</span>
+                  </div>
+                  <p
                     className={cn(
-                      "font-semibold",
+                      "text-sm sm:text-base font-mono font-semibold",
                       energyResponse.device.charge_kwh -
                         energyResponse.device.discharge_kwh >=
                         0
@@ -575,10 +583,10 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                     {(
                       energyResponse.device.charge_kwh -
                       energyResponse.device.discharge_kwh
-                    ).toFixed(2)}{" "}
-                    kWh
-                  </span>
-                </span>
+                    ).toFixed(2)}
+                    <span className="text-[10px] text-muted-foreground ml-1">kWh</span>
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -597,7 +605,11 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                 u.health ?? synthesizeHealthLite(u.soh_pct, cellRange);
               return (
               <div key={u.unit} className="border border-border/50 rounded-lg p-2 sm:p-3 bg-secondary/10">
-                {/* Unit header row */}
+                {/* Unit header row — icon + name on the left, prominent
+                    tappable health badge on the right. Splits from the
+                    other stat badges (below) so the primary action
+                    (open detail page) is always visible and easy to tap
+                    on mobile. */}
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <Battery className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-battery shrink-0" />
                   <h4 className="font-medium text-xs sm:text-sm text-foreground">Unit {u.unit}</h4>
@@ -608,67 +620,69 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                     <AlertTriangle className="w-3 h-3 text-destructive" />
                   )}
 
-                  {/* Right-side unit stats */}
-                  <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
-                    {/* Health status badge — colored dot + label. Click
-                        opens the full module detail page. Hover shows the
-                        specific concerns detected. Falls back to a computed
-                        status (SOH + cell balance) when the adapter didn't
-                        provide one. */}
-                    {effectiveHealth && device?.id && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                navigate(
-                                  `/devices/${device.id}/battery/unit/${u.unit}`,
-                                )
-                              }
-                              className={cn(
-                                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold border transition-all hover:brightness-110 cursor-pointer",
-                                effectiveHealth.status === "healthy" && "bg-success/10 text-success border-success/20",
-                                effectiveHealth.status === "watch" && "bg-warning/10 text-warning border-warning/20",
-                                effectiveHealth.status === "degraded" && "bg-orange-500/10 text-orange-500 border-orange-500/20",
-                                effectiveHealth.status === "critical" && "bg-destructive/10 text-destructive border-destructive/20",
-                              )}
-                              aria-label={`View unit ${u.unit} details`}
-                            >
-                              <span className={cn(
-                                "w-1.5 h-1.5 rounded-full",
-                                effectiveHealth.status === "healthy" && "bg-success",
-                                effectiveHealth.status === "watch" && "bg-warning",
-                                effectiveHealth.status === "degraded" && "bg-orange-500",
-                                effectiveHealth.status === "critical" && "bg-destructive",
-                              )} />
-                              {effectiveHealth.status.charAt(0).toUpperCase() + effectiveHealth.status.slice(1)}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
-                            {effectiveHealth.concerns.length === 0 ? (
-                              <p className="text-xs">
-                                No issues detected.{" "}
-                                <span className="opacity-70">
-                                  Click for full details.
-                                </span>
-                              </p>
-                            ) : (
-                              <div className="space-y-1">
-                                <p className="text-xs font-semibold">
-                                  Health concerns (click for details):
-                                </p>
-                                <ul className="text-xs space-y-0.5 list-disc list-inside">
-                                  {effectiveHealth.concerns.map((c, i) => (
-                                    <li key={i}>{c}</li>
-                                  ))}
-                                </ul>
-                              </div>
+                  {/* Health status badge — tappable primary action, sits
+                      on the header row so it's always visible on mobile.
+                      Larger touch target (min ~36px h) than the other
+                      badges below. Fallback to computed status for JK
+                      BMS and any adapter that doesn't emit health. */}
+                  {effectiveHealth && device?.id && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                `/devices/${device.id}/battery/unit/${u.unit}`,
+                              )
+                            }
+                            className={cn(
+                              "ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-semibold border transition-all hover:brightness-110 active:scale-95 cursor-pointer min-h-[28px]",
+                              effectiveHealth.status === "healthy" && "bg-success/10 text-success border-success/30",
+                              effectiveHealth.status === "watch" && "bg-warning/10 text-warning border-warning/30",
+                              effectiveHealth.status === "degraded" && "bg-orange-500/10 text-orange-500 border-orange-500/30",
+                              effectiveHealth.status === "critical" && "bg-destructive/10 text-destructive border-destructive/30",
                             )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
+                            aria-label={`View unit ${u.unit} details`}
+                          >
+                            <span className={cn(
+                              "w-2 h-2 rounded-full",
+                              effectiveHealth.status === "healthy" && "bg-success",
+                              effectiveHealth.status === "watch" && "bg-warning",
+                              effectiveHealth.status === "degraded" && "bg-orange-500",
+                              effectiveHealth.status === "critical" && "bg-destructive",
+                            )} />
+                            {effectiveHealth.status.charAt(0).toUpperCase() + effectiveHealth.status.slice(1)}
+                            <span className="opacity-70">›</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          {effectiveHealth.concerns.length === 0 ? (
+                            <p className="text-xs">
+                              No issues detected. Tap for full details.
+                            </p>
+                          ) : (
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold">
+                                Concerns (tap for details):
+                              </p>
+                              <ul className="text-xs space-y-0.5 list-disc list-inside">
+                                {effectiveHealth.concerns.map((c, i) => (
+                                  <li key={i}>{c}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+
+                {/* Secondary stats row — wraps freely on all viewports.
+                    Sits below the header row so mobile users always see
+                    the health badge above without hunting through wraps. */}
+                <div className="flex items-center gap-1.5 flex-wrap mb-2">
                     {/* Charge / Discharge badge */}
                     {u.current_a != null && (
                       <span className={cn(
@@ -764,7 +778,6 @@ const BatteryCellGrid = ({ device, telemetry }: BatteryCellGridProps) => {
                     {u.cycle_count != null && (
                       <span className="text-[9px] sm:text-[10px] text-muted-foreground">{u.cycle_count} cyc</span>
                     )}
-                  </div>
                 </div>
 
                 {cells.length > 0 ? (

@@ -468,53 +468,51 @@ export default function BatteryUnitDetail() {
             statusMeta.ringClass,
           )}
         >
-          <div className="flex flex-col lg:flex-row items-start gap-4 lg:gap-6">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
             {/* Icon + title */}
-            <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
               <div
                 className={cn(
-                  "w-14 h-14 sm:w-16 sm:h-16 rounded-xl flex items-center justify-center",
+                  "w-12 h-12 sm:w-16 sm:h-16 rounded-xl flex items-center justify-center shrink-0",
                   statusMeta.bgClass,
                 )}
               >
                 <Battery
-                  className={cn("w-8 h-8 sm:w-10 sm:h-10", statusMeta.textClass)}
+                  className={cn("w-6 h-6 sm:w-10 sm:h-10", statusMeta.textClass)}
                 />
               </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl font-semibold text-foreground">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg sm:text-2xl font-semibold text-foreground truncate">
                   Unit {unit.unit}
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
                   {nameplate.model ?? "Battery module"}
-                  {nameplate.barcode && (
-                    <span className="ml-2 font-mono text-xs">
-                      · {nameplate.barcode}
-                    </span>
-                  )}
                 </p>
+                {nameplate.barcode && (
+                  <p className="text-[10px] sm:text-xs text-muted-foreground/70 font-mono truncate">
+                    {nameplate.barcode}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Status badge + summary */}
-            <div className="lg:ml-auto flex items-start gap-3 sm:gap-4">
-              <div
-                className={cn(
-                  "px-4 py-2 rounded-lg border inline-flex items-center gap-2",
-                  statusMeta.bgClass,
-                  statusMeta.textClass,
-                  "border-current/20",
-                )}
-              >
-                <StatusIcon className="w-5 h-5" />
-                <div>
-                  <p className="text-xs uppercase tracking-wider opacity-80">
-                    Health
-                  </p>
-                  <p className="text-base sm:text-lg font-semibold leading-tight">
-                    {statusMeta.label}
-                  </p>
-                </div>
+            {/* Status badge — full-width on mobile so it's easy to see */}
+            <div
+              className={cn(
+                "w-full lg:w-auto lg:ml-auto px-4 py-2 rounded-lg border inline-flex items-center gap-2",
+                statusMeta.bgClass,
+                statusMeta.textClass,
+                "border-current/20",
+              )}
+            >
+              <StatusIcon className="w-5 h-5 shrink-0" />
+              <div>
+                <p className="text-xs uppercase tracking-wider opacity-80">
+                  Health
+                </p>
+                <p className="text-base sm:text-lg font-semibold leading-tight">
+                  {statusMeta.label}
+                </p>
               </div>
             </div>
           </div>
@@ -1127,8 +1125,8 @@ function PeerComparisonTable({
   ];
 
   return (
-    <div className="overflow-x-auto -mx-2 sm:mx-0">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+      <table className="w-full text-xs sm:text-sm min-w-[420px]">
         <thead>
           <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
             <th className="text-left px-2 sm:px-3 py-2">Metric</th>
