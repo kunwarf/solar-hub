@@ -81,12 +81,13 @@ export const SettingFieldCard = ({
   // only captures the mount-time value and the field stays stuck on
   // stale data even though the parent re-rendered with a new prop.
   //
-  // Guarded on !isDirty so we don't clobber the user's in-progress edit
-  // with the device's current value mid-typing. Once they hit Apply
-  // (which flips isDirty back to false), the next fresh rawValue will
-  // land as expected.
+  // Guards:
+  //   * !isDirty  — never clobber the user's in-progress edit mid-type
+  //   * rawValue not null/undefined — a failed refresh may transiently
+  //     pass undefined through; ignore that and keep the cached display
+  //     value so fields don't visibly blank out on transport errors
   useEffect(() => {
-    if (!isDirty) {
+    if (!isDirty && rawValue !== undefined && rawValue !== null) {
       setDisplayValue(toDisplay(rawValue));
     }
   }, [rawValue, isDirty, toDisplay]);

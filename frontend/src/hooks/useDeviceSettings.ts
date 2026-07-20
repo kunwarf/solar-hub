@@ -197,19 +197,25 @@ export function useDeviceSettings(
         }
 
         if (isFailure) {
-          // Ran out of attempts. Accept an empty settings dict so the UI
-          // doesn't spin forever, and flag the whole thing as stale — the
-          // outer state also flips isDeviceOffline via the catch path when
-          // status was 'failed'/'timeout'.
+          // Ran out of attempts. Backend either couldn't read any
+          // register (Fix A returns `completed` with 0 keys + error)
+          // or explicitly returned failed/timeout. Either way we do
+          // NOT want to call setSettings({}) — that would clobber the
+          // cached-but-still-valid values already on screen and force
+          // every SettingField to re-sync to blank via the useEffect
+          // introduced in commit 92f02c9.
+          //
+          // Instead, throw so the outer catch flips isDeviceOffline
+          // and shows the banner while leaving `settings` state alone.
           console.warn(
-            `[useDeviceSettings] Accepting empty result after ${MAX_ATTEMPTS} attempts (last status=${status.status})`,
+            `[useDeviceSettings] Empty result after ${MAX_ATTEMPTS} attempts ` +
+            `(last status=${status.status}) — keeping cached values, flagging offline`,
           );
-          deviceSettings = settings ?? {};
-          if (status.status !== 'completed') {
-            // Force the catch path so the UI shows the offline banner.
-            throw new Error(lastError || `Device query returned status=${status.status}`);
-          }
-          break;
+          throw new Error(
+            status.error ||
+              lastError ||
+              `Device query returned ${status.status} with no data`,
+          );
         }
 
         // Any other non-final status shouldn't be possible (waitForCommand
