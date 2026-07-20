@@ -10,7 +10,7 @@
  * If the field is destructive, Apply opens the ConfirmWriteDialog.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,6 +74,22 @@ export const SettingFieldCard = ({
   const [isApplying, setIsApplying] = useState(false);
   const [appliedOk, setAppliedOk] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Sync the local display value when the parent-provided rawValue
+  // changes (e.g. after the user hits Refresh and the hook pulls fresh
+  // settings from the device). Without this, `useState(toDisplay(...))`
+  // only captures the mount-time value and the field stays stuck on
+  // stale data even though the parent re-rendered with a new prop.
+  //
+  // Guarded on !isDirty so we don't clobber the user's in-progress edit
+  // with the device's current value mid-typing. Once they hit Apply
+  // (which flips isDirty back to false), the next fresh rawValue will
+  // land as expected.
+  useEffect(() => {
+    if (!isDirty) {
+      setDisplayValue(toDisplay(rawValue));
+    }
+  }, [rawValue, isDirty, toDisplay]);
 
   const handleChange = (newDisplay: string) => {
     setDisplayValue(newDisplay);
