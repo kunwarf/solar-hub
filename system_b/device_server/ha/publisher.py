@@ -28,6 +28,7 @@ from .discovery import (
     get_stale_metric_keys,
 )
 from .energy_calculator import BatteryEnergyCalculator, InverterEnergyCalculator
+from .spike_guard import EnergySpikeGuard
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,10 @@ class HATelemetryPublisher:
         # Energy calculators  (Redis accumulator + TimescaleDB for totals)
         self._energy_calc     = BatteryEnergyCalculator(redis_client, db_url=db_url)
         self._inv_energy_calc = InverterEnergyCalculator(redis_client, db_url=db_url)
+
+        # Sanity guard for energy sensors — rejects implausible spikes before
+        # they poison Home Assistant's long-term statistics.
+        self._spike_guard = EnergySpikeGuard(redis_client)
 
         # Tracks last-publish wall-clock time per device for interval calculation
         self._last_publish_ts: Dict[str, float] = {}
@@ -199,7 +204,11 @@ class HATelemetryPublisher:
         avail_topic = build_availability_topic(ha_username, serial)
 
         if raw is None:
-            # No recent data — mark device unavailable, skip discovery for now
+            # No recent data — mark device unavailable, skip discovery for now.
+            # Advance _last_publish_ts so that when the device reconnects we
+            # don't integrate an enormous offline gap into today's energy
+            # (that would produce a false ~kWh burst in HA).
+            self._last_publish_ts[serial] = time.monotonic()
             await client.publish(avail_topic, payload=b"offline", retain=False)
             return
 
@@ -207,6 +216,7 @@ class HATelemetryPublisher:
             telemetry = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             logger.warning("Corrupt telemetry JSON for %s", serial)
+            self._last_publish_ts[serial] = time.monotonic()
             await client.publish(avail_topic, payload=b"offline", retain=False)
             return
 
@@ -223,6 +233,7 @@ class HATelemetryPublisher:
                     logger.debug(
                         "Stale telemetry for %s (age=%.0fs) — marking offline", serial, age_seconds
                     )
+                    self._last_publish_ts[serial] = time.monotonic()
                     await client.publish(avail_topic, payload=b"offline", retain=False)
                     return
             except (ValueError, TypeError):
@@ -261,6 +272,12 @@ class HATelemetryPublisher:
         # (covers Voltronic — no energy registers at all — and Deye — no total registers)
         elif device_type == "inverter":
             await self._inv_energy_calc.fill_missing_energy(serial, state, interval_sec)
+
+        # Final sanity pass: reject implausible energy readings so a single
+        # bad Modbus poll can't corrupt HA's long-term statistics.  Rejected
+        # values are replaced with the last-good value from Redis (or None if
+        # this is the first reading we've ever seen for the metric).
+        await self._spike_guard.sanitize(serial, state)
 
         state_topic = build_state_topic(ha_username, serial)
 

@@ -380,6 +380,25 @@ class TelemetryCacheWriter:
                 if src in telemetry:
                     energy_data[target_key] = telemetry[src]
                     break
+        # Defense-in-depth: daily energy counters can never legitimately
+        # exceed ~500 kWh on the systems we support.  A single garbage
+        # Modbus read (e.g. a lifetime-total register accidentally landing
+        # here — the class of bug that produced the Aug-18 HA spike) turns
+        # into a permanent stain on HA's long-term statistics.  Drop such
+        # values before caching so no downstream consumer sees them.
+        _DAILY_KWH_CEILING = 500.0
+        for k in list(energy_data.keys()):
+            v = energy_data[k]
+            try:
+                fv = float(v) if v is not None else None
+            except (TypeError, ValueError):
+                fv = None
+            if fv is not None and (fv < 0 or fv > _DAILY_KWH_CEILING):
+                logger.warning(
+                    "[cache] Dropped implausible energy_today.%s=%s for %s (ceiling=%.0f kWh)",
+                    k, v, serial_number, _DAILY_KWH_CEILING,
+                )
+                del energy_data[k]
         if energy_data:
             cache_data["energy_today"] = energy_data
 
