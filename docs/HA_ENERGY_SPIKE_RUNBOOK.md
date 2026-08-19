@@ -260,6 +260,34 @@ either zero or the real ~88 kWh depending on how you edited.
 
 ---
 
+## Part 3.5 — Flush poisoned "0.00 kWh" cache values
+
+If your lifetime `*_total_kwh` sensors have been displaying `0.00 kWh` in
+HA, the InverterEnergyCalculator / BatteryEnergyCalculator wrote fake
+zeros into Redis (the pre-fix `_get_totals` cached
+`totals.get(key, 0.0)` for one hour whenever the DB integration query
+returned no matching rows).  After deploying the code fix you also need
+to purge those Redis keys so real values start flowing on the next
+publish cycle instead of waiting for the 1 h TTL to expire.
+
+```bash
+# Wipe both inverter and battery lifetime-total caches for every device.
+# Uses SCAN so it's safe against big keyspaces.
+redis-cli --scan --pattern 'ha:inv:*:total_*_kwh' | xargs -r redis-cli DEL
+redis-cli --scan --pattern 'ha:batt:*:total_*_kwh' | xargs -r redis-cli DEL
+```
+
+If lifetime sensors keep showing `Unknown` after this + a `solarhub-telemetry`
+restart, tail the log — the calculator now logs the reason (no rows /
+wrong `device_type` / raw fields missing) so you can fix the underlying
+data path:
+
+```bash
+sudo journalctl -u solarhub-telemetry -f | grep -E 'inv_energy_calc|energy_calc'
+```
+
+---
+
 ## Part 4 — Make HA adopt the new discovery config
 
 Our publisher republishes MQTT discovery on every process restart with the

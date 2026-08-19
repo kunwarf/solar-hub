@@ -132,15 +132,27 @@ class BatteryEnergyCalculator:
             return None, None
 
         try:
-            charge_kwh, discharge_kwh = await self._query_db_total(serial)
-            await self._redis.setex(charge_key,    _TOTAL_TTL, str(charge_kwh))
-            await self._redis.setex(discharge_key, _TOTAL_TTL, str(discharge_kwh))
-            return charge_kwh, discharge_kwh
+            charge_kwh, discharge_kwh, row_count = await self._query_db_total(serial)
+            # Only cache real answers.  When no telemetry rows matched the
+            # query, treat the totals as unknown (None) rather than 0 — HA
+            # would otherwise display a misleading "0.00 kWh" for a lifetime
+            # sensor that has never actually reported.
+            if row_count > 0:
+                await self._redis.setex(charge_key,    _TOTAL_TTL, str(charge_kwh))
+                await self._redis.setex(discharge_key, _TOTAL_TTL, str(discharge_kwh))
+                return charge_kwh, discharge_kwh
+            logger.info(
+                "[energy_calc] No battery telemetry rows for %s in device_telemetry "
+                "— totals reported as Unknown (check retention window, serial match, "
+                "and that data has 'power' or 'battery_power_w' keys)",
+                serial,
+            )
+            return None, None
         except Exception as exc:
             logger.warning("[energy_calc] DB total query failed for %s: %s", serial, exc)
             return None, None
 
-    async def _query_db_total(self, serial: str) -> Tuple[float, float]:
+    async def _query_db_total(self, serial: str) -> Tuple[float, float, int]:
         """
         Sum all historical charge/discharge energy from device_telemetry.
 
@@ -150,6 +162,10 @@ class BatteryEnergyCalculator:
 
         Both JK BMS ('power' field) and other batteries ('battery_power_w')
         are handled via COALESCE.
+
+        Returns (charge_kwh, discharge_kwh, row_count) — row_count lets the
+        caller distinguish "genuinely zero energy across N rows" from "no
+        matching rows at all so we don't actually know".
         """
         import asyncpg
 
@@ -164,6 +180,7 @@ class BatteryEnergyCalculator:
             row = await conn.fetchrow(
                 """
                 SELECT
+                    COUNT(*)                                                        AS row_count,
                     COALESCE(SUM(GREATEST(power_w, 0) * interval_secs) / 3600000.0, 0)
                         AS charge_kwh,
                     COALESCE(SUM(GREATEST(-power_w, 0) * interval_secs) / 3600000.0, 0)
@@ -190,8 +207,12 @@ class BatteryEnergyCalculator:
             )
 
         if row:
-            return round(float(row["charge_kwh"]), 3), round(float(row["discharge_kwh"]), 3)
-        return 0.0, 0.0
+            return (
+                round(float(row["charge_kwh"]), 3),
+                round(float(row["discharge_kwh"]), 3),
+                int(row["row_count"]),
+            )
+        return 0.0, 0.0, 0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -365,7 +386,20 @@ class InverterEnergyCalculator:
 
         try:
             totals = await self._query_db_totals(serial)
-            # Cache results
+            # `totals` is empty when the query matched no rows — the previous
+            # implementation cached a fake 0.0 for every component in that
+            # case, which then surfaced in HA as a misleading "0.00 kWh" for
+            # every lifetime sensor.  Only cache and return real answers.
+            if not totals:
+                logger.info(
+                    "[inv_energy_calc] No inverter telemetry rows for %s in "
+                    "device_telemetry — lifetime totals reported as Unknown. "
+                    "Check that data has pv_power_w / pv1_power_w / power.pv_total_w, "
+                    "that device_type = 'inverter', and that the 7-day retention "
+                    "window still contains rows for this serial.",
+                    serial,
+                )
+                return {}
             pipe = self._redis.pipeline()
             for c in components:
                 total_key = self._component_to_total_state_key(c)
@@ -396,6 +430,7 @@ class InverterEnergyCalculator:
             row = await conn.fetchrow(
                 """
                 SELECT
+                    COUNT(*)                                                        AS row_count,
                     COALESCE(SUM(GREATEST(pv_w, 0)    * interval_secs) / 3600000.0, 0) AS pv_kwh,
                     COALESCE(SUM(GREATEST(bat_w, 0)   * interval_secs) / 3600000.0, 0) AS bat_charge_kwh,
                     COALESCE(SUM(GREATEST(-bat_w, 0)  * interval_secs) / 3600000.0, 0) AS bat_discharge_kwh,
@@ -404,11 +439,15 @@ class InverterEnergyCalculator:
                     COALESCE(SUM(GREATEST(load_w, 0)  * interval_secs) / 3600000.0, 0) AS load_kwh
                 FROM (
                     SELECT
-                        -- PV: flat key (Powdrive/Voltronic/Senergy) or nested (Deye)
+                        -- PV: sum both MPPT strings when available (Senergy has
+                        -- pv1_power_w + pv2_power_w but no combined pv_power_w),
+                        -- otherwise fall back to the single flat key or the
+                        -- Deye-style nested power.pv_total_w.
                         COALESCE(
                             (data->>'pv_power_w')::float,
                             (data->>'pv_input_power_w')::float,
-                            (data->>'pv1_power_w')::float,
+                            (COALESCE((data->>'pv1_power_w')::float, 0)
+                             + COALESCE((data->>'pv2_power_w')::float, 0)),
                             CASE WHEN data ? 'power'
                                  THEN (data->'power'->>'pv_total_w')::float END
                         ) AS pv_w,
@@ -445,16 +484,19 @@ class InverterEnergyCalculator:
                 serial,
             )
 
-        if row:
-            return {
-                "pv_energy_total_kwh":          round(float(row["pv_kwh"]), 3),
-                "battery_charge_total_kwh":     round(float(row["bat_charge_kwh"]), 3),
-                "battery_discharge_total_kwh":  round(float(row["bat_discharge_kwh"]), 3),
-                "grid_import_total_kwh":        round(float(row["grid_import_kwh"]), 3),
-                "grid_export_total_kwh":        round(float(row["grid_export_kwh"]), 3),
-                "load_energy_total_kwh":        round(float(row["load_kwh"]), 3),
-            }
-        return {}
+        # No matching rows → return empty so _get_totals treats totals as
+        # unknown rather than caching a misleading 0.0 for every component.
+        if not row or int(row["row_count"]) == 0:
+            return {}
+
+        return {
+            "pv_energy_total_kwh":          round(float(row["pv_kwh"]), 3),
+            "battery_charge_total_kwh":     round(float(row["bat_charge_kwh"]), 3),
+            "battery_discharge_total_kwh":  round(float(row["bat_discharge_kwh"]), 3),
+            "grid_import_total_kwh":        round(float(row["grid_import_kwh"]), 3),
+            "grid_export_total_kwh":        round(float(row["grid_export_kwh"]), 3),
+            "load_energy_total_kwh":        round(float(row["load_kwh"]), 3),
+        }
 
     # ------------------------------------------------------------------
     # Lifecycle

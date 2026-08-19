@@ -412,6 +412,98 @@ class TestInverterGetTotals:
         assert result == {}
 
 
+class TestInverterNoHistoryPoisoning:
+    """
+    Regression: when device_telemetry has no rows for the serial, the DB
+    integration query still returns a single COALESCE'd row of zeros.  The
+    previous _get_totals cached those 0.0 values in Redis for 1 h and
+    returned them, causing HA to display "0.00 kWh" on every lifetime
+    sensor.  The fix must:
+
+      * Return an empty dict from _query_db_totals when row_count == 0.
+      * Cause _get_totals to skip the Redis cache write in that case.
+      * Cause _get_totals to return {} so fill_missing_energy leaves the
+        state field as None (HA shows Unknown, not a bogus 0.00).
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_totals_returns_empty_when_query_returned_no_rows(self, redis):
+        calc = InverterEnergyCalculator(redis, db_url="postgres://x")
+        redis.mget = AsyncMock(return_value=[None] * 6)
+        calc._query_db_totals = AsyncMock(return_value={})
+
+        result = await calc._get_totals(SERIAL)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_get_totals_does_not_cache_zeros_when_no_rows(self, redis):
+        calc = InverterEnergyCalculator(redis, db_url="postgres://x")
+        redis.mget = AsyncMock(return_value=[None] * 6)
+        calc._query_db_totals = AsyncMock(return_value={})
+
+        pipe = redis.pipeline.return_value
+        await calc._get_totals(SERIAL)
+
+        # No setex on the pipeline — we must not poison Redis with 0.0s
+        pipe.setex.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_totals_caches_and_returns_when_query_has_rows(self, redis):
+        calc = InverterEnergyCalculator(redis, db_url="postgres://x")
+        redis.mget = AsyncMock(return_value=[None] * 6)
+        real_totals = {
+            "pv_energy_total_kwh":         1234.5,
+            "battery_charge_total_kwh":    100.0,
+            "battery_discharge_total_kwh": 90.0,
+            "grid_import_total_kwh":       50.0,
+            "grid_export_total_kwh":       800.0,
+            "load_energy_total_kwh":       1500.0,
+        }
+        calc._query_db_totals = AsyncMock(return_value=real_totals)
+
+        result = await calc._get_totals(SERIAL)
+
+        assert result == real_totals
+        pipe = redis.pipeline.return_value
+        # One setex per component
+        assert pipe.setex.call_count == 6
+
+
+class TestBatteryNoHistoryPoisoning:
+    """
+    Same regression for BatteryEnergyCalculator._get_total: when the DB
+    query returned no rows, the old code cached 0.0/0.0 with 1 h TTL and
+    returned them.  Fix: only cache when row_count > 0; otherwise return
+    (None, None) so HA shows Unknown.
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_total_returns_none_when_query_returned_no_rows(self, redis):
+        calc = BatteryEnergyCalculator(redis, db_url="postgres://x")
+        redis.get = AsyncMock(return_value=None)
+        calc._query_db_total = AsyncMock(return_value=(0.0, 0.0, 0))
+
+        charge, discharge = await calc._get_total(SERIAL)
+
+        assert charge is None
+        assert discharge is None
+        redis.setex.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_total_caches_and_returns_when_query_has_rows(self, redis):
+        calc = BatteryEnergyCalculator(redis, db_url="postgres://x")
+        redis.get = AsyncMock(return_value=None)
+        calc._query_db_total = AsyncMock(return_value=(42.5, 17.25, 314))
+
+        charge, discharge = await calc._get_total(SERIAL)
+
+        assert charge == 42.5
+        assert discharge == 17.25
+        # Both keys cached
+        assert redis.setex.call_count == 2
+
+
 class TestInverterClose:
     """Tests for lifecycle management."""
 
