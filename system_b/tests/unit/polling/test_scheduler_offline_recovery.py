@@ -30,7 +30,7 @@ from system_b.device_server.devices.device_state import (
 from system_b.device_server.polling.scheduler import PollingScheduler
 
 
-def _make_state(interval: int = 1) -> DeviceState:
+def _make_state(interval: int = 0) -> DeviceState:
     return DeviceState(
         device_id=uuid4(),
         serial_number="SH01TEST00000001",
@@ -108,14 +108,16 @@ class TestPollLoopSurvivesOfflineBurst:
 
         scheduler.collector.collect = AsyncMock(side_effect=fake_collect)
 
-        # Stop the loop after we've consumed every outcome.
+        # poll_interval=0 makes the loop's wait_for timeout immediately, so
+        # real wallclock never has to advance for the test to drain outcomes.
+        # We poll idx["i"] with real sleep() slices (not asyncio.sleep(0),
+        # which just yields once) so the poll loop actually runs.
         async def loop_and_stop():
             task = asyncio.create_task(scheduler._poll_loop(state.device_id))
-            # Give the loop enough cycles to consume the outcomes.
-            for _ in range(50):
-                await asyncio.sleep(0)
-                if idx["i"] >= len(outcomes):
-                    break
+            deadline = 0
+            while idx["i"] < len(outcomes) and deadline < 200:
+                await asyncio.sleep(0.005)
+                deadline += 1
             scheduler._running = False
             scheduler._shutdown_event.set()
             await asyncio.wait_for(task, timeout=2.0)
@@ -179,10 +181,10 @@ class TestPollLoopSurvivesOfflineBurst:
         scheduler.collector.collect = AsyncMock(side_effect=fake_collect)
 
         task = asyncio.create_task(scheduler._poll_loop(state.device_id))
-        for _ in range(50):
-            await asyncio.sleep(0)
-            if idx["i"] >= len(outcomes):
-                break
+        deadline = 0
+        while idx["i"] < len(outcomes) and deadline < 200:
+            await asyncio.sleep(0.005)
+            deadline += 1
         scheduler._running = False
         scheduler._shutdown_event.set()
         await asyncio.wait_for(task, timeout=2.0)
@@ -224,10 +226,10 @@ class TestPollLoopSurvivesOfflineBurst:
         scheduler.collector.collect = AsyncMock(side_effect=fake_collect)
 
         task = asyncio.create_task(scheduler._poll_loop(state.device_id))
-        for _ in range(100):
-            await asyncio.sleep(0)
-            if idx["i"] >= len(outcomes):
-                break
+        deadline = 0
+        while idx["i"] < len(outcomes) and deadline < 400:
+            await asyncio.sleep(0.005)
+            deadline += 1
         scheduler._running = False
         scheduler._shutdown_event.set()
         await asyncio.wait_for(task, timeout=2.0)
