@@ -19,6 +19,49 @@ logger = logging.getLogger(__name__)
 ConnectionHandler = Callable[[TCPConnection], Awaitable[asyncio.Task]]
 
 
+def _apply_tcp_keepalive(writer: asyncio.StreamWriter) -> None:
+    """
+    Turn on SO_KEEPALIVE with production-sensible probe timings.
+
+    Set once on every accepted socket in the TCP server.  The actual
+    tunable constants (TCP_KEEPIDLE, _INTVL, _CNT) live in socket.h on
+    Linux and BSD but are absent on Windows — we set what we can and
+    silently skip the rest so the same code runs on all dev machines.
+
+    Effect on a Linux server:
+      SO_KEEPALIVE  = 1  (arm the OS keepalive machinery)
+      TCP_KEEPIDLE  = 30 (send first probe after 30s idle)
+      TCP_KEEPINTVL = 15 (retry every 15s)
+      TCP_KEEPCNT   = 3  (give up after 3 missed probes ⇒ dead in ~75s)
+    """
+    import socket as _socket
+
+    try:
+        sock = writer.get_extra_info("socket")
+    except Exception:
+        return
+    if sock is None:
+        return
+
+    try:
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)
+    except OSError:
+        return   # If we can't even set the flag, don't try the specifics.
+
+    for name, value in (
+        ("TCP_KEEPIDLE", 30),
+        ("TCP_KEEPINTVL", 15),
+        ("TCP_KEEPCNT", 3),
+    ):
+        opt = getattr(_socket, name, None)
+        if opt is None:
+            continue   # Windows, or an old kernel — skip silently.
+        try:
+            sock.setsockopt(_socket.IPPROTO_TCP, opt, value)
+        except OSError:
+            pass
+
+
 class TCPServer:
     """
     TCP server for data logger connections.
@@ -190,6 +233,22 @@ class TCPServer:
             writer.close()
             await writer.wait_closed()
             return
+
+        # Enable TCP keepalive on the accepted socket so we detect dead
+        # peers quickly instead of waiting for the app-level PING chain
+        # (or, worse, the OS default of 7200s idle before the first probe).
+        #
+        # Production evidence: ESP32 dataloggers reconnect on a ~2-minute
+        # cadence.  Without keepalive, our end can hold half-open sockets
+        # long after the ESP32 side is gone, which delays cleanup and
+        # widens the "device missing from Redis" window.
+        #
+        # Tuning: probe after 30s idle, every 15s, drop after 3 misses ⇒
+        # dead-peer detection in ~75s.  Portable enough for Linux and BSD;
+        # silently no-op on platforms lacking the specific TCP_KEEPIDLE
+        # constants (Windows), which is fine — the SO_KEEPALIVE flag alone
+        # still helps.
+        _apply_tcp_keepalive(writer)
 
         # Create connection wrapper
         connection = TCPConnection(reader, writer)

@@ -453,6 +453,22 @@ class ConnectionManager:
         """
         Clean up after a connection closes.
 
+        Reconnect-race handling:
+          When an ESP32 datalogger reconnects on its ~2-minute cadence, we
+          often have BOTH the old dying socket and the new incoming socket
+          in-flight simultaneously.  If the new connection wins the race
+          it calls into `device_manager` which switches the serial's
+          `_by_serial` entry to the new connection.  The old socket's
+          cleanup then runs and, without this guard, would call
+          `remove_device` on the still-active device — tearing down the
+          poll loop that the new connection just re-armed and producing
+          a several-second Redis outage that flapped HA to Unavailable.
+
+          Guard: only remove the device from the device_manager if THIS
+          connection's serial is still the one registered.  If a newer
+          connection has already taken over, our cleanup is a no-op on
+          the device state — the newer path owns it now.
+
         Args:
             connection: The connection to clean up.
         """
@@ -461,13 +477,24 @@ class ConnectionManager:
         # Remove from tracking
         self._connections.pop(connection.connection_id, None)
 
-        if connection.serial_number:
-            self._by_serial.pop(connection.serial_number, None)
+        serial = connection.serial_number
+        current_conn_id = self._by_serial.get(serial) if serial else None
+        we_still_own_serial = current_conn_id == connection.connection_id
+        if serial and we_still_own_serial:
+            self._by_serial.pop(serial, None)
 
         if connection.device_id:
             self._by_device_id.pop(connection.device_id, None)
-            # Notify device manager
-            await self.device_manager.remove_device(connection.device_id)
+            if we_still_own_serial:
+                # Only tear down the device_state if a newer connection
+                # hasn't already superseded us for this serial.
+                await self.device_manager.remove_device(connection.device_id)
+            else:
+                logger.info(
+                    "Skipping remove_device for %s — serial %s has already "
+                    "been taken over by a newer connection",
+                    connection.device_id, serial,
+                )
 
         # Ensure connection is closed
         if connection.is_connected:

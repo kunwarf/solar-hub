@@ -134,9 +134,16 @@ class RedisCacheSettings(BaseSettings):
     password: Optional[str] = Field(default=None, description="Redis password")
     ssl: bool = Field(default=False, description="Use SSL connection")
 
-    # Cache TTL settings (in seconds)
-    telemetry_ttl: int = Field(default=120, description="TTL for telemetry cache (2 minutes)")
-    status_ttl: int = Field(default=120, description="TTL for device status cache (2 minutes)")
+    # Cache TTL settings (in seconds).
+    # Set to 240s (4 minutes) so a device that reconnects on a ~2-minute
+    # cadence (observed floor for ESP32 dataloggers) is never expunged
+    # from Redis between the old socket dying and the new socket producing
+    # its first telemetry write.  Prior default of 120s put the TTL right
+    # at the average reconnect gap, which caused sensors to flap
+    # Unavailable in HA for the 15-30s window between reconnect and first
+    # poll.
+    telemetry_ttl: int = Field(default=240, description="TTL for telemetry cache (4 minutes — covers reconnect gaps)")
+    status_ttl: int = Field(default=240, description="TTL for device status cache (4 minutes — covers reconnect gaps)")
 
     @property
     def url(self) -> str:
