@@ -71,6 +71,10 @@ class TCPConnection:
         # Set to True for serial bridge connections (ESP32 sends HELLO on connect)
         self._bridged: bool = False
 
+        # Guard so close() is safe to call multiple times without double-closing
+        # the writer.  See close() docstring for the CLOSE-WAIT scenario.
+        self._writer_closed: bool = False
+
         # Extract addresses
         try:
             peername = writer.get_extra_info("peername")
@@ -382,16 +386,35 @@ class TCPConnection:
         return response.decode("utf-8", errors="replace").strip()
 
     async def close(self) -> None:
-        """Close the connection gracefully."""
-        if self._state == ConnectionState.DISCONNECTED:
-            return
+        """
+        Close the connection.
 
-        logger.info(
-            f"Closing connection {self.connection_id} "
-            f"(device={self._device_id}, protocol={self._protocol_id})"
-        )
+        Always closes the underlying writer, even when the state is already
+        DISCONNECTED — because that state gets set by the read paths
+        (read/read_until) when the peer sends FIN, but at that point our
+        writer is still open and the kernel is holding the socket in
+        CLOSE-WAIT.  Prior to this fix, close() short-circuited when it
+        saw the DISCONNECTED state and never called writer.close(), which
+        leaked FDs and (much worse) held the `_by_serial` slot preventing
+        the ESP32's reconnect from re-registering under the same serial.
+
+        Idempotent via `_writer_closed` guard — safe to call multiple times.
+        """
+        # State can already be DISCONNECTED here (peer-sent-FIN path).
+        # We still want to close the writer if we haven't already.
+        already_closing = self._writer_closed
+        self._writer_closed = True
+
+        if not already_closing:
+            logger.info(
+                f"Closing connection {self.connection_id} "
+                f"(device={self._device_id}, protocol={self._protocol_id})"
+            )
 
         self._state = ConnectionState.DISCONNECTED
+
+        if already_closing:
+            return
 
         try:
             self.writer.close()
