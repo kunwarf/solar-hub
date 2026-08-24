@@ -122,6 +122,7 @@ class DeviceServer:
         # Setup polling callbacks
         self.polling_scheduler.set_on_telemetry(self._on_telemetry)
         self.polling_scheduler.set_on_device_offline(self._on_poll_device_offline)
+        self.polling_scheduler.set_on_device_online(self._on_poll_device_online)
 
         # Initialize storage
         self.timescale_writer = TimescaleWriter(self.settings)
@@ -518,14 +519,45 @@ class DeviceServer:
         device_id: UUID,
         device_state,
     ) -> None:
-        """Handle device going offline due to poll failures."""
-        # Update Redis cache with offline status
+        """
+        Handle a device crossing the offline threshold.
+
+        We flip the Redis status key to "offline" so System A / the frontend
+        show the state change immediately.  We deliberately do NOT delete
+        the telemetry key here — the 120 s TTL will remove it if no fresh
+        writes arrive, but if the device recovers within that window HA and
+        the dashboard keep displaying the last known values instead of
+        showing a hard "Unavailable" flap.
+
+        Historically we called delete_telemetry() here, which combined
+        with the (fixed) scheduler.py bug that ended the poll loop on
+        offline meant a device that hit 5 consecutive Modbus failures
+        would go dark until the ESP32 dropped its TCP session — often
+        hours.  Same devices ended up on the offline list repeatedly.
+        """
         if self.redis_cache and device_state:
             # Use data_logger_serial for Redis caching (matches System A lookups)
             cache_serial = device_state.data_logger_serial or device_state.serial_number
             if cache_serial:
                 await self.redis_cache.write_status(cache_serial, "offline")
-                await self.redis_cache.delete_telemetry(cache_serial)
+
+    async def _on_poll_device_online(
+        self,
+        device_id: UUID,
+        device_state,
+    ) -> None:
+        """
+        Handle a device recovering from an offline burst.
+
+        The poll loop continues to run through outages now; when the next
+        poll succeeds we flip the Redis status key back to "online" so
+        downstream consumers see the recovery immediately (the telemetry
+        write itself already refreshed the TTL).
+        """
+        if self.redis_cache and device_state:
+            cache_serial = device_state.data_logger_serial or device_state.serial_number
+            if cache_serial:
+                await self.redis_cache.write_status(cache_serial, "online")
 
     def get_stats(self) -> dict:
         """Get server statistics."""

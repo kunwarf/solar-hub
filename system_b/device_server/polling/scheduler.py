@@ -55,6 +55,7 @@ class PollingScheduler:
         self._on_telemetry: Optional[Callable] = None
         self._on_poll_error: Optional[Callable] = None
         self._on_device_offline: Optional[Callable] = None
+        self._on_device_online: Optional[Callable] = None
 
         # State
         self._running = False
@@ -135,10 +136,31 @@ class PollingScheduler:
         """
         Continuous polling loop for a device.
 
+        The loop keeps running for the life of the TCP connection.  If
+        `max_consecutive_failures` is exceeded we mark the device offline
+        (once) so downstream consumers see the state change, but we do NOT
+        exit the loop.  Exponential backoff (see _calculate_interval) then
+        stretches the poll interval, and the moment a poll succeeds
+        record_poll() resets consecutive_failures to 0 and flips status
+        back to ONLINE — so recovery is automatic.
+
+        The old behaviour (`break` on offline) meant a device with a bad
+        Modbus link, an inverter that briefly rejected reads, or the shared
+        upstream burst that clips 5-15 devices at once would stay dead
+        until the TCP session eventually dropped and the ESP32 reconnected
+        — often hours.  Same devices ended up in the offline list over and
+        over.
+
         Args:
             device_id: Device to poll.
         """
         logger.debug(f"Starting poll loop for {device_id}")
+
+        # We only call _handle_device_offline once per outage — otherwise
+        # every failed poll after the threshold would fire the callback
+        # (redundant Redis writes, log noise).  This flag flips back to
+        # False as soon as a successful poll re-arms the device.
+        offline_notified = False
 
         while self._running:
             device_state = self.device_manager.get_device(device_id)
@@ -151,6 +173,20 @@ class PollingScheduler:
                 success, telemetry, error = await self.collector.collect(device_id)
 
                 if success and telemetry:
+                    # Recovery: if we were offline, tell the world we're back.
+                    # record_poll() has already flipped status to ONLINE and
+                    # zeroed consecutive_failures inside collector.collect().
+                    if offline_notified:
+                        logger.info(
+                            f"Device {device_id} recovered after being offline"
+                        )
+                        if self._on_device_online:
+                            try:
+                                await self._on_device_online(device_id, device_state)
+                            except Exception as e:
+                                logger.error(f"Error in device_online callback: {e}")
+                        offline_notified = False
+
                     # Process telemetry
                     processed = self.processor.process(
                         telemetry, device_state.device_type
@@ -171,10 +207,14 @@ class PollingScheduler:
                         except Exception as e:
                             logger.error(f"Error in poll_error callback: {e}")
 
-                    # Check for too many failures
-                    if self._should_mark_offline(device_state):
+                    # Threshold crossed for the first time in this outage:
+                    # mark offline once, keep the loop running so we
+                    # auto-recover on the next successful poll.
+                    if not offline_notified and self._should_mark_offline(device_state):
                         await self._handle_device_offline(device_id, device_state)
-                        break
+                        offline_notified = True
+                        # NOTE: no `break` — the loop keeps trying with the
+                        # backoff interval computed below.
 
                 # Calculate next poll interval (with backoff if needed)
                 interval = self._calculate_interval(device_state)
@@ -332,6 +372,10 @@ class PollingScheduler:
     def set_on_device_offline(self, callback: Callable) -> None:
         """Set callback for device offline events."""
         self._on_device_offline = callback
+
+    def set_on_device_online(self, callback: Callable) -> None:
+        """Set callback for device recovery-from-offline events."""
+        self._on_device_online = callback
 
     def is_polling(self, device_id: UUID) -> bool:
         """
