@@ -496,9 +496,14 @@ class ConnectionManager:
                     connection.device_id, serial,
                 )
 
-        # Ensure connection is closed
-        if connection.is_connected:
-            await connection.close()
+        # Ensure the underlying writer is closed.  We used to guard this
+        # with `if connection.is_connected`, but is_connected returns False
+        # as soon as the peer's FIN flips the state to DISCONNECTED — so
+        # for the exact case we care most about (ESP32 initiates the
+        # close) we'd skip close() and leave the socket in CLOSE-WAIT
+        # forever.  TCPConnection.close() is now idempotent (guarded by
+        # _writer_closed), so calling it unconditionally is safe.
+        await connection.close()
 
     def get_connection_by_device(
         self,
