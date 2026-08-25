@@ -370,7 +370,14 @@ class SerialBridge:
             length: Number of bytes to receive.
 
         Returns:
-            Bytes received or None on error/close.
+            Bytes received, or None on error/peer close.
+
+        Raises:
+            OSError(ETIMEDOUT) when the socket idle-timeout fires BEFORE any
+            byte of this read has arrived.  The caller treats that as the
+            expected keepalive window and loops — the socket stays alive.
+            See esp32_datalogger/modbus_bridge.py._recv_exact for the full
+            rationale.
         """
         # bytearray avoids the O(n²) copy cost of bytes += on MicroPython.
         data = bytearray()
@@ -380,6 +387,11 @@ class SerialBridge:
                 if not chunk:
                     return None
                 data.extend(chunk)
+            except OSError as e:
+                # ETIMEDOUT at the start of a read is normal idle; propagate.
+                if e.args and e.args[0] == 110 and not data:
+                    raise
+                return None
             except Exception:
                 return None
         return bytes(data)

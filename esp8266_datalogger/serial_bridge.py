@@ -218,6 +218,10 @@ class SerialBridge:
             self.socket.sendall(payload)
 
     def _recv_exact(self, length):
+        # See esp32_datalogger/modbus_bridge.py._recv_exact for the rationale.
+        # Propagate ETIMEDOUT (errno 110) when we've received nothing yet
+        # so the outer keepalive handler in run() can `continue` instead of
+        # tearing down the connection.
         data = bytearray()
         while len(data) < length:
             try:
@@ -225,6 +229,10 @@ class SerialBridge:
                 if not chunk:
                     return None
                 data.extend(chunk)
+            except OSError as e:
+                if e.args and e.args[0] == 110 and not data:
+                    raise
+                return None
             except Exception:
                 return None
         return bytes(data)

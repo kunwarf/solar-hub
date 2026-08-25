@@ -182,6 +182,11 @@ class ModbusBridge:
                 time.sleep(1)
 
     def _recv_exact(self, length):
+        # See esp32_datalogger/modbus_bridge.py._recv_exact for the rationale.
+        # Bare `except: return None` swallowed socket recv-timeouts and made
+        # the ESP32 reconnect every keepalive_interval seconds.  Propagate
+        # ETIMEDOUT (errno 110) when we've received nothing yet so the
+        # outer keepalive handler in run() runs `continue`.
         data = bytearray()
         while len(data) < length:
             try:
@@ -189,7 +194,11 @@ class ModbusBridge:
                 if not chunk:
                     return None
                 data.extend(chunk)
-            except:
+            except OSError as e:
+                if e.args and e.args[0] == 110 and not data:
+                    raise
+                return None
+            except Exception:
                 return None
         return bytes(data)
 

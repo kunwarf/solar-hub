@@ -292,7 +292,16 @@ class ModbusBridge:
             length: Number of bytes to receive.
 
         Returns:
-            Bytes received or None on error.
+            Bytes received, or None on error/peer close.
+
+        Raises:
+            OSError(ETIMEDOUT) when the socket idle-timeout fires BEFORE any
+            byte of this read has arrived.  The caller in run() interprets
+            this as a keepalive window and simply loops — the socket stays
+            alive.  Prior to the fix, a bare `except: return None` swallowed
+            the timeout and made the caller reconnect every
+            keepalive_interval seconds (30 s default), producing the
+            observed ~30-40 s reconnect cadence on the server.
         """
         data = bytearray()
         while len(data) < length:
@@ -301,7 +310,16 @@ class ModbusBridge:
                 if not chunk:
                     return None
                 data.extend(chunk)
-            except:
+            except OSError as e:
+                # errno 110 = ETIMEDOUT on the recv timeout the caller set.
+                # If we've received nothing yet, the socket is still healthy —
+                # propagate so the outer keepalive handler continues the loop.
+                # If we've received a partial header/PDU, the connection is
+                # in a bad state — return None so the caller reconnects.
+                if e.args and e.args[0] == 110 and not data:
+                    raise
+                return None
+            except Exception:
                 return None
         return bytes(data)
 
