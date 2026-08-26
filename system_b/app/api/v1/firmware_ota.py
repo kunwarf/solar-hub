@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
 
 # NOTE: uvicorn runs with `WorkingDirectory=/opt/solarhub/app/solar-hub/system_b`
@@ -162,7 +163,11 @@ async def list_firmware_versions(
     db: AsyncSession = Depends(get_db)
 ):
     """List all firmware versions."""
-    query = select(FirmwareVersion)
+    # Eagerly load .files so the response comprehension's `len(v.files)`
+    # doesn't trigger a lazy SELECT after the session boundary — that
+    # raises sqlalchemy.exc.MissingGreenlet under AsyncSession because
+    # implicit lazy loads try to run sync IO outside a greenlet context.
+    query = select(FirmwareVersion).options(selectinload(FirmwareVersion.files))
 
     if device_type:
         query = query.where(FirmwareVersion.device_type == device_type)
