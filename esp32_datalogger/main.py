@@ -26,11 +26,13 @@ wifi = None
 rtu = None
 bridge = None
 web = None
+ota = None
 
 # Control flags
 _bridge_running = False
 _serial_bridge_running = False
 _web_running = False
+_ota_running = False
 
 
 def main():
@@ -90,6 +92,17 @@ def main():
     # Start web server in background
     _thread.start_new_thread(web_server_loop, ())
 
+    # Deferred OTA client init — after WiFi is up.  Own module so the
+    # import failing (e.g. after a broken update) doesn't block the bridge.
+    global ota
+    try:
+        from ota_client import OTAClient
+        ota = OTAClient(config)
+        _thread.start_new_thread(ota_loop, ())
+        print("[Main] OTA check loop started")
+    except Exception as e:
+        print("[Main] OTA init failed (bridge will run without OTA):", e)
+
     # Main loop
     if mode == "modbus_bridge":
         run_bridge_mode(config)
@@ -113,6 +126,35 @@ def web_server_loop():
         except Exception as e:
             print("[Web] Error:", e)
             time.sleep(1)
+
+
+def ota_loop():
+    """
+    Background OTA polling loop.
+
+    Wakes every 60 s and calls `ota.run_background_check()`.  The OTAClient
+    guards its own poll interval via `should_check()` (default 300 s), so
+    this frequent wake-up just yields quickly when there's nothing due.
+    When an update IS available and applied, `apply_update()` calls
+    machine.reset() and this thread never returns.
+
+    Kept in its own function (not folded into web_server_loop) so a stall
+    in the OTA HTTP call can't jam the local /api/files/upload endpoint
+    that operators use to bootstrap a bricked device.
+    """
+    global _ota_running
+    _ota_running = True
+    # Small delay so the first check doesn't race with the bridge's own
+    # register_device() call on freshly booted devices.
+    time.sleep(10)
+    while _ota_running:
+        try:
+            if ota and ota.run_background_check():
+                # Update was applied; device is rebooting.
+                break
+        except Exception as e:
+            print("[OTA] Loop error:", e)
+        time.sleep(60)
 
 
 def run_serial_bridge_mode(config):
@@ -178,11 +220,12 @@ def run_bridge_mode(config):
 
 def stop():
     """Stop all services."""
-    global _bridge_running, _serial_bridge_running, _web_running
+    global _bridge_running, _serial_bridge_running, _web_running, _ota_running
 
     _bridge_running = False
     _serial_bridge_running = False
     _web_running = False
+    _ota_running = False
 
     if bridge:
         bridge.disconnect()
