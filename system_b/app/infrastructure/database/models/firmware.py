@@ -10,7 +10,11 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
-from system_b.app.infrastructure.database.base import Base
+# Same relative-import convention as the other models in this package.
+# The absolute `system_b.app.…` path does NOT work at runtime because
+# uvicorn launches with `WorkingDirectory=system_b` and no `system_b`
+# package is on the module path.
+from .base import Base
 
 
 class FirmwareVersion(Base):
@@ -24,7 +28,11 @@ class FirmwareVersion(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(dt_timezone.utc))
     created_by = Column(String(100), nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    # NOTE: `metadata` is a reserved attribute on Declarative Base (it holds
+    # the MetaData registry).  We map to the DB column of the same name via
+    # the string arg; Python attribute is `metadata_`.  Callers must use
+    # `.metadata_` when reading/writing.
+    metadata_ = Column("metadata", JSONB, nullable=True)
 
     # Relationships
     files = relationship("FirmwareFile", back_populates="firmware_version", cascade="all, delete-orphan")
@@ -64,7 +72,9 @@ class DeviceFirmwareStatus(Base):
     update_started_at = Column(DateTime(timezone=True), nullable=True)
     update_completed_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
-    metadata = Column(JSONB, nullable=True)  # Device info, memory, etc.
+    # See FirmwareVersion.metadata_ comment — reserved name, mapped to
+    # existing DB column via string arg.
+    metadata_ = Column("metadata", JSONB, nullable=True)  # Device info, memory, etc.
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(dt_timezone.utc))
 
     # Relationships
@@ -89,7 +99,8 @@ class FirmwareUpdateCampaign(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(String(100), nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    # See FirmwareVersion.metadata_ comment.
+    metadata_ = Column("metadata", JSONB, nullable=True)
 
     # Relationships
     firmware_version = relationship("FirmwareVersion", back_populates="campaigns")
@@ -108,7 +119,8 @@ class FirmwareUpdateHistory(Base):
     started_at = Column(DateTime(timezone=True), nullable=False, index=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    # See FirmwareVersion.metadata_ comment.
+    metadata_ = Column("metadata", JSONB, nullable=True)
 
     # Relationships
     campaign = relationship("FirmwareUpdateCampaign")

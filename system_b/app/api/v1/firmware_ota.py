@@ -18,8 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from pydantic import BaseModel, Field
 
-from system_b.app.infrastructure.database.session import get_db
-from system_b.app.infrastructure.database.models.firmware import (
+# NOTE: uvicorn runs with `WorkingDirectory=/opt/solarhub/app/solar-hub/system_b`
+# and launches `app.main:app`, so the module namespace starts at `app.*` —
+# there is NO `system_b` package on the path.  Every other v1 router uses
+# relative imports (see devices.py:14, telemetry.py, commands.py); this
+# file must match that convention or FastAPI fails to import the whole
+# api_router at startup and every worker crashes on boot (no port bind).
+from ...infrastructure.database.timescale_connection import get_db
+from ...infrastructure.database.models.firmware import (
     FirmwareVersion, FirmwareFile, DeviceFirmwareStatus,
     FirmwareUpdateCampaign, FirmwareUpdateHistory
 )
@@ -229,12 +235,15 @@ async def check_for_update(
     status = result.scalar_one_or_none()
 
     if not status:
-        # First time this device is checking - create status record
+        # First time this device is checking - create status record.
+        # NOTE: `metadata_` is the Python attribute name; it maps to the
+        # `metadata` DB column.  See firmware.py model for the rename
+        # rationale (SQLAlchemy reserves `metadata` on Declarative Base).
         status = DeviceFirmwareStatus(
             device_serial=check_data.device_serial,
             current_version=check_data.current_version,
             last_check_at=datetime.now(dt_timezone.utc),
-            metadata=check_data.device_info
+            metadata_=check_data.device_info,
         )
         db.add(status)
     else:
@@ -242,7 +251,7 @@ async def check_for_update(
         status.current_version = check_data.current_version
         status.last_check_at = datetime.now(dt_timezone.utc)
         if check_data.device_info:
-            status.metadata = check_data.device_info
+            status.metadata_ = check_data.device_info
 
     await db.commit()
     await db.refresh(status)
