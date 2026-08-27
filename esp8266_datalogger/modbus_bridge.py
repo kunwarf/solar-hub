@@ -24,6 +24,11 @@ class ModbusBridge:
         self._registered = False
         self._device_id = None
         self.stats = {"requests": 0, "responses": 0, "errors": 0, "reconnects": 0}
+        # See esp32_datalogger/modbus_bridge.py for the rationale — after N
+        # consecutive RTU failures we force a fresh TCP session to break out
+        # of a stale-byte framing loop.
+        self._consecutive_rtu_failures = 0
+        self._rtu_failure_reconnect_threshold = 5
 
     def connect(self):
         cfg = self.config["modbus_bridge"]
@@ -131,11 +136,15 @@ class ModbusBridge:
                     continue
                 transaction_id, protocol_id, length, unit_id = struct.unpack(">HHHB", header)
                 if protocol_id != 0:
-                    print("[Bridge] Invalid protocol ID:", protocol_id)
+                    print("[Bridge] Invalid protocol ID {} — forcing reconnect".format(protocol_id))
+                    self.stats["reconnects"] += 1
+                    self._cleanup_socket()
                     continue
                 pdu_length = length - 1
                 if pdu_length <= 0 or pdu_length > 253:
-                    print("[Bridge] Invalid PDU length:", pdu_length)
+                    print("[Bridge] Invalid PDU length {} — forcing reconnect".format(pdu_length))
+                    self.stats["reconnects"] += 1
+                    self._cleanup_socket()
                     continue
                 pdu = self._recv_exact(pdu_length)
                 if not pdu:
@@ -161,13 +170,26 @@ class ModbusBridge:
                     resp_header = struct.pack(">HHHB", transaction_id, 0, resp_length, unit_id)
                     self.socket.sendall(resp_header + response_pdu)
                     self.stats["responses"] += 1
+                    self._consecutive_rtu_failures = 0
                 else:
                     print("[Bridge] FC{:02X} addr={} unit={} → RTU no response".format(
                         func_code, addr, rtu_unit))
+                    try:
+                        self.rtu._flush_rx()
+                    except Exception:
+                        pass
                     exc_pdu = bytes([func_code | 0x80, 0x0B])
                     resp_header = struct.pack(">HHHB", transaction_id, 0, 3, unit_id)
                     self.socket.sendall(resp_header + exc_pdu)
                     self.stats["errors"] += 1
+                    self._consecutive_rtu_failures += 1
+                    if self._consecutive_rtu_failures >= self._rtu_failure_reconnect_threshold:
+                        print("[Bridge] {} consecutive RTU failures — forcing reconnect".format(
+                            self._consecutive_rtu_failures))
+                        self.stats["reconnects"] += 1
+                        self._consecutive_rtu_failures = 0
+                        self._cleanup_socket()
+                        continue
             except OSError as e:
                 if e.args[0] in (110, 116):
                     if idle_cb:

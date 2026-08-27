@@ -57,6 +57,16 @@ class ModbusBridge:
             "reconnects": 0,
         }
 
+        # Framing circuit breaker.  After N consecutive RTU failures, force a
+        # TCP reconnect so both sides resync from a clean state.  Prod 2026-08-27
+        # showed the failure mode: a single slow RTU response arrives after the
+        # server timed out → next request's response reads the previous late
+        # bytes → transaction-id mismatch → server drains N stale bytes and
+        # retries → same failure again → retry storm.  Full reconnect breaks
+        # the cycle because the OS socket buffer is dropped along with the FD.
+        self._consecutive_rtu_failures = 0
+        self._rtu_failure_reconnect_threshold = 5
+
     def connect(self):
         """
         Connect to the server.
@@ -210,15 +220,29 @@ class ModbusBridge:
                     ">HHHB", header
                 )
 
-                # Validate protocol ID (should be 0 for Modbus)
+                # Validate protocol ID (should be 0 for Modbus).  A non-zero
+                # value means we're out-of-sync with the server's frame stream
+                # (the "header" is really mid-frame from a corrupted prior
+                # transmission).  `continue`ing would misread the next 7 bytes
+                # as another header — a fresh reconnect is the only clean
+                # recovery.
                 if protocol_id != 0:
-                    print("[Bridge] Invalid protocol ID:", protocol_id)
+                    print("[Bridge] Invalid protocol ID {} — forcing reconnect".format(protocol_id))
+                    self.stats["reconnects"] += 1
+                    self.stats["last_reconnect"] = "bad_protocol_id"
+                    self._cleanup_socket()
                     continue
 
-                # Read PDU (length - 1 because unit_id is included in length)
+                # Read PDU (length - 1 because unit_id is included in length).
+                # An out-of-range length is the same class of framing corruption
+                # as bad protocol_id — reconnect rather than skip an unknown
+                # number of bytes.
                 pdu_length = length - 1
                 if pdu_length <= 0 or pdu_length > 253:
-                    print("[Bridge] Invalid PDU length:", pdu_length)
+                    print("[Bridge] Invalid PDU length {} — forcing reconnect".format(pdu_length))
+                    self.stats["reconnects"] += 1
+                    self.stats["last_reconnect"] = "bad_pdu_length"
+                    self._cleanup_socket()
                     continue
 
                 pdu = self._recv_exact(pdu_length)
@@ -260,10 +284,25 @@ class ModbusBridge:
                     )
                     self.socket.sendall(resp_header + response_pdu)
                     self.stats["responses"] += 1
+                    # A clean round-trip resets the circuit breaker.
+                    self._consecutive_rtu_failures = 0
                 else:
                     # RTU did not respond — always log regardless of function code
                     print("[Bridge] FC{:02X} addr={} unit={} → RTU no response".format(
                         func_code, addr, rtu_unit))
+
+                    # Explicit UART drain: if the RTU replied *after* our
+                    # timeout deadline, those bytes are now sitting in the
+                    # UART RX buffer and would leak into the next transceive's
+                    # response window.  transceive() already calls _flush_rx()
+                    # at the start of the next call, but doing it here too
+                    # ensures no leftover bytes influence a re-poll that comes
+                    # via a different code path.
+                    try:
+                        self.rtu._flush_rx()
+                    except Exception:
+                        pass
+
                     # Send exception response (gateway target device failed)
                     exc_pdu = bytes([func_code | 0x80, 0x0B])
                     resp_header = struct.pack(
@@ -275,6 +314,20 @@ class ModbusBridge:
                     )
                     self.socket.sendall(resp_header + exc_pdu)
                     self.stats["errors"] += 1
+
+                    # Circuit breaker: too many consecutive RTU failures means
+                    # either the RS485 link is down (physical) or our TCP
+                    # frame stream is desynced with the server's expectations.
+                    # In both cases a fresh TCP session is the cheapest reset.
+                    self._consecutive_rtu_failures += 1
+                    if self._consecutive_rtu_failures >= self._rtu_failure_reconnect_threshold:
+                        print("[Bridge] {} consecutive RTU failures — forcing reconnect".format(
+                            self._consecutive_rtu_failures))
+                        self.stats["reconnects"] += 1
+                        self.stats["last_reconnect"] = "rtu_circuit_breaker"
+                        self._consecutive_rtu_failures = 0
+                        self._cleanup_socket()
+                        continue
 
             except OSError as e:
                 # ETIMEDOUT — keepalive window, normal.  Accept both
