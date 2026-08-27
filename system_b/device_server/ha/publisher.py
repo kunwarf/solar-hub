@@ -28,6 +28,7 @@ from .discovery import (
     get_stale_metric_keys,
 )
 from .energy_calculator import BatteryEnergyCalculator, InverterEnergyCalculator
+from .last_known import LastKnownCache
 from .spike_guard import EnergySpikeGuard
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,13 @@ class HATelemetryPublisher:
         # Sanity guard for energy sensors — rejects implausible spikes before
         # they poison Home Assistant's long-term statistics.
         self._spike_guard = EnergySpikeGuard(redis_client)
+
+        # Last-known-value cache — fills any None state field from Redis
+        # with the last non-None value we published for the same
+        # (serial, metric).  Prevents HA sensors from flapping to
+        # Unavailable on a single missed poll or a spike-guard rejection.
+        # See last_known.py for the full rationale.
+        self._last_known = LastKnownCache(redis_client)
 
         # Tracks last-publish wall-clock time per device for interval calculation
         self._last_publish_ts: Dict[str, float] = {}
@@ -278,6 +286,12 @@ class HATelemetryPublisher:
         # values are replaced with the last-good value from Redis (or None if
         # this is the first reading we've ever seen for the metric).
         await self._spike_guard.sanitize(serial, state)
+
+        # Fill any remaining None values from the last-known cache so no
+        # sensor publishes as null (which HA treats as Unavailable).  This
+        # runs AFTER spike_guard so a spike-rejected metric also gets a
+        # last-known substitute rather than a null.  See last_known.py.
+        await self._last_known.fill_and_update(serial, state)
 
         state_topic = build_state_topic(ha_username, serial)
 
