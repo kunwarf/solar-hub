@@ -52,11 +52,29 @@ class TelemetryCacheWriter:
         """
         Connect to Redis.
 
+        Uses redis-py's built-in retry + health-check machinery so that a
+        transient network hiccup doesn't silently flip `_connected` to False
+        for the remainder of the worker's life.  Without this a single dropped
+        TCP session on a multi-worker deploy made 1 of N workers silently
+        drop every telemetry write for hours (until the whole polling manager
+        was restarted), because there was no auto-reconnect anywhere in the
+        cache write path — `write_telemetry` returned False without logging.
+
+        `retry_on_error` includes ConnectionError which is what fires on
+        a broken socket, so redis-py will transparently re-establish before
+        surfacing the error to us.  `health_check_interval=30` sends a PING
+        every 30 s of idle to detect dead peers proactively.
+
         Returns:
             True if connected successfully.
         """
         try:
             redis_settings = self.settings.redis
+            from redis.exceptions import ConnectionError as RedisConnectionError
+            from redis.exceptions import TimeoutError as RedisTimeoutError
+            from redis.retry import Retry
+            from redis.backoff import ExponentialBackoff
+
             self._client = redis.Redis(
                 host=redis_settings.host,
                 port=redis_settings.port,
@@ -64,12 +82,25 @@ class TelemetryCacheWriter:
                 password=redis_settings.password,
                 ssl=redis_settings.ssl,
                 decode_responses=True,
+                # Auto-reconnect: retry connection errors up to 3 times with
+                # exponential backoff (0.1s, 0.2s, 0.4s).  Applies to every
+                # command, not just connect().
+                retry=Retry(ExponentialBackoff(cap=1.0, base=0.1), 3),
+                retry_on_error=[RedisConnectionError, RedisTimeoutError],
+                # Health check the connection every 30 s of idle so we
+                # detect dead peers before an actual command runs.
+                health_check_interval=30,
+                # Socket timeouts so a hung Redis doesn't hang the poll loop.
+                socket_timeout=5,
+                socket_connect_timeout=5,
+                socket_keepalive=True,
             )
             # Test connection
             await self._client.ping()
             self._connected = True
             logger.info(
-                f"Redis cache connected: {redis_settings.host}:{redis_settings.port}/{redis_settings.db}"
+                f"Redis cache connected: {redis_settings.host}:{redis_settings.port}/{redis_settings.db} "
+                f"(retry+health_check enabled)"
             )
             return True
         except Exception as e:
@@ -105,7 +136,14 @@ class TelemetryCacheWriter:
         Returns:
             True if write succeeded.
         """
-        if not self.is_connected:
+        # Trust redis-py's retry_on_error to handle transient disconnects.
+        # We only skip when we literally don't have a client instance
+        # (initial connect() never succeeded).  Previously we returned
+        # False here whenever `_connected` was False, which stayed False
+        # forever after any hiccup because nothing re-set it.  Now the
+        # command will either succeed via the retry machinery or throw,
+        # and the except-clause below flips `_connected` accordingly.
+        if self._client is None:
             return False
 
         try:
@@ -147,10 +185,18 @@ class TelemetryCacheWriter:
                 await pipe.execute()
 
             logger.debug(f"Cached telemetry for device {serial_number}")
+            # A successful write proves the connection is alive — flip the
+            # flag on in case a prior transient failure had knocked it off.
+            self._connected = True
             return True
 
         except Exception as e:
-            logger.error(f"Failed to cache telemetry for {serial_number}: {e}")
+            # Log AT WARNING level (not error) since this fires per-poll if
+            # Redis is down and we don't want to flood the log.  The retry
+            # machinery in the client has already tried 3 exponential
+            # backoffs before we reach here.
+            logger.warning(f"Failed to cache telemetry for {serial_number}: {e}")
+            self._connected = False
             return False
 
     async def delete_telemetry(self, serial_number: str) -> None:
@@ -179,7 +225,10 @@ class TelemetryCacheWriter:
         Returns:
             True if write succeeded.
         """
-        if not self.is_connected:
+        # Same rationale as write_telemetry above — don't short-circuit on
+        # `_connected` alone.  The client's retry machinery may transparently
+        # reconnect.
+        if self._client is None:
             return False
 
         try:
@@ -190,9 +239,11 @@ class TelemetryCacheWriter:
                 status,
             )
             logger.debug(f"Cached status for device {serial_number}: {status}")
+            self._connected = True
             return True
         except Exception as e:
-            logger.error(f"Failed to cache status for {serial_number}: {e}")
+            logger.warning(f"Failed to cache status for {serial_number}: {e}")
+            self._connected = False
             return False
 
     def _format_telemetry_for_cache(
