@@ -293,11 +293,20 @@ class TelemetryCacheWriter:
                     power_data[target_key] = telemetry[src]
                     break
 
-        # Calculate pv_total_w if we have pv1 and pv2 but not total
+        # Calculate pv_total_w if we have pv1 and pv2 but not total.
+        # NOTE: we set pv_total_w even when both strings are 0 (nighttime) —
+        # what we care about is whether the REGISTERS were read.  Previously
+        # `if pv1 or pv2:` treated both-zero as "don't compute" because
+        # `0 or 0` is falsy, and pv_total_w never got set at night.  That
+        # made the HA Solar sensor go "Unavailable" every night instead of
+        # showing 0 W, and the Energy dashboard's power-sources graph got
+        # gaps at the baseline.
         if "pv_total_w" not in power_data:
-            pv1 = power_data.get("pv1_w", 0) or 0
-            pv2 = power_data.get("pv2_w", 0) or 0
-            if pv1 or pv2:
+            has_pv1 = "pv1_w" in power_data
+            has_pv2 = "pv2_w" in power_data
+            if has_pv1 or has_pv2:
+                pv1 = power_data.get("pv1_w") or 0
+                pv2 = power_data.get("pv2_w") or 0
                 power_data["pv_total_w"] = pv1 + pv2
 
         # Add EPS / Smart Load port power to total load when present.
@@ -336,13 +345,22 @@ class TelemetryCacheWriter:
         #   When discharging: bat>0 → adds to available load power ✓
         #   When charging:    bat<0 → subtracts from available load power ✓
         #   grid>0 = import (adds), grid<0 = export (subtracts) ✓
+        # Note: `not power_data.get("load_w")` is intentionally truthy on
+        # both missing AND zero — Senergy's load register frequently reads
+        # 0 when the actual load is going through the EPS port, so we do
+        # want to derive in that case too.
         if _is_senergy and not power_data.get("load_w"):
             pv = power_data.get("pv_total_w") or 0
             bat = float(telemetry.get("battery_power_w") or 0)
             grid = float(telemetry.get("grid_power_w") or 0)
             derived = pv + bat + grid
-            if derived > 0:
-                power_data["load_w"] = round(derived, 1)
+            # Clamp negatives to 0 (energy balance can go slightly negative
+            # due to metering inaccuracy or Modbus poll skew).  A zero load
+            # is a legitimate reading at night and should be published to
+            # HA rather than dropped — same reasoning as pv_total_w above,
+            # otherwise HA shows the Load sensor "Unavailable" whenever
+            # nothing's consuming, breaking the Energy dashboard baseline.
+            power_data["load_w"] = round(max(derived, 0.0), 1)
 
         # Senergy battery_power_w: positive=discharging, negative=charging.
         # Negate to get dashboard convention (positive=charging, negative=discharging).
