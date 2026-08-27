@@ -93,9 +93,20 @@ class TCPModbusAdapter:
                 max_bytes=8192, timeout=0.1,
             )
             if drained:
+                # Log the hex so we can identify what leaked. Working
+                # theory (2026-08-27): the ghost bytes are the tail of a
+                # previous poll's late response — e.g. an FC03 response for
+                # 1 register is 11 bytes, server consumes 9, drain finds
+                # the 2-byte register data.  Confirming this dictates the
+                # real fix (widen server timeout beyond ESP32 RTU timeout
+                # + inverter worst-case, so late responses never race the
+                # next poll's window).
+                hex_bytes = drained.hex() if len(drained) <= 32 else drained[:32].hex() + "..."
                 logger.warning(
-                    "[MODBUS] Drained %d stale byte(s) from socket after error",
+                    "[MODBUS] Drained %d stale byte(s) from %s after error: %s",
                     len(drained),
+                    getattr(self.connection, "serial_number", None) or getattr(self.connection, "device_id", "?"),
+                    hex_bytes,
                 )
             return len(drained)
         except Exception as exc:
@@ -150,6 +161,24 @@ class TCPModbusAdapter:
                 resp_trans_id, _, length, resp_unit_id = struct.unpack(">HHHB", header[:7])
 
                 if resp_trans_id != transaction_id:
+                    # Log the full received header + what we expected so we
+                    # can correlate the ghost frame with a prior poll.  If
+                    # this is a late response from N polls ago, the diff
+                    # (transaction_id - resp_trans_id) tells us how far
+                    # behind — and once we know how many polls in the past,
+                    # we know the exact time window in which the late
+                    # response was racing our next request.
+                    logger.warning(
+                        "[MODBUS] TxID mismatch on %s: expected=%d got=%d "
+                        "(diff=%+d) header=%s fc=0x%02x bc=%d",
+                        getattr(self.connection, "serial_number", None) or getattr(self.connection, "device_id", "?"),
+                        transaction_id,
+                        resp_trans_id,
+                        resp_trans_id - transaction_id,
+                        header[:7].hex(),
+                        header[7],
+                        header[8],
+                    )
                     raise ValueError(
                         f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}"
                     )
