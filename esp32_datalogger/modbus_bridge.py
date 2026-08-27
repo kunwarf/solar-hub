@@ -310,38 +310,53 @@ class ModbusBridge:
         """
         Receive exact number of bytes.
 
-        Args:
-            length: Number of bytes to receive.
-
         Returns:
-            Bytes received, or None on error/peer close.
+            bytes on success
+            None ONLY on genuine peer FIN (recv returned b"") — the caller
+                logs this as "peer_closed"
 
         Raises:
-            OSError(ETIMEDOUT) when the socket idle-timeout fires BEFORE any
-            byte of this read has arrived.  The caller in run() interprets
-            this as a keepalive window and simply loops — the socket stays
-            alive.  Prior to the fix, a bare `except: return None` swallowed
-            the timeout and made the caller reconnect every
-            keepalive_interval seconds (30 s default), producing the
-            observed ~30-40 s reconnect cadence on the server.
+            OSError — any socket-level error.  The caller's OSError handler
+                logs the errno (32=EPIPE, 104=ECONNRESET, 113=EHOSTUNREACH,
+                etc) so we can identify what's actually killing the socket.
+                Previously this method swallowed all OSErrors and returned
+                None, making every reconnect look like a clean FIN — which
+                masked the real cause of residual churn.
+
+            The only exception: OSError(ETIMEDOUT) at start-of-read is
+            still swallowed via `raise` so the outer keepalive handler in
+            run() sees it and `continue`s — that's the keepalive window,
+            not a real error.
+
+            Partial-read ETIMEDOUT (some data already received then
+            timeout) still returns None so the caller reconnects; this
+            represents a broken mid-message state, not a per-errno issue.
         """
         data = bytearray()
         while len(data) < length:
             try:
                 chunk = self.socket.recv(length - len(data))
                 if not chunk:
+                    # Genuine peer FIN — clean close.  This is the ONLY
+                    # path that legitimately maps to "peer_closed".
                     return None
                 data.extend(chunk)
             except OSError as e:
-                # errno 110 = ETIMEDOUT on the recv timeout the caller set.
-                # If we've received nothing yet, the socket is still healthy —
-                # propagate so the outer keepalive handler continues the loop.
-                # If we've received a partial header/PDU, the connection is
-                # in a bad state — return None so the caller reconnects.
-                if e.args and e.args[0] == 110 and not data:
-                    raise
-                return None
+                if e.args and e.args[0] == 110:
+                    # ETIMEDOUT: keepalive window at start-of-read → raise
+                    # for outer to `continue`; partial-read → None so we
+                    # reconnect on a broken state.
+                    if not data:
+                        raise
+                    return None
+                # Any other OSError: propagate so the outer handler logs
+                # the errno.  This is the key change — previously we
+                # returned None here, which was indistinguishable from a
+                # peer FIN in the caller's eyes.
+                raise
             except Exception:
+                # Non-OSError Python-level exception: still return None so
+                # the caller reconnects and labels it appropriately.
                 return None
         return bytes(data)
 
