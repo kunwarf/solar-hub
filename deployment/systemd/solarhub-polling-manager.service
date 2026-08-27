@@ -1,5 +1,5 @@
 [Unit]
-Description=Solar Hub Polling Manager (Multi-Process Device Server)
+Description=Solar Hub Polling Manager (Single-Worker Device Server)
 Documentation=https://github.com/YOUR_USERNAME/solar-hub
 # Must start after storage worker (which consumes the Redis Stream)
 After=network.target postgresql.service redis-server.service solarhub-storage-worker.service
@@ -13,7 +13,12 @@ Group=solarhub
 WorkingDirectory=/opt/solarhub/app/solar-hub/system_b
 Environment="PATH=/opt/solarhub/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
-Environment="POLLING_WORKERS=8"
+# Single worker: SO_REUSEPORT with N>1 causes device-manager state divergence
+# (per-worker _claimed_data_loggers sets), so devices "linked" to worker A can
+# never be polled by worker B on the next connection cycle, and telemetry
+# vanishes from Redis until the next lucky routing. At current fleet size
+# one worker handles the load with plenty of headroom.
+Environment="POLLING_WORKERS=1"
 Environment="STORAGE_WORKER_ENABLED=true"
 EnvironmentFile=/opt/solarhub/app/.env
 ExecStartPre=/bin/mkdir -p /opt/solarhub/logs

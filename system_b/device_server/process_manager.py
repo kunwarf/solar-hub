@@ -17,7 +17,15 @@ Managed by: solarhub-polling-manager.service
 Log file:   /opt/solarhub/logs/polling-manager.log
 
 Environment variables:
-  POLLING_WORKERS=4           Number of worker processes (default: 4)
+  POLLING_WORKERS=1           Number of worker processes (default: 1).
+                              Raising this above 1 with SO_REUSEPORT causes
+                              per-worker device-manager state divergence —
+                              devices routed to worker A on one connection
+                              cycle can end up on worker B the next, leaving
+                              their prior state (claimed_data_loggers, poll
+                              schedule) orphaned. Leave at 1 unless the
+                              fleet grows large enough to bottleneck one
+                              CPU core.
   STORAGE_WORKER_ENABLED=true Must also be set for workers to skip DB writes
 """
 import asyncio
@@ -200,7 +208,7 @@ def main() -> None:
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    num_workers = int(os.environ.get("POLLING_WORKERS", "4"))
+    num_workers = int(os.environ.get("POLLING_WORKERS", "1"))
     logger.info("[POLLING_MGR] Polling manager starting (workers=%d)", num_workers)
 
     manager = ProcessManager(num_workers=num_workers)
