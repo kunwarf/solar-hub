@@ -378,44 +378,155 @@ class TCPModbusAdapter:
                 raise ValueError(f"Value at index {i} ({val}) out of range [0, 65535]")
         await self._write_holding_u16_list(address, values)
 
+    # Range-consolidation config.
+    # max_gap: how many empty register addresses we're willing to read as
+    #   "wasted" to avoid a separate Modbus round-trip.
+    #     0 = pure contiguous only — never read an address not in the map
+    #     N = tolerate N-word holes between two defined registers
+    #   We default to 0 so we never speculatively touch addresses the
+    #   inverter didn't advertise — several Deye/Powdrive units respond
+    #   with a Modbus exception if you read a reserved register, and one
+    #   exception can poison the whole chunk.  A larger gap tolerance is
+    #   only a win if the register map is very sparse; measure first.
+    # max_chunk_size: cap per single read.  Modbus TCP allows up to 125
+    #   registers; we stay well below to keep response times short (a slow
+    #   inverter processes ~1-2 ms per register).
+    _POLL_MAX_GAP = 0
+    _POLL_MAX_CHUNK_SIZE = 60
+
+    def _build_read_plan(self) -> List[Dict[str, Any]]:
+        """
+        Group readable registers into contiguous read ranges.
+
+        Called lazily on first poll and cached on the adapter instance.
+        The register map doesn't change during adapter lifetime, so the
+        plan is stable.
+
+        Reduces the number of Modbus TCP round-trips per poll cycle from
+        one-per-register (127+ for a Senergy inverter) to one-per-chunk
+        (~10-15).  Fewer round-trips = smaller window for late-response
+        ghost bytes to leak into the next request's read window (the
+        actual failure mode we're diagnosing).
+
+        Returns:
+            List of chunk dicts: {start, count, registers: [reg_dict, ...]}
+        """
+        readable: List[Dict[str, Any]] = []
+        for reg in self.regs:
+            if not reg.get("id"):
+                continue
+            if str(reg.get("rw", "RO")).upper() in ("WO", "Write-Only"):
+                continue
+            if (reg.get("kind") or "").lower() not in ("holding", "input"):
+                continue
+            try:
+                addr = int(reg["addr"]) + self.addr_offset
+                size = max(1, int(reg.get("size", 1)))
+            except (KeyError, ValueError, TypeError):
+                continue
+            readable.append({"reg": reg, "addr": addr, "size": size})
+
+        # Sort by address so a linear sweep can grow chunks.
+        readable.sort(key=lambda r: r["addr"])
+
+        plan: List[Dict[str, Any]] = []
+        current: Optional[Dict[str, Any]] = None
+
+        for entry in readable:
+            reg_start = entry["addr"]
+            reg_end = reg_start + entry["size"] - 1  # inclusive last word
+
+            if current is None:
+                current = {
+                    "start": reg_start,
+                    "end": reg_end,
+                    "registers": [entry],
+                }
+                continue
+
+            gap = reg_start - (current["end"] + 1)
+            projected_end = max(current["end"], reg_end)
+            projected_count = projected_end - current["start"] + 1
+
+            can_extend = gap <= self._POLL_MAX_GAP and projected_count <= self._POLL_MAX_CHUNK_SIZE
+            if can_extend:
+                current["end"] = projected_end
+                current["registers"].append(entry)
+            else:
+                plan.append(current)
+                current = {"start": reg_start, "end": reg_end, "registers": [entry]}
+
+        if current is not None:
+            plan.append(current)
+
+        # Compute counts once so poll() doesn't recompute
+        for chunk in plan:
+            chunk["count"] = chunk["end"] - chunk["start"] + 1
+
+        logger.info(
+            "[MODBUS] Read plan built for %s: %d chunks covering %d registers "
+            "(was %d individual reads)",
+            getattr(self.connection, "serial_number", None) or "?",
+            len(plan),
+            sum(c["count"] for c in plan),
+            len(readable),
+        )
+        return plan
+
     async def poll(self) -> Dict[str, Any]:
         """
         Poll all readable registers and return telemetry data.
+
+        Uses a cached read plan that groups contiguous registers into
+        single Modbus reads, then slices the response per register.  On
+        chunk failure, falls back to per-register reads for JUST that
+        chunk so a single unreadable register doesn't blank neighbours.
 
         Returns:
             Dictionary of register ID to decoded value.
         """
         values: Dict[str, Any] = {}
 
-        # Note: _read_holding_regs already uses the lock, so multiple reads
-        # during polling are serialized automatically
+        # Build (and cache) the read plan on first call.  The register map
+        # is immutable per-adapter, so lazy init is fine.
+        if getattr(self, "_read_plan", None) is None:
+            self._read_plan = self._build_read_plan()
 
-        for reg in self.regs:
-            reg_id = reg.get("id")
-            if not reg_id:
-                continue
-
-            # Skip write-only registers
-            if str(reg.get("rw", "RO")).upper() in ("WO", "Write-Only"):
-                continue
-
-            # Only read holding/input registers
-            kind = (reg.get("kind") or "").lower()
-            if kind not in ("holding", "input"):
-                continue
-
+        for chunk in self._read_plan:
             try:
-                addr = int(reg["addr"]) + self.addr_offset
-                size = max(1, int(reg.get("size", 1)))
-
-                regs = await self._read_holding_regs(addr, size)
-
-                # Decode value
-                value = self._decode_words(reg, regs)
-                values[reg_id] = value
-
-            except Exception:
+                chunk_words = await self._read_holding_regs(chunk["start"], chunk["count"])
+            except Exception as exc:
+                # Chunk-level failure: fall back to per-register reads
+                # for just this chunk.  Preserves the old poll() behavior
+                # of "one bad register doesn't kill the whole map".
+                logger.debug(
+                    "[MODBUS] Chunk read failed for %s (start=%d count=%d): %s — "
+                    "falling back to per-register",
+                    getattr(self.connection, "serial_number", None) or "?",
+                    chunk["start"],
+                    chunk["count"],
+                    exc,
+                )
+                for entry in chunk["registers"]:
+                    try:
+                        regs = await self._read_holding_regs(entry["addr"], entry["size"])
+                        value = self._decode_words(entry["reg"], regs)
+                        values[entry["reg"]["id"]] = value
+                    except Exception:
+                        continue
                 continue
+
+            # Slice each register's words out of the chunk response.
+            for entry in chunk["registers"]:
+                offset = entry["addr"] - chunk["start"]
+                end = offset + entry["size"]
+                if offset < 0 or end > len(chunk_words):
+                    continue
+                try:
+                    value = self._decode_words(entry["reg"], chunk_words[offset:end])
+                    values[entry["reg"]["id"]] = value
+                except Exception:
+                    continue
 
         # Log summary with key metrics
         key_metrics = []
