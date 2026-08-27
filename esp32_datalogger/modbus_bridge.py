@@ -200,6 +200,8 @@ class ModbusBridge:
                 header = self._recv_exact(self.MBAP_HEADER_SIZE)
                 if not header:
                     print("[Bridge] Connection closed by server")
+                    self.stats["reconnects"] += 1
+                    self.stats["last_reconnect"] = "peer_closed"
                     self._cleanup_socket()
                     continue
 
@@ -222,6 +224,8 @@ class ModbusBridge:
                 pdu = self._recv_exact(pdu_length)
                 if not pdu:
                     print("[Bridge] Failed to receive PDU")
+                    self.stats["reconnects"] += 1
+                    self.stats["last_reconnect"] = "partial_pdu"
                     self._cleanup_socket()
                     continue
 
@@ -273,14 +277,32 @@ class ModbusBridge:
                     self.stats["errors"] += 1
 
             except OSError as e:
-                if e.args[0] == 110:  # ETIMEDOUT — keepalive window, normal
+                if e.args and e.args[0] == 110:  # ETIMEDOUT — keepalive window, normal
                     continue
+                # Log the errno so we know why we're reconnecting. Common:
+                #   32   EPIPE          — send() after peer FIN
+                #   104  ECONNRESET     — peer sent RST
+                #   113  EHOSTUNREACH   — network temporarily unreachable
+                #   116  ETIMEDOUT      — some MicroPython builds report this
+                #   -1   MP_ENOTCONN    — MicroPython lwIP wrapping
+                errno = e.args[0] if e.args else "?"
+                reason = "OSError errno={}".format(errno)
+                print("[Bridge] Reconnect on {}: {}".format(reason, e))
                 self.stats["errors"] += 1
+                self.stats["reconnects"] += 1
+                self.stats["last_reconnect"] = reason
                 self._cleanup_socket()
                 time.sleep(1)
 
-            except Exception:
+            except Exception as e:
+                # Bare-catch fallback — everything that isn't OSError.  Log the
+                # type so we know if it's a real Python bug vs a wrapped
+                # network condition MicroPython raised as a generic Exception.
+                reason = type(e).__name__
+                print("[Bridge] Reconnect on {}: {}".format(reason, e))
                 self.stats["errors"] += 1
+                self.stats["reconnects"] += 1
+                self.stats["last_reconnect"] = reason
                 self._cleanup_socket()
                 time.sleep(1)
 

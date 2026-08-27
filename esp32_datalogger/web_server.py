@@ -388,6 +388,14 @@ class WebServer:
                 html += "<tr><td>Responses</td><td>{}</td></tr>".format(
                     bridge_stats.get("responses", 0))
             html += "<tr><td>Errors</td><td>{}</td></tr>".format(bridge_stats.get("errors", 0))
+            html += "<tr><td>Reconnects</td><td>{}</td></tr>".format(
+                bridge_stats.get("reconnects", 0))
+            # Last reconnect reason for over-the-wire debugging.  The bridge
+            # sets this from the OSError errno or Exception type in run()'s
+            # catch clauses.  Falls back to "-" when nothing has reconnected
+            # since boot.
+            html += "<tr><td>Last Reconnect</td><td>{}</td></tr>".format(
+                bridge_stats.get("last_reconnect", "-"))
             html += "</table></div>"
 
         # Actions
