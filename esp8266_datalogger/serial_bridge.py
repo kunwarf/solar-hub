@@ -230,7 +230,7 @@ class SerialBridge:
                     return None
                 data.extend(chunk)
             except OSError as e:
-                if e.args and e.args[0] == 110 and not data:
+                if e.args and e.args[0] in (110, 116) and not data:  # ETIMEDOUT (110 stdlib, 116 MicroPython/ESP)
                     raise
                 return None
             except Exception:

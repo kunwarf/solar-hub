@@ -277,7 +277,12 @@ class ModbusBridge:
                     self.stats["errors"] += 1
 
             except OSError as e:
-                if e.args and e.args[0] == 110:  # ETIMEDOUT — keepalive window, normal
+                # ETIMEDOUT — keepalive window, normal.  Accept both
+                # errno=110 (stdlib) and errno=116 (MicroPython ESP32) —
+                # production data 2026-08-27 showed all residual reconnects
+                # were errno=116 because MicroPython on ESP-IDF/LwIP raises
+                # a different errno for the same POSIX condition.
+                if e.args and e.args[0] in (110, 116):
                     continue
                 # Log the errno so we know why we're reconnecting. Common:
                 #   32   EPIPE          — send() after peer FIN
@@ -342,7 +347,7 @@ class ModbusBridge:
                     return None
                 data.extend(chunk)
             except OSError as e:
-                if e.args and e.args[0] == 110:
+                if e.args and e.args[0] in (110, 116):  # ETIMEDOUT on stdlib=110, MicroPython ESP32=116
                     # ETIMEDOUT: keepalive window at start-of-read → raise
                     # for outer to `continue`; partial-read → None so we
                     # reconnect on a broken state.

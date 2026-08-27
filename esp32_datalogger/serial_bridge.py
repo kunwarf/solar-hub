@@ -281,7 +281,13 @@ class SerialBridge:
                     pass  # Unknown frame type — ignore
 
             except OSError as e:
-                if e.args[0] == 110:  # ETIMEDOUT — keepalive window, normal
+                # ETIMEDOUT is errno 110 in stdlib and errno 116 in
+                # MicroPython on ESP32 (ESP-IDF/LwIP).  Accept both so we
+                # continue the keepalive loop rather than tearing down the
+                # socket every 30 seconds.  This was the root cause of the
+                # residual reconnect churn on modbus_bridge devices — same
+                # class of bug applies here.
+                if e.args and e.args[0] in (110, 116):  # ETIMEDOUT
                     continue
                 self.stats["errors"] += 1
                 self._cleanup_socket()
@@ -389,7 +395,7 @@ class SerialBridge:
                 data.extend(chunk)
             except OSError as e:
                 # ETIMEDOUT at the start of a read is normal idle; propagate.
-                if e.args and e.args[0] == 110 and not data:
+                if e.args and e.args[0] in (110, 116) and not data:  # ETIMEDOUT on stdlib=110, MicroPython ESP32=116
                     raise
                 return None
             except Exception:
