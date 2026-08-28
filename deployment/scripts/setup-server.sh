@@ -1270,6 +1270,15 @@ EOF
 setup_logrotate() {
     log_section "Configuring Log Rotation"
 
+    # copytruncate is used because our services' stdout/stderr are attached
+    # via systemd's `StandardOutput=append:…` directive.  Systemd opens the
+    # file descriptor once at process start and does not reopen it on
+    # SIGHUP, so the classic "rename + create + signal to reload" pattern
+    # leaves the process still writing to the rotated inode — /*.log ends
+    # up 0 bytes while /*.log.1 keeps growing.  copytruncate sidesteps
+    # this by copying then truncating in place, preserving the FD.
+    # A few log lines can be lost in the copy-then-truncate window; that's
+    # a fine trade for actually-working rotation.
     cat > /etc/logrotate.d/solarhub <<EOF
 /opt/solarhub/logs/*.log {
     daily
@@ -1278,12 +1287,7 @@ setup_logrotate() {
     compress
     delaycompress
     notifempty
-    create 0640 solarhub solarhub
-    sharedscripts
-    postrotate
-        systemctl reload solarhub-platform >/dev/null 2>&1 || true
-        systemctl reload solarhub-telemetry >/dev/null 2>&1 || true
-    endscript
+    copytruncate
 }
 EOF
 
