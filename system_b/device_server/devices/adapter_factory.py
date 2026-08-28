@@ -69,6 +69,16 @@ class TCPModbusAdapter:
         # Lock for serializing Modbus operations (prevents concurrent access)
         self._modbus_lock = asyncio.Lock()
 
+        # Desync escalation counter.  A TxID mismatch of exactly -1 means
+        # the response we just read belongs to the previous request — the
+        # ghost-frame desync.  We first try to drain it away; if we hit
+        # this state N times in a row, we force-close the TCP connection
+        # so the ESP32 reconnects from scratch and both sides resync.
+        # Prod data 2026-08-28 showed 70k of these mismatches over 20h,
+        # all diff=-1, all on the same 5 inverters (batteries untouched).
+        self._consecutive_desync = 0
+        self._desync_reconnect_threshold = 20
+
     def _next_transaction_id(self) -> int:
         """Get next Modbus transaction ID."""
         self._transaction_id = (self._transaction_id + 1) & 0xFFFF
@@ -161,24 +171,61 @@ class TCPModbusAdapter:
                 resp_trans_id, _, length, resp_unit_id = struct.unpack(">HHHB", header[:7])
 
                 if resp_trans_id != transaction_id:
-                    # Log the full received header + what we expected so we
-                    # can correlate the ghost frame with a prior poll.  If
-                    # this is a late response from N polls ago, the diff
-                    # (transaction_id - resp_trans_id) tells us how far
-                    # behind — and once we know how many polls in the past,
-                    # we know the exact time window in which the late
-                    # response was racing our next request.
+                    diff = resp_trans_id - transaction_id
+                    serial_id = (
+                        getattr(self.connection, "serial_number", None)
+                        or getattr(self.connection, "device_id", "?")
+                    )
                     logger.warning(
                         "[MODBUS] TxID mismatch on %s: expected=%d got=%d "
                         "(diff=%+d) header=%s fc=0x%02x bc=%d",
-                        getattr(self.connection, "serial_number", None) or getattr(self.connection, "device_id", "?"),
+                        serial_id,
                         transaction_id,
                         resp_trans_id,
-                        resp_trans_id - transaction_id,
+                        diff,
                         header[:7].hex(),
                         header[7],
                         header[8],
                     )
+
+                    # Consume the ghost frame's remaining body so the
+                    # buffer is empty when the next poll fires.  The
+                    # header we already read includes the byte_count
+                    # (header[8]).  Full response length = 9 header + BC
+                    # data.  We've read 9; drain exactly BC bytes.  If we
+                    # only did the previous best-effort drain (whatever's
+                    # there in 100ms), the trailing bytes arrive AFTER
+                    # the drain window closes and get read as the next
+                    # poll's header — perpetuating the -1 lag forever.
+                    ghost_bc = header[8]
+                    if 0 < ghost_bc <= 250:
+                        try:
+                            await self.connection.read(ghost_bc, timeout=self.timeout)
+                        except Exception as swallow:
+                            logger.debug(
+                                "[MODBUS] Failed to consume ghost body (%d bytes) "
+                                "for %s: %s",
+                                ghost_bc, serial_id, swallow,
+                            )
+
+                    # Escalate: if we keep seeing the same -1 lag, the
+                    # buffer is chronically off by one and no amount of
+                    # draining will catch up.  Force-close the socket so
+                    # the ESP32 reconnects fresh.
+                    if diff == -1:
+                        self._consecutive_desync += 1
+                        if self._consecutive_desync >= self._desync_reconnect_threshold:
+                            logger.warning(
+                                "[MODBUS] %d consecutive -1 desyncs on %s — "
+                                "force-closing socket to trigger ESP32 reconnect",
+                                self._consecutive_desync, serial_id,
+                            )
+                            self._consecutive_desync = 0
+                            try:
+                                await self.connection.close()
+                            except Exception:
+                                pass
+
                     raise ValueError(
                         f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}"
                     )
@@ -197,6 +244,11 @@ class TCPModbusAdapter:
                 # doesn't inherit a corrupted framing state.
                 await self._drain_stale_bytes()
                 raise
+
+            # Successful read — clear the desync escalator so a healthy
+            # run counts towards recovery rather than getting kicked out
+            # by a stale counter.
+            self._consecutive_desync = 0
 
             # Parse registers
             registers = []
