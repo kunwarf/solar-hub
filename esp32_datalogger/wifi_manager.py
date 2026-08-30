@@ -47,6 +47,22 @@ class WiFiManager:
         self.sta.active(True)
         time.sleep(0.5)
 
+        # Disable WiFi power-save.  ESP32 defaults to modem-sleep, which
+        # holds RX buffered at the AP between DTIM intervals and adds
+        # ~100-500ms latency to any inbound packet.  Prod diagnostic
+        # 2026-08-30 showed 3800ms avg latency to LAN peers with power-save
+        # on.  For a device that polls every 5s and must respond to
+        # Modbus TCP within a few hundred ms, PM_NONE is the right tradeoff
+        # (higher idle current is negligible when the device is mains-powered).
+        try:
+            self.sta.config(pm=network.WLAN.PM_NONE)
+            print("[WiFi] Power-save disabled (PM_NONE)")
+        except (AttributeError, OSError, ValueError) as pm_err:
+            # Older MicroPython builds don't expose WLAN.PM_NONE or the pm
+            # config option.  Not fatal — device will still work with
+            # default power-save, just with higher latency.
+            print("[WiFi] Could not disable power-save:", pm_err)
+
         if self.sta.isconnected():
             print("[WiFi] Already connected to", self.sta.config("essid"))
             return True

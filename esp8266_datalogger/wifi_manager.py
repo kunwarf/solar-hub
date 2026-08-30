@@ -48,6 +48,16 @@ class WiFiManager:
         self.sta.active(True)
         time.sleep(0.5)
 
+        # Disable WiFi power-save.  See esp32_datalogger/wifi_manager.py for
+        # rationale — modem-sleep adds ~100-500ms latency to inbound frames.
+        # ESP8266 exposes the same API but PM_NONE may not exist in older
+        # builds; try the constant, else fall back to no-op.
+        try:
+            self.sta.config(pm=network.WLAN.PM_NONE)
+            print("[WiFi] Power-save disabled (PM_NONE)")
+        except (AttributeError, OSError, ValueError) as pm_err:
+            print("[WiFi] Could not disable power-save:", pm_err)
+
         if self.sta.isconnected():
             print("[WiFi] Already connected to", self.sta.config("essid"))
             return True
