@@ -188,15 +188,16 @@ class TCPModbusAdapter:
                         header[8],
                     )
 
-                    # Consume the ghost frame's remaining body so the
-                    # buffer is empty when the next poll fires.  The
-                    # header we already read includes the byte_count
-                    # (header[8]).  Full response length = 9 header + BC
-                    # data.  We've read 9; drain exactly BC bytes.  If we
-                    # only did the previous best-effort drain (whatever's
-                    # there in 100ms), the trailing bytes arrive AFTER
-                    # the drain window closes and get read as the next
-                    # poll's header — perpetuating the -1 lag forever.
+                    # Consume the ghost frame's remaining body — but the
+                    # queue may be N-deep (diff=-N).  Prod 2026-08-30
+                    # showed diff=-2 stalls that b833375 couldn't clear
+                    # because it consumed exactly ONE ghost per mismatch.
+                    # Solution: consume this ghost's body, then keep
+                    # peek-and-drain looking for either our real TxID or
+                    # an empty buffer.  A negative diff of -N means there
+                    # are up to N ghost frames stacked; drain until we
+                    # hit the wanted TxID or the buffer is quiet for a
+                    # short window (whichever comes first).
                     ghost_bc = header[8]
                     if 0 < ghost_bc <= 250:
                         try:
@@ -208,23 +209,60 @@ class TCPModbusAdapter:
                                 ghost_bc, serial_id, swallow,
                             )
 
-                    # Escalate: if we keep seeing the same -1 lag, the
-                    # buffer is chronically off by one and no amount of
-                    # draining will catch up.  Force-close the socket so
-                    # the ESP32 reconnects fresh.
-                    if diff == -1:
-                        self._consecutive_desync += 1
-                        if self._consecutive_desync >= self._desync_reconnect_threshold:
-                            logger.warning(
-                                "[MODBUS] %d consecutive -1 desyncs on %s — "
-                                "force-closing socket to trigger ESP32 reconnect",
-                                self._consecutive_desync, serial_id,
-                            )
-                            self._consecutive_desync = 0
+                    # If the ghost was more than one behind, drain until
+                    # we run out.  Peek 9 more bytes; if TxID matches
+                    # what we wanted, we recovered — return that data.
+                    # If it doesn't match, consume ITS body and try
+                    # again.  Cap iterations so a truly-broken stream
+                    # doesn't spin forever.
+                    if diff < -1:
+                        for _ in range(abs(diff) + 2):  # small headroom
                             try:
-                                await self.connection.close()
+                                peek = await self.connection.read(9, timeout=1.0)
                             except Exception:
-                                pass
+                                break
+                            peek_tid = struct.unpack(">H", peek[:2])[0]
+                            peek_bc = peek[8]
+                            if peek_tid == transaction_id:
+                                # Recovered — this is our real response.
+                                # Fall through: read data and continue as
+                                # if the original read had matched.
+                                logger.info(
+                                    "[MODBUS] Recovered from %d-deep ghost queue on %s",
+                                    abs(diff), serial_id,
+                                )
+                                header = peek  # replace so the code below uses it
+                                self._consecutive_desync = 0
+                                # Read the actual data for THIS frame
+                                data = await self.connection.read(peek_bc, timeout=self.timeout)
+                                registers = [
+                                    struct.unpack(">H", data[i:i + 2])[0]
+                                    for i in range(0, len(data), 2)
+                                    if i + 1 < len(data)
+                                ]
+                                return registers
+                            # Not ours yet — drop this ghost body too
+                            if 0 < peek_bc <= 250:
+                                try:
+                                    await self.connection.read(peek_bc, timeout=self.timeout)
+                                except Exception:
+                                    break
+
+                    # Escalate on ANY consecutive desync (not just -1).
+                    # A device stuck in a diff=-2 pattern needs recovery
+                    # just as urgently as diff=-1.
+                    self._consecutive_desync += 1
+                    if self._consecutive_desync >= self._desync_reconnect_threshold:
+                        logger.warning(
+                            "[MODBUS] %d consecutive desyncs on %s — "
+                            "force-closing socket to trigger ESP32 reconnect",
+                            self._consecutive_desync, serial_id,
+                        )
+                        self._consecutive_desync = 0
+                        try:
+                            await self.connection.close()
+                        except Exception:
+                            pass
 
                     raise ValueError(
                         f"Transaction ID mismatch: {resp_trans_id} != {transaction_id}"
