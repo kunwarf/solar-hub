@@ -129,8 +129,13 @@ class OTAClient:
 
                 print("[OTA] Downloading {}/{}:{}".format(i + 1, total_files, filename))
 
-                # Verify checksum
-                actual_checksum = hashlib.sha256(content.encode()).hexdigest()
+                # Verify checksum.  MicroPython's hashlib.sha256() object
+                # has .digest() (bytes) but NOT .hexdigest() like CPython,
+                # so we build the hex ourselves.  Prod 2026-08-30 caught
+                # this: every OTA download failed with
+                # "'sha256' object has no attribute 'hexdigest'".
+                digest = hashlib.sha256(content.encode()).digest()
+                actual_checksum = "".join("{:02x}".format(b) for b in digest)
                 if actual_checksum != checksum:
                     print("[OTA] Checksum mismatch for {}".format(filename))
                     if is_required:

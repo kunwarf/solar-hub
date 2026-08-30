@@ -124,7 +124,10 @@ class OTAClient:
 
                 print("[OTA] Downloading {}/{}:{}".format(i + 1, total_files, filename))
 
-                actual_checksum = hashlib.sha256(content.encode()).hexdigest()
+                # See esp32_datalogger/ota_client.py — MicroPython's sha256
+                # has .digest() but not .hexdigest(); build hex ourselves.
+                digest = hashlib.sha256(content.encode()).digest()
+                actual_checksum = "".join("{:02x}".format(b) for b in digest)
                 if actual_checksum != checksum:
                     print("[OTA] Checksum mismatch for {}".format(filename))
                     if is_required:
