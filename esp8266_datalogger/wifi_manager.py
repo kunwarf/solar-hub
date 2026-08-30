@@ -58,8 +58,18 @@ class WiFiManager:
         except (AttributeError, OSError, ValueError) as pm_err:
             print("[WiFi] Could not disable power-save:", pm_err)
 
+        # Max TX power (ESP8266 max ~20.5 dBm).  Small free gain.
+        try:
+            self.sta.config(txpower=20)
+        except (AttributeError, OSError, ValueError):
+            pass
+
         if self.sta.isconnected():
             print("[WiFi] Already connected to", self.sta.config("essid"))
+            try:
+                print("[WiFi] RSSI={} dBm".format(self.sta.status("rssi")))
+            except (AttributeError, OSError, ValueError):
+                pass
             return True
 
         print("[WiFi] Connecting to:", ssid)

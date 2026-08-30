@@ -63,8 +63,18 @@ class WiFiManager:
             # default power-save, just with higher latency.
             print("[WiFi] Could not disable power-save:", pm_err)
 
+        # Max out TX power.  ESP32 default is 19.5 dBm; supported max on
+        # most boards is 20.5 dBm.  Free gain — a couple dB can be the
+        # difference between marginal signal and reliable link when the
+        # device is far from the AP.
+        try:
+            self.sta.config(txpower=20)
+        except (AttributeError, OSError, ValueError):
+            pass  # Not exposed on older builds — harmless.
+
         if self.sta.isconnected():
             print("[WiFi] Already connected to", self.sta.config("essid"))
+            self._log_link_quality()
             return True
 
         print("[WiFi] Connecting to:", ssid)
@@ -87,13 +97,61 @@ class WiFiManager:
         start = time.time()
         while time.time() - start < timeout_s:
             if self.sta.isconnected():
+                # Optional static IP: if wifi.json specifies static_ip,
+                # netmask, gateway, dns, apply them.  Skipping DHCP removes
+                # ~500ms from every reconnect AND eliminates the periodic
+                # DHCP-renew traffic that can bounce off a congested AP.
+                # To enable, add to wifi.json:
+                #   {"ssid":"…","password":"…",
+                #    "static_ip":"192.168.88.246",
+                #    "netmask":"255.255.255.0",
+                #    "gateway":"192.168.88.1",
+                #    "dns":"192.168.88.1"}
+                static_ip = wifi_cfg.get("static_ip")
+                if static_ip:
+                    try:
+                        self.sta.ifconfig((
+                            static_ip,
+                            wifi_cfg.get("netmask", "255.255.255.0"),
+                            wifi_cfg.get("gateway", "192.168.88.1"),
+                            wifi_cfg.get("dns", "192.168.88.1"),
+                        ))
+                        print("[WiFi] Static IP applied:", static_ip)
+                    except Exception as ip_err:
+                        print("[WiFi] Static IP config failed:", ip_err)
+
                 ip = self.sta.ifconfig()[0]
                 print("[WiFi] Connected! IP:", ip)
+                self._log_link_quality()
                 return True
             time.sleep(0.5)
 
         print("[WiFi] Connection failed")
         return False
+
+    def _log_link_quality(self):
+        """
+        Print RSSI, BSSID, channel after association so weak-signal cases
+        show up in logs.  RSSI thresholds:
+          -50 to -60 dBm  excellent — full link speed
+          -60 to -70 dBm  good      — normal operation
+          -70 to -75 dBm  fair      — some retries, occasional loss
+          -75 to -85 dBm  poor      — frequent retries, high loss
+          below -85 dBm  unusable  — connection will drop
+        """
+        try:
+            rssi = self.sta.status("rssi")
+        except (AttributeError, OSError, ValueError):
+            rssi = "?"
+        try:
+            bssid = ":".join("{:02x}".format(b) for b in self.sta.config("bssid"))
+        except (AttributeError, OSError, ValueError):
+            bssid = "?"
+        try:
+            channel = self.sta.config("channel")
+        except (AttributeError, OSError, ValueError):
+            channel = "?"
+        print("[WiFi] RSSI={} dBm  BSSID={}  channel={}".format(rssi, bssid, channel))
 
     def start_ap(self):
         """Start Access Point for configuration."""
