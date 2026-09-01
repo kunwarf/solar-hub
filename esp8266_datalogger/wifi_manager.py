@@ -7,6 +7,11 @@ The network module API is identical between ESP8266 and ESP32 MicroPython.
 import network
 import time
 
+try:
+    from log_buffer import log_print as print
+except ImportError:
+    pass
+
 from config import load_wifi, AP_PASSWORD, get_ap_ssid
 
 

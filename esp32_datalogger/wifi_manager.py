@@ -6,6 +6,14 @@ Handles WiFi connection (STA mode) and Access Point (AP mode) for configuration.
 import network
 import time
 
+# Route print through the ring-buffer logger so [WiFi] lines are visible
+# via the device's web UI, not just the serial console.  Other modules
+# (modbus_bridge, serial_bridge, etc.) already use this pattern.
+try:
+    from log_buffer import log_print as print
+except ImportError:
+    pass  # fall back to stdout in test/host environments
+
 from config import load_wifi, AP_PASSWORD, get_ap_ssid
 
 
@@ -49,19 +57,29 @@ class WiFiManager:
 
         # Disable WiFi power-save.  ESP32 defaults to modem-sleep, which
         # holds RX buffered at the AP between DTIM intervals and adds
-        # ~100-500ms latency to any inbound packet.  Prod diagnostic
-        # 2026-08-30 showed 3800ms avg latency to LAN peers with power-save
-        # on.  For a device that polls every 5s and must respond to
-        # Modbus TCP within a few hundred ms, PM_NONE is the right tradeoff
-        # (higher idle current is negligible when the device is mains-powered).
-        try:
-            self.sta.config(pm=network.WLAN.PM_NONE)
-            print("[WiFi] Power-save disabled (PM_NONE)")
-        except (AttributeError, OSError, ValueError) as pm_err:
-            # Older MicroPython builds don't expose WLAN.PM_NONE or the pm
-            # config option.  Not fatal — device will still work with
-            # default power-save, just with higher latency.
-            print("[WiFi] Could not disable power-save:", pm_err)
+        # ~100-500ms latency to any inbound packet.  For a device that
+        # polls every 5s and must respond to Modbus TCP within a few
+        # hundred ms, PM_NONE is the right tradeoff.
+        # Try 3 API variants because MicroPython builds differ:
+        #   1. pm=WLAN.PM_NONE  (modern, 1.20+)
+        #   2. pm=0             (raw int, some 1.19 builds)
+        #   3. 'pm', 0          (older tuple-style config, rare)
+        pm_ok = False
+        for attempt in ("attr", "int", "tuple"):
+            try:
+                if attempt == "attr":
+                    self.sta.config(pm=network.WLAN.PM_NONE)
+                elif attempt == "int":
+                    self.sta.config(pm=0)
+                elif attempt == "tuple":
+                    self.sta.config('pm', 0)
+                pm_ok = True
+                print("[WiFi] Power-save disabled (PM_NONE via {})".format(attempt))
+                break
+            except (AttributeError, OSError, ValueError, TypeError) as pm_err:
+                continue
+        if not pm_ok:
+            print("[WiFi] Could not disable power-save on this MicroPython build")
 
         # Max out TX power.  ESP32 default is 19.5 dBm; supported max on
         # most boards is 20.5 dBm.  Free gain — a couple dB can be the
