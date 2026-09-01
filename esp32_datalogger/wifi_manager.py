@@ -212,14 +212,48 @@ class WiFiManager:
         return None
 
     def get_status(self):
-        """Get WiFi status information."""
+        """Get WiFi status information — includes PM state and RSSI so
+        we can verify PM_NONE actually engaged after boot."""
+        pm_state = None
+        rssi = None
+        bssid = None
+        channel = None
+        if self.sta.isconnected():
+            # Read current power-save mode; if the build doesn't support
+            # querying, report None so we know it's opaque.
+            for key in ("pm", "channel", "bssid"):
+                try:
+                    val = self.sta.config(key)
+                    if key == "pm":
+                        pm_state = val
+                    elif key == "channel":
+                        channel = val
+                    elif key == "bssid":
+                        bssid = ":".join("{:02x}".format(b) for b in val)
+                except (AttributeError, OSError, ValueError, TypeError):
+                    pass
+            try:
+                rssi = self.sta.status("rssi")
+            except (AttributeError, OSError, ValueError):
+                pass
+        # sys.implementation identifies the MicroPython build for diagnostic
+        try:
+            import sys
+            mpy_version = "{}.{}.{}".format(*sys.implementation.version)
+        except Exception:
+            mpy_version = "?"
         return {
             "sta_connected": self.sta.isconnected(),
             "sta_ip": self.sta.ifconfig()[0] if self.sta.isconnected() else None,
             "sta_ssid": self.sta.config("essid") if self.sta.isconnected() else None,
+            "sta_rssi_dbm": rssi,
+            "sta_bssid": bssid,
+            "sta_channel": channel,
+            "sta_pm_state": pm_state,  # 0=none, 1=min, 2=max modem sleep
             "ap_active": self.ap.active(),
             "ap_ssid": get_ap_ssid() if self.ap.active() else None,
             "ap_ip": "192.168.4.1" if self.ap.active() else None,
+            "mpy_version": mpy_version,
         }
 
     def disconnect(self):
