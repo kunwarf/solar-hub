@@ -860,9 +860,17 @@ class TCPCommandAdapter:
 
                 if resp_len > _MAX_PAYLOAD:
                     logger.warning(f"Binary framed response too large: {resp_len} bytes — closing connection to prevent framing corruption")
-                    # Do NOT leave payload bytes in the socket; close so the next
-                    # connection starts clean.  Returning None without draining
-                    # causes every subsequent read to parse garbage lengths.
+                    # Actually close the socket so the ESP32 reconnects fresh
+                    # and both sides resync.  Prior version just raised; the
+                    # outer except swallowed it and the connection stayed
+                    # open with corrupt framing state forever.  Prod
+                    # 2026-09-03: JK BMS was stuck 40 hours in this state,
+                    # units aged out because no telemetry was arriving even
+                    # though the TCP session showed ESTAB.
+                    try:
+                        await self.connection.close()
+                    except Exception:
+                        pass
                     raise ValueError(f"Response payload too large: {resp_len} bytes")
 
                 resp_payload = b""
