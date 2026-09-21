@@ -71,6 +71,51 @@ if ! "$PYTHON" -c 'import sqlalchemy' >/dev/null 2>&1; then
     exit 1
 fi
 
+# .env: DB credentials, Redis settings, etc.  systemd loads this via
+# EnvironmentFile on the running services; interactive runs need it
+# sourced manually or every DB call will fail with a password error.
+# Set SOLARHUB_ENV=/path/to/.env to override; otherwise try common
+# locations, then ask systemctl where the service loads its env from.
+ENV_FILE=""
+if [ -n "${SOLARHUB_ENV:-}" ] && [ -f "$SOLARHUB_ENV" ]; then
+    ENV_FILE="$SOLARHUB_ENV"
+else
+    for candidate in \
+        "$REPO/.env" \
+        "$(dirname "$REPO")/.env" \
+        "$(dirname "$(dirname "$REPO")")/.env" \
+        "/opt/solarhub/.env" \
+        "/opt/solarhub/app/.env" \
+    ; do
+        if [ -f "$candidate" ]; then
+            ENV_FILE="$candidate"
+            break
+        fi
+    done
+fi
+
+# Last-ditch: ask systemd where solarhub-polling-manager loads its env.
+if [ -z "$ENV_FILE" ] && command -v systemctl >/dev/null 2>&1; then
+    for svc in solarhub-polling-manager solarhub-telemetry solarhub-platform; do
+        sd_env="$(systemctl show "$svc" -p EnvironmentFiles --value 2>/dev/null | awk '{print $1}' || true)"
+        if [ -n "$sd_env" ] && [ -f "$sd_env" ]; then
+            ENV_FILE="$sd_env"
+            break
+        fi
+    done
+fi
+
+if [ -n "$ENV_FILE" ]; then
+    echo "Loading env from: $ENV_FILE"
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+else
+    echo "⚠  No .env file found.  If DB auth fails, set SOLARHUB_ENV:" >&2
+    echo "    SOLARHUB_ENV=/opt/solarhub/.env $0 $*" >&2
+fi
+
 # JK MB280 battery @ 192.168.88.245.  Chosen as default canary because:
 # - Batteries have never appeared in the disconnect/desync incident logs
 # - Failure of the battery datalogger does NOT interrupt PV generation
