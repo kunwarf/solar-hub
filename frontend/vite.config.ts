@@ -82,6 +82,14 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         skipWaiting: true,
         clientsClaim: true,
+        // Bundle grew past Workbox's 2 MiB default cache limit after the
+        // v2 settings UI (profiles for Senergy/Powdrive/Voltronic).  Raise
+        // to 5 MiB so the main JS still gets precached — without this the
+        // service worker silently drops the largest chunk from its precache
+        // manifest and offline-first PWA behavior breaks.
+        // Longer-term fix is manualChunks code-splitting (see build.rollupOptions
+        // below — currently `manualChunks: undefined`).
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
