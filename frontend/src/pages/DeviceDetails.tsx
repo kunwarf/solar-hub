@@ -62,6 +62,7 @@ import { Separator } from "@/components/ui/separator";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import devicesService from "@/api/services/devices.service";
+import { deviceCommandsService } from "@/api/services/device-commands.service";
 
 interface TelemetryPoint {
   timestamp: string;
@@ -158,6 +159,32 @@ export default function DeviceDetails() {
     },
     onError: () => {
       toast.error("Failed to unclaim device");
+    },
+  });
+
+  // Reboot ESP32 datalogger.  Distinct from an inverter restart — this only
+  // resets the ESP32 hardware.  Delivered via System B's command queue on the
+  // datalogger-scope poll path (see esp32_datalogger/command_client.py).
+  const rebootMutation = useMutation({
+    mutationFn: async () => {
+      if (!device) throw new Error("Device not loaded");
+      return await deviceCommandsService.rebootDatalogger(device.id);
+    },
+    onSuccess: (result) => {
+      if (result.status === "completed") {
+        toast.success("Reboot signal delivered — datalogger is restarting");
+      } else if (result.status === "failed") {
+        toast.error(`Reboot failed: ${result.error ?? "unknown error"}`);
+      } else if (result.status === "timeout") {
+        toast.warning(
+          "Datalogger did not acknowledge within 90s. The command remains queued for 30 min and will apply if the device comes back online.",
+        );
+      } else {
+        toast.warning(`Unexpected command status: ${result.status}`);
+      }
+    },
+    onError: (err) => {
+      toast.error(`Reboot request failed: ${err instanceof Error ? err.message : String(err)}`);
     },
   });
 
@@ -837,6 +864,78 @@ export default function DeviceDetails() {
                       </p>
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/*
+              Datalogger Danger Zone.
+              Kept in the Maintenance tab because it applies to ALL device
+              types (the ESP32 bridge is device-agnostic) — unlike the
+              Voltronic-specific Danger Zone further down which acts on the
+              inverter firmware.
+            */}
+            <Card className="mt-4 border-destructive/30">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  Datalogger Controls
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">Reboot Datalogger</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Restarts the ESP32 datalogger only. The connected inverter or battery
+                      keeps running. Expect the device to be offline for ~30 seconds.
+                    </p>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={rebootMutation.isPending}
+                      >
+                        <RefreshCw
+                          className={`h-4 w-4 mr-2 ${rebootMutation.isPending ? "animate-spin" : ""}`}
+                        />
+                        {rebootMutation.isPending ? "Rebooting…" : "Reboot Datalogger"}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reboot the datalogger?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This sends a reboot command to the ESP32 datalogger for device{" "}
+                          <span className="font-mono font-semibold">
+                            {device.serial_number}
+                          </span>
+                          .
+                          <br />
+                          <br />
+                          The datalogger will disconnect briefly and reconnect within roughly
+                          30 seconds. The connected inverter or battery is <b>not</b> affected.
+                          <br />
+                          <br />
+                          The command is queued and picked up on the next datalogger poll
+                          (~30&nbsp;s). If the device is offline, the reboot applies when it
+                          reconnects (within 30&nbsp;minutes) or expires unused.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground"
+                          onClick={() => rebootMutation.mutate()}
+                          disabled={rebootMutation.isPending}
+                        >
+                          {rebootMutation.isPending ? "Sending…" : "Yes, reboot datalogger"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </CardContent>
             </Card>

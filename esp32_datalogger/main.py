@@ -27,12 +27,16 @@ rtu = None
 bridge = None
 web = None
 ota = None
+cmd_client = None
+watchdog = None
 
 # Control flags
 _bridge_running = False
 _serial_bridge_running = False
 _web_running = False
 _ota_running = False
+_cmd_poll_running = False
+_watchdog_running = False
 
 
 def main():
@@ -103,6 +107,35 @@ def main():
     except Exception as e:
         print("[Main] OTA init failed (bridge will run without OTA):", e)
 
+    # Datalogger command poll loop — receives reboot_datalogger etc. from
+    # System B.  Isolated in its own thread + try/except so a broken update
+    # can't jam the bridge or the OTA path that recovers it.
+    global cmd_client
+    try:
+        from command_client import CommandClient
+        cmd_client = CommandClient(config, get_device_id_fn=bridge.get_device_id)
+        _thread.start_new_thread(command_poll_loop, ())
+        print("[Main] Datalogger command poll loop started")
+    except Exception as e:
+        print("[Main] Command client init failed (bridge will run without remote commands):", e)
+
+    # Firmware watchdog — reboots the ESP32 if no successful transmit to
+    # System B in `watchdog.no_transmit_threshold_sec` seconds (default 10 min).
+    # Cooldown-guarded so a truly-broken environment doesn't boot-loop.
+    # Isolated so a broken watchdog can't take down the bridge.
+    global watchdog
+    try:
+        from watchdog import Watchdog
+        watchdog = Watchdog(
+            config,
+            get_last_activity_fn=bridge.get_last_activity_ts,
+            get_wifi_connected_fn=wifi.is_connected,
+        )
+        _thread.start_new_thread(watchdog_loop, ())
+        print("[Main] Firmware watchdog started")
+    except Exception as e:
+        print("[Main] Watchdog init failed (bridge will run without watchdog):", e)
+
     # Main loop
     if mode == "modbus_bridge":
         run_bridge_mode(config)
@@ -126,6 +159,55 @@ def web_server_loop():
         except Exception as e:
             print("[Web] Error:", e)
             time.sleep(1)
+
+
+def command_poll_loop():
+    """
+    Background datalogger-command polling loop.
+
+    Wakes every 30 s and queries System B for pending datalogger-scope
+    commands.  Kept in its own function so a stall in the poll HTTP call
+    can't jam the bridge or the OTA path.
+
+    First check is delayed 15 s so we don't race the bridge's own
+    register_device() call — get_device_id() returns None until then.
+    """
+    global _cmd_poll_running
+    _cmd_poll_running = True
+    time.sleep(15)
+    while _cmd_poll_running:
+        try:
+            if cmd_client:
+                cmd_client.poll_once()
+        except Exception as e:
+            print("[Cmd] Loop error:", e)
+        time.sleep(30)
+
+
+def watchdog_loop():
+    """
+    Background firmware watchdog loop.
+
+    Wakes every 60 s and checks whether the bridge has successfully
+    transmitted to System B recently.  If not, and WiFi is up, and the
+    cooldown has elapsed, triggers machine.reset().  Isolated in its own
+    thread so a bug here can't take down the bridge or block recovery.
+
+    Delayed start: 30 s after boot so slow-registering devices don't get
+    tripped by a "no activity since boot" false positive on the first
+    check.  The threshold is 10 min anyway, so this delay mostly protects
+    the log output from noise.
+    """
+    global _watchdog_running
+    _watchdog_running = True
+    time.sleep(30)
+    while _watchdog_running:
+        try:
+            if watchdog:
+                watchdog.check_once()
+        except Exception as e:
+            print("[Watchdog] Loop error:", e)
+        time.sleep(60)
 
 
 def ota_loop():
@@ -220,12 +302,14 @@ def run_bridge_mode(config):
 
 def stop():
     """Stop all services."""
-    global _bridge_running, _serial_bridge_running, _web_running, _ota_running
+    global _bridge_running, _serial_bridge_running, _web_running, _ota_running, _cmd_poll_running, _watchdog_running
 
     _bridge_running = False
     _serial_bridge_running = False
     _web_running = False
     _ota_running = False
+    _cmd_poll_running = False
+    _watchdog_running = False
 
     if bridge:
         bridge.disconnect()

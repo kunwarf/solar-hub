@@ -158,6 +158,25 @@ BATTERY_COMMANDS: Dict[str, Dict[str, Any]] = {
 }
 
 
+DATALOGGER_COMMANDS: Dict[str, Dict[str, Any]] = {
+    # Datalogger-scope commands act on the ESP32 datalogger itself, NOT the
+    # inverter/battery it's bridging.  They are not delivered via Modbus writes
+    # over the TCP session — instead the ESP32 firmware polls
+    # GET /api/v1/commands/pending/{device_id}?scope=datalogger and dispatches
+    # them locally.  See esp32_datalogger/command_client.py.
+    "reboot_datalogger": {
+        "operation": "datalogger_local",
+        "description": "Reboot the ESP32 datalogger (machine.reset()).  Does NOT restart the connected inverter — for that use 'restart'.",
+    },
+}
+
+
+# Set of command type strings that are datalogger-scope.  Used by the pending-command
+# API endpoint to filter based on ?scope= and by the server-side command executor
+# to skip commands it must not consume (they belong to the ESP32 poll path).
+DATALOGGER_COMMAND_TYPES = frozenset(DATALOGGER_COMMANDS.keys())
+
+
 METER_COMMANDS: Dict[str, Dict[str, Any]] = {
     "query_settings": {
         "operation": "read_all_configurable",
@@ -387,6 +406,7 @@ DEVICE_COMMANDS: Dict[str, Dict[str, Dict[str, Any]]] = {
     "inverter": INVERTER_COMMANDS,
     "battery": BATTERY_COMMANDS,
     "meter": METER_COMMANDS,
+    "datalogger": DATALOGGER_COMMANDS,
 }
 
 

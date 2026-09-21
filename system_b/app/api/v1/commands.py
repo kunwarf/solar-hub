@@ -24,6 +24,12 @@ from ...infrastructure.database.repositories import CommandRepository, EventRepo
 
 logger = logging.getLogger(__name__)
 
+# Command types scoped to the ESP32 datalogger itself (not the connected inverter).
+# Kept in sync with device_server.commands.command_definitions.DATALOGGER_COMMAND_TYPES.
+# Duplicated here (rather than imported across the app/device_server boundary) to
+# avoid coupling the API package to the polling process's internal modules.
+DATALOGGER_COMMAND_TYPES = frozenset({"reboot_datalogger"})
+
 router = APIRouter(prefix="/commands", tags=["Commands"])
 
 
@@ -254,20 +260,43 @@ async def get_site_commands(
     "/pending/{device_id}",
     response_model=Optional[CommandResponse],
     summary="Claim pending command",
-    description="Claim and return the next pending command for a device.",
+    description=(
+        "Claim and return the next pending command for a device.\n\n"
+        "`scope=device` (default): returns Modbus/serial commands intended for "
+        "the connected inverter/battery.  This is the path the server-side "
+        "command executor uses.\n\n"
+        "`scope=datalogger`: returns ESP32-scope commands (e.g. reboot_datalogger) "
+        "that the datalogger firmware polls for and handles locally."
+    ),
 )
 async def claim_pending_command(
     device_id: UUID,
+    scope: str = Query(
+        default="device",
+        pattern="^(device|datalogger)$",
+        description="Command scope: 'device' (inverter/battery, default) or 'datalogger' (ESP32-local).",
+    ),
     session: AsyncSession = Depends(get_db_session),
 ) -> Optional[CommandResponse]:
     """
     Claim the next pending command for a device.
 
     This atomically claims the command so no other process can get it.
+    Scope filtering prevents the server executor and datalogger poll from
+    consuming each other's commands.
     """
     command_repo = CommandRepository(session)
 
-    command = await command_repo.claim_pending_command(device_id)
+    if scope == "datalogger":
+        include, exclude = list(DATALOGGER_COMMAND_TYPES), None
+    else:
+        include, exclude = None, list(DATALOGGER_COMMAND_TYPES)
+
+    command = await command_repo.claim_pending_command(
+        device_id,
+        include_types=include,
+        exclude_types=exclude,
+    )
 
     if not command:
         return None

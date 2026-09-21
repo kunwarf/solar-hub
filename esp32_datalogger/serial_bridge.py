@@ -65,6 +65,12 @@ class SerialBridge:
         self._registered = False
         self._device_id = None
 
+        # Last time we successfully wrote bytes to the server socket via
+        # _send_frame().  Read by the firmware watchdog to detect a stuck
+        # TCP session and trigger a reboot.  Init to boot time so we don't
+        # reboot immediately on a slow startup.
+        self._last_activity_ts = time.time()
+
         self.stats = {
             "commands": 0,
             "responses": 0,
@@ -132,6 +138,17 @@ class SerialBridge:
     def is_registered(self):
         """Check if device is registered with System B API."""
         return self._registered
+
+    def get_device_id(self):
+        """Return the UUID assigned by System B at registration (None until registered)."""
+        return self._device_id
+
+    def get_last_activity_ts(self):
+        """Return time.time() of last successful send via _send_frame().
+
+        Used by the firmware watchdog to detect a stuck TCP session.
+        """
+        return self._last_activity_ts
 
     def register_device(self):
         """
@@ -367,6 +384,9 @@ class SerialBridge:
         self.socket.sendall(header)
         if payload:
             self.socket.sendall(payload)
+        # Refresh watchdog activity timestamp — any successful send (response,
+        # error frame, PONG) proves the TCP session is alive.
+        self._last_activity_ts = time.time()
 
     def _recv_exact(self, length):
         """

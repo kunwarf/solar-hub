@@ -225,35 +225,49 @@ class CommandRepository:
     async def claim_pending_command(
         self,
         device_id: UUID,
+        include_types: Optional[List[str]] = None,
+        exclude_types: Optional[List[str]] = None,
     ) -> Optional[DeviceCommand]:
         """
         Claim the next pending command for a device (atomic operation).
 
         Args:
             device_id: Device UUID.
+            include_types: If provided, only commands with command_type in this
+                list are eligible.  Use for scope filtering (e.g. datalogger).
+            exclude_types: If provided, commands with command_type in this list
+                are skipped.  Use to keep the server-side executor from
+                consuming ESP32-scope commands that must be polled by the
+                datalogger instead.
 
         Returns:
             Claimed DeviceCommand, or None if no pending commands.
         """
         now = datetime.now(timezone.utc)
 
+        # Base predicate — status, schedule window, expiry window.
+        conditions = [
+            DeviceCommandsModel.device_id == device_id,
+            DeviceCommandsModel.status == CommandStatus.PENDING.value,
+            or_(
+                DeviceCommandsModel.scheduled_at.is_(None),
+                DeviceCommandsModel.scheduled_at <= now,
+            ),
+            or_(
+                DeviceCommandsModel.expires_at.is_(None),
+                DeviceCommandsModel.expires_at > now,
+            ),
+        ]
+
+        if include_types:
+            conditions.append(DeviceCommandsModel.command_type.in_(include_types))
+        if exclude_types:
+            conditions.append(DeviceCommandsModel.command_type.notin_(exclude_types))
+
         # Select and update in one query (PostgreSQL specific)
         subquery = (
             select(DeviceCommandsModel.id)
-            .where(
-                and_(
-                    DeviceCommandsModel.device_id == device_id,
-                    DeviceCommandsModel.status == CommandStatus.PENDING.value,
-                    or_(
-                        DeviceCommandsModel.scheduled_at.is_(None),
-                        DeviceCommandsModel.scheduled_at <= now,
-                    ),
-                    or_(
-                        DeviceCommandsModel.expires_at.is_(None),
-                        DeviceCommandsModel.expires_at > now,
-                    ),
-                )
-            )
+            .where(and_(*conditions))
             .order_by(DeviceCommandsModel.priority, DeviceCommandsModel.created_at)
             .limit(1)
             .with_for_update(skip_locked=True)

@@ -167,6 +167,40 @@ class DeviceCommandsService {
     );
     return response.data;
   }
+
+  /**
+   * Reboot the ESP32 datalogger itself (NOT the connected inverter).
+   *
+   * Delivery path: System A creates a datalogger-scope command in System B's
+   * queue; the ESP32 firmware polls GET /commands/pending/{id}?scope=datalogger
+   * every ~30s and executes machine.reset() locally.  Expect the device to go
+   * offline briefly after this returns success, then reconnect.
+   *
+   * The datalogger acks and reports success BEFORE resetting, so the returned
+   * status transitions to 'completed' at reboot-arm time (~2s before actual
+   * reset).  Watching device offline/online telemetry is the real confirmation.
+   *
+   * siteId/deviceSerial args kept for signature parity with other command
+   * methods, but System A looks them up server-side from device_id — the args
+   * are unused here.
+   */
+  async rebootDatalogger(
+    deviceId: string,
+    _siteId?: string,
+    _deviceSerial?: string
+  ): Promise<CommandStatusResponse> {
+    // System A proxies to System B and handles auth / device lookup.
+    const createResp = await apiClient.post<{ command_id: string; status: string }>(
+      `/devices/${deviceId}/commands/reboot-datalogger`,
+      {}
+    );
+
+    // Poll until the datalogger acks + reports.  Poll interval 5s vs firmware
+    // poll cadence 30s means most polls will see 'pending' until the firmware
+    // wakes.  Total timeout 90s = 3 firmware cycles, enough to survive one
+    // missed poll.
+    return this.waitForCommand(deviceId, createResp.data.command_id, 90000, 5000);
+  }
 }
 
 export const deviceCommandsService = new DeviceCommandsService();

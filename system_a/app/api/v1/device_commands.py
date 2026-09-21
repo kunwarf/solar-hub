@@ -47,6 +47,14 @@ class QuerySettingsResponse(BaseModel):
     message: Optional[str] = None
 
 
+class RebootDataloggerResponse(BaseModel):
+    """Response from datalogger reboot command dispatch"""
+
+    command_id: str
+    status: str = "pending"
+    message: Optional[str] = None
+
+
 class UpdateSettingsRequest(BaseModel):
     """Request to update device settings"""
 
@@ -276,6 +284,67 @@ async def update_device_settings(
         raise HTTPException(
             status_code=e.status_code or status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update device settings: {str(e)}",
+        )
+
+
+@router.post(
+    "/{device_id}/commands/reboot-datalogger",
+    response_model=RebootDataloggerResponse,
+    summary="Reboot the ESP32 datalogger",
+    description=(
+        "Sends a reboot command to the ESP32 datalogger itself.  This is "
+        "different from the inverter 'restart' command — only the datalogger "
+        "reboots; the connected inverter/battery is not affected.\n\n"
+        "Delivery: queued as a datalogger-scope command in System B.  The "
+        "ESP32 firmware polls GET /commands/pending/{id}?scope=datalogger "
+        "every ~30s and executes machine.reset() locally.  Frontend should "
+        "poll GET /devices/{id}/commands/{command_id}/status for completion."
+    ),
+)
+async def reboot_datalogger(
+    device_id: UUID,
+    current_user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    system_b_client: SystemBClient = Depends(get_system_b_client_instance),
+) -> RebootDataloggerResponse:
+    """Reboot the ESP32 datalogger via the datalogger-scope command queue."""
+    await check_device_access(device_id, current_user, uow)
+
+    device = await uow.devices.get_by_id(device_id)
+
+    logger.info(
+        "[reboot-datalogger] Dispatching reboot for device %s (serial=%s) by user %s",
+        device_id,
+        device.serial_number,
+        current_user.email,
+    )
+
+    try:
+        # 30 min expiry — if the datalogger is offline right now, the reboot
+        # will apply when it comes back within that window, which is exactly
+        # the recovery case this button is designed for.  Priority 3 is
+        # below settings writes (7-8) so we don't block operational commands.
+        command_response = await system_b_client.send_command(
+            device_id=device_id,
+            site_id=device.site_id,
+            command_type="reboot_datalogger",
+            command_params=None,
+            device_serial=device.serial_number,
+            priority=3,
+            expires_in_minutes=30,
+        )
+
+        return RebootDataloggerResponse(
+            command_id=command_response.get("id", ""),
+            status=command_response.get("status", "pending"),
+            message="Reboot command queued — datalogger will pick it up on next poll (~30s)",
+        )
+
+    except SystemBClientError as e:
+        logger.error("[reboot-datalogger] System B error: %s", str(e))
+        raise HTTPException(
+            status_code=e.status_code or status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to queue datalogger reboot: {str(e)}",
         )
 
 

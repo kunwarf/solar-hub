@@ -67,6 +67,12 @@ class ModbusBridge:
         self._consecutive_rtu_failures = 0
         self._rtu_failure_reconnect_threshold = 5
 
+        # Last time we successfully wrote bytes to the server socket.  Read
+        # by the firmware watchdog (esp32_datalogger/watchdog.py) to detect
+        # a stuck/half-open TCP session and trigger a reboot.  Init to boot
+        # time so we don't reboot immediately on a slow startup.
+        self._last_activity_ts = time.time()
+
     def connect(self):
         """
         Connect to the server.
@@ -125,6 +131,16 @@ class ModbusBridge:
     def get_device_id(self):
         """Get the device ID assigned by System B."""
         return self._device_id
+
+    def get_last_activity_ts(self):
+        """Return time.time() of last successful sendall to the server socket.
+
+        Used by the firmware watchdog to detect a stuck TCP session (server
+        stopped polling, or half-open socket that keeps ESTABLISHED locally
+        but never wakes up).  Initial value is bridge-init time so a slow
+        boot doesn't trip the watchdog.
+        """
+        return self._last_activity_ts
 
     def register_device(self):
         """
@@ -284,6 +300,7 @@ class ModbusBridge:
                     )
                     self.socket.sendall(resp_header + response_pdu)
                     self.stats["responses"] += 1
+                    self._last_activity_ts = time.time()
                     # A clean round-trip resets the circuit breaker.
                     self._consecutive_rtu_failures = 0
                 else:
@@ -314,6 +331,9 @@ class ModbusBridge:
                     )
                     self.socket.sendall(resp_header + exc_pdu)
                     self.stats["errors"] += 1
+                    # Exception PDU still counts as a healthy TCP transmit —
+                    # the session is fine, only the downstream RTU failed.
+                    self._last_activity_ts = time.time()
 
                     # Circuit breaker: too many consecutive RTU failures means
                     # either the RS485 link is down (physical) or our TCP
