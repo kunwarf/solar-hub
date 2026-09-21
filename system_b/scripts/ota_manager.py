@@ -26,17 +26,37 @@ from sqlalchemy import select
 
 
 async def create_firmware_version(version: str, description: str = None):
-    """Create a new firmware version."""
+    """
+    Get-or-create a firmware version.
+
+    Returns the version ID whether the row already exists or was newly
+    created.  Rationale: a previous run may have created the version row
+    then failed on file upload, leaving an orphan.  Refusing to touch it
+    forces the operator to either bump the version (polluting history)
+    or manually clean the DB.  Get-or-create lets a re-run heal itself.
+
+    Existing files (if any) on the version are logged; upload_files()
+    below will purge them before re-inserting so the resulting file set
+    matches exactly what was passed in.
+    """
     async with get_db_session() as db:
-        # Check if exists
         result = await db.execute(
             select(FirmwareVersion).where(FirmwareVersion.version == version)
         )
-        if result.scalar_one_or_none():
-            print(f"❌ Version {version} already exists")
-            return None
+        existing = result.scalar_one_or_none()
+        if existing:
+            # Count files via a separate query — lazy-loading `existing.files`
+            # is disallowed under async SQLAlchemy 2.0 and would raise
+            # MissingGreenlet.
+            from sqlalchemy import func
+            count_result = await db.execute(
+                select(func.count(FirmwareFile.id))
+                .where(FirmwareFile.firmware_version_id == existing.id)
+            )
+            file_count = count_result.scalar() or 0
+            print(f"⚠  Version {version} already exists (ID: {existing.id}, {file_count} files) — reusing")
+            return existing.id
 
-        # Create
         firmware = FirmwareVersion(
             version=version,
             description=description,
@@ -51,7 +71,15 @@ async def create_firmware_version(version: str, description: str = None):
 
 
 async def upload_files(version_id: str, file_paths: List[str]):
-    """Upload files to firmware version."""
+    """Upload files to firmware version.
+
+    Idempotent: deletes any existing FirmwareFile rows for this version
+    before inserting the new set, so re-running with the same version
+    replaces the payload rather than accumulating duplicates.  This is
+    what makes the get-or-create pattern in create_firmware_version()
+    safe on re-runs.
+    """
+    from sqlalchemy import delete as sql_delete
     async with get_db_session() as db:
         # Verify version exists
         result = await db.execute(
@@ -61,6 +89,13 @@ async def upload_files(version_id: str, file_paths: List[str]):
         if not firmware:
             print(f"❌ Firmware version {version_id} not found")
             return False
+
+        # Purge any pre-existing files for this version (safe if none).
+        purge_result = await db.execute(
+            sql_delete(FirmwareFile).where(FirmwareFile.firmware_version_id == firmware.id)
+        )
+        if purge_result.rowcount:
+            print(f"  Purged {purge_result.rowcount} stale file(s) from previous run")
 
         print(f"\\nUploading files to version {firmware.version}...")
 
@@ -303,31 +338,40 @@ def main():
 
     args = parser.parse_args()
 
+    # All subcommands routed through a single asyncio.run() call.  Previously
+    # each pair of async ops (create + upload / create + activate) used two
+    # separate asyncio.run() invocations, but the SQLAlchemy engine is a
+    # class-level singleton whose connection pool binds to the first event
+    # loop; the second run would fail with "Future attached to a different
+    # loop".  Single-dispatch fixes it and simplifies dispose semantics.
+    if args.command is None:
+        parser.print_help()
+        return
+
+    asyncio.run(_async_dispatch(args))
+
+
+async def _async_dispatch(args):
     if args.command == "upload":
-        # Create version and upload files
-        version_id = asyncio.run(create_firmware_version(args.version, args.description))
+        version_id = await create_firmware_version(args.version, args.description)
         if version_id:
             file_paths = args.files.split(",")
-            asyncio.run(upload_files(str(version_id), file_paths))
+            await upload_files(str(version_id), file_paths)
 
     elif args.command == "deploy":
-        # Create and activate campaign
         devices = args.devices.split(",") if args.devices else ["all"]
-        campaign_id = asyncio.run(create_campaign(args.name, args.version, devices, args.rollout))
+        campaign_id = await create_campaign(args.name, args.version, devices, args.rollout)
         if campaign_id:
-            asyncio.run(activate_campaign(str(campaign_id)))
+            await activate_campaign(str(campaign_id))
 
     elif args.command == "status":
-        asyncio.run(show_campaign_status(args.campaign))
+        await show_campaign_status(args.campaign)
 
     elif args.command == "list":
         if args.type == "versions":
-            asyncio.run(list_versions())
+            await list_versions()
         elif args.type == "devices":
-            asyncio.run(list_devices())
-
-    else:
-        parser.print_help()
+            await list_devices()
 
 
 if __name__ == "__main__":
