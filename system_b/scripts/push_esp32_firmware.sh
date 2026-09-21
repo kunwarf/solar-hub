@@ -228,7 +228,7 @@ echo "─── [4/4] Next steps ───────────────�
 echo ""
 echo "▶ Watch the device pick up the update (up to 5 min):"
 echo ""
-echo "    $VENV/bin/python -m system_b.scripts.ota_manager list devices"
+echo "    $PYTHON -m system_b.scripts.ota_manager list devices"
 echo ""
 echo "  Expected status transitions on the target device:"
 echo "    pending → downloading → applying → success  (then it reboots)"
