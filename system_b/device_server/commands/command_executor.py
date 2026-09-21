@@ -392,6 +392,25 @@ class ModbusCommandExecutor:
                 writable_registers = [r for r in register_map if r.get("rw") in ("RW", "RW/RO")]
                 logger.info(f"[COMMAND_EXECUTOR] Found {len(writable_registers)} writable registers")
 
+                # Subset scoping.  When the frontend passes command_params.setting_keys,
+                # limit both the chunk-read path and the individual-read fallback to
+                # just those register ids.  Enables the lazy per-section fetch model
+                # (see frontend/src/components/settings/v2/ — Home mount fetches ~10
+                # keys, each Hub group fetches its own subset on open) instead of
+                # blasting all ~50 writable registers every time settings are opened.
+                # None or empty list = read everything (backwards compatible).
+                requested_keys = params.get("setting_keys") if params else None
+                if requested_keys:
+                    requested_set = set(requested_keys)
+                    before = len(writable_registers)
+                    writable_registers = [r for r in writable_registers if r.get("id") in requested_set]
+                    logger.info(
+                        f"[COMMAND_EXECUTOR] setting_keys filter: {len(writable_registers)}/{before} "
+                        f"registers requested (keys={list(requested_set)[:5]}{'…' if len(requested_set) > 5 else ''})"
+                    )
+                else:
+                    requested_set = None
+
                 # Try to load chunk configuration for optimized reading
                 chunk_config_path = Path(__file__).parent.parent / "register_chunks" / f"{protocol_id}_chunks.json"
                 settings = {}
@@ -413,6 +432,16 @@ class ModbusCommandExecutor:
                             count = chunk["count"]
                             expected_ids = set(chunk.get("register_ids", []))
 
+                            # Subset filter: if the caller requested specific keys and
+                            # none of this chunk's registers are requested, skip the
+                            # Modbus read entirely.  This is where the bulk of the
+                            # latency win comes from — a single-key request that
+                            # falls in one chunk saves ~28 chunk reads out of 29 on
+                            # Senergy.
+                            if requested_set is not None and not (expected_ids & requested_set):
+                                logger.debug(f"[COMMAND_EXECUTOR] Chunk {chunk_idx} skipped (no requested keys)")
+                                continue
+
                             try:
                                 logger.debug(f"[COMMAND_EXECUTOR] Reading chunk {chunk_idx}: {count} registers from {start_addr}")
                                 chunk_values = await adapter._read_holding_regs(start_addr, count)
@@ -421,8 +450,11 @@ class ModbusCommandExecutor:
                                     logger.warning(f"[COMMAND_EXECUTOR] Chunk {chunk_idx} read failed")
                                     continue
 
-                                # Extract values for registers in this chunk
-                                for reg_id in expected_ids:
+                                # Extract values for registers in this chunk.  When
+                                # a subset was requested, only extract those ids
+                                # even though the chunk read returned the full block.
+                                extract_ids = (expected_ids & requested_set) if requested_set is not None else expected_ids
+                                for reg_id in extract_ids:
                                     if reg_id not in register_lookup:
                                         continue
 
