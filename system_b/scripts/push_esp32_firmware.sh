@@ -25,8 +25,29 @@
 
 set -euo pipefail
 
-REPO="${SOLARHUB_REPO:-/opt/solarhub/app}"
-VENV="${SOLARHUB_VENV:-/opt/solarhub/venv}"
+# Auto-detect the repo root from this script's own location.
+# Script lives at <repo>/system_b/scripts/push_esp32_firmware.sh, so two
+# levels up is the repo.  SOLARHUB_REPO env var overrides if set.
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+DEFAULT_REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO="${SOLARHUB_REPO:-$DEFAULT_REPO}"
+
+# Python: prefer $SOLARHUB_VENV/bin/python, then a venv next to the repo,
+# then a venv inside the repo, then system python3.
+if [ -n "${SOLARHUB_VENV:-}" ] && [ -x "$SOLARHUB_VENV/bin/python" ]; then
+    PYTHON="$SOLARHUB_VENV/bin/python"
+elif [ -x "$(dirname "$REPO")/venv/bin/python" ]; then
+    PYTHON="$(dirname "$REPO")/venv/bin/python"
+elif [ -x "$REPO/venv/bin/python" ]; then
+    PYTHON="$REPO/venv/bin/python"
+else
+    PYTHON="$(command -v python3 || command -v python || true)"
+fi
+if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+    echo "✗ Could not find a Python interpreter." >&2
+    echo "  Set SOLARHUB_VENV=/path/to/venv (containing bin/python)." >&2
+    exit 1
+fi
 
 # JK MB280 battery @ 192.168.88.245.  Chosen as default canary because:
 # - Batteries have never appeared in the disconnect/desync incident logs
@@ -44,6 +65,23 @@ if [ -z "$VERSION" ]; then
     echo "Example: $0 1.1.0                        # canary $DEFAULT_CANARY" >&2
     echo "Example: $0 1.1.0 SH01GWF42L5D4L00       # canary Pylontech" >&2
     echo "Example: $0 1.1.0 all                    # fleet-wide (skip canary)" >&2
+    exit 1
+fi
+
+# Version-format sanity check.  Catches the common mistake of passing a
+# target (e.g. "all" or a serial) as the first arg — otherwise you'd
+# see confusing "MISSING file" errors.
+if [[ ! "$VERSION" =~ ^v?[0-9]+(\.[0-9]+)*([-.][A-Za-z0-9]+)*$ ]]; then
+    echo "✗ '$VERSION' does not look like a version string." >&2
+    echo "" >&2
+    echo "The first argument is VERSION.  Did you mean:" >&2
+    if [ "$VERSION" = "all" ]; then
+        echo "    $0 <VERSION> all" >&2
+        echo "" >&2
+        echo "  E.g.  $0 1.1.0 all" >&2
+    else
+        echo "    $0 <VERSION> $VERSION" >&2
+    fi
     exit 1
 fi
 
@@ -89,7 +127,7 @@ FILE_CSV=$(IFS=,; echo "${FIRMWARE_FILES[*]}")
 GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DESC="v$VERSION @ $GIT_SHA — reboot_datalogger command + firmware self-watchdog"
 
-"$VENV/bin/python" -m system_b.scripts.ota_manager upload \
+"$PYTHON" -m system_b.scripts.ota_manager upload \
     --version "$VERSION" \
     --description "$DESC" \
     --files "$FILE_CSV"
@@ -105,13 +143,13 @@ if [ "$TARGET" = "all" ]; then
         echo "Aborted."
         exit 1
     fi
-    "$VENV/bin/python" -m system_b.scripts.ota_manager deploy \
+    "$PYTHON" -m system_b.scripts.ota_manager deploy \
         --version "$VERSION" \
         --name "$CAMPAIGN_NAME" \
         --devices all
 else
     CAMPAIGN_NAME="v${VERSION}-canary-${TARGET}-$(date +%Y%m%d-%H%M)"
-    "$VENV/bin/python" -m system_b.scripts.ota_manager deploy \
+    "$PYTHON" -m system_b.scripts.ota_manager deploy \
         --version "$VERSION" \
         --name "$CAMPAIGN_NAME" \
         --devices "$TARGET"
