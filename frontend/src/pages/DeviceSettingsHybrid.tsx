@@ -17,6 +17,8 @@ import { BatteryConfigPage } from "@/components/settings/BatteryConfigPage";
 import { PowdriveSettingsPage } from "@/components/settings/powdrive/PowdriveSettingsPage";
 import { VoltronicSettingsPage } from "@/components/settings/voltronic/VoltronicSettingsPage";
 import { SenergySettingsPage } from "@/components/settings/senergy/SenergySettingsPage";
+import { SettingsScreen as SenergyV2SettingsScreen } from "@/components/settings/v2/SettingsScreen";
+import { useUserRole } from "@/contexts/UserRoleContext";
 
 const deviceIcons = {
   inverter: Cpu,
@@ -33,6 +35,10 @@ const typeColors = {
 const DeviceSettingsPageHybrid = () => {
   const { deviceId } = useParams<{ deviceId: string }>();
   const navigate = useNavigate();
+  const { hasPermission } = useUserRole();
+  // Read-only when the current user's role can't manage devices.  Viewer +
+  // expired-Installer end up here; Owner/Admin/Installer-active pass.
+  const canWriteSettings = hasPermission("manage_devices");
 
   // Fetch device details
   const { data: device, isLoading: deviceLoading, error: deviceError } = useQuery({
@@ -152,6 +158,57 @@ const DeviceSettingsPageHybrid = () => {
   }
 
   const Icon = deviceIcons[device.device_type as keyof typeof deviceIcons] || Cpu;
+
+  // v2 settings UI: 4 task cards on home, browsable hub for advanced
+  // groups, lazy per-section fetch backed by the subset-scoped
+  // query_settings backend fix.  Iteration 1 shipped Senergy; Iteration 2
+  // adds Powdrive/Deye and Voltronic.  All three families use the same
+  // components, differing only in the profile file.
+  const proto = (device.protocol ?? "").toLowerCase();
+  const mfr = (device.manufacturer ?? "").toLowerCase();
+  const usesV2 =
+    mfr.includes("senergy") ||
+    proto === "senergy" ||
+    mfr.includes("powdrive") ||
+    mfr.includes("deye") ||
+    proto === "powdrive" ||
+    proto === "deye" ||
+    proto.startsWith("voltronic") ||
+    mfr.includes("voltronic");
+  if (usesV2) {
+    // Normalize protocol string for profile lookup — voltronic has
+    // multiple variants (pi30, pi18, ...) that all share one profile.
+    const profileProto = proto.startsWith("voltronic")
+      ? proto  // registry has entries per variant
+      : (proto ||
+          (mfr.includes("senergy")
+            ? "senergy"
+            : mfr.includes("powdrive") || mfr.includes("deye")
+              ? "powdrive"
+              : "voltronic_pi30"));
+    return (
+      <AppLayout>
+        <div className="mb-2">
+          <Button variant="ghost" onClick={() => navigate("/devices")} className="gap-2">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Devices
+          </Button>
+        </div>
+        <SenergyV2SettingsScreen
+          deviceId={device.id}
+          serial={device.serial_number}
+          protocol={profileProto}
+          deviceName={device.name || device.model || "Inverter"}
+          readOnly={!canWriteSettings}
+          readOnlyReason={
+            !canWriteSettings
+              ? "Your role doesn't allow editing device settings."
+              : undefined
+          }
+        />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
