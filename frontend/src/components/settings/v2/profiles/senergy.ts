@@ -22,8 +22,10 @@ import {
   Clock,
   AlertTriangle,
   Sliders,
+  ArrowDownCircle,
+  ArrowUpCircle,
 } from "lucide-react";
-import type { DeviceProfile } from "./types";
+import type { DeviceProfile, FlatField } from "./types";
 
 const zone = (from: number, to: number, color: string) => ({ from, to, color });
 const RED = "#f43f5e";
@@ -241,6 +243,110 @@ export const senergyProfile: DeviceProfile = {
       ],
     },
 
+    /* ===================================================================
+       TOU SCHEDULES — 3 charge + 3 discharge windows, 5 fields each.
+       Fields are grounded in senergy_registers.json:
+         - charge_frequency_{n}     (reg 8449, 8454, 8459)
+         - charge_start_time_{n}    (reg 8450, 8455, 8460)  HHMM binary
+         - charge_end_time_{n}      (reg 8451, 8456, 8461)  HHMM binary
+         - charge_power_{n}         (reg 8553, 8561, 8569)  W
+         - charger_end_soc_{n}      (reg 8554, 8562, 8570)  % (note: reg
+                                       spelling is "charger", not "charge")
+         - discharge_frequency_{n}, discharge_start_time_{n},
+           discharge_end_time_{n}, discharge_power_{n},
+           discharge_end_soc_{n}
+       Start/end times use the hhmm_binary encoding (e.g. 06:30 = 630).
+       For iteration 2 we surface them as numbers; a proper time picker
+       + HHMM ↔ HH:MM conversion is deferred polish.
+       =================================================================== */
+    chargeSchedule: {
+      kind: "fields",
+      tier: "default",
+      icon: createElement(ArrowDownCircle, { className: "w-5 h-5" }),
+      title: "TOU charge windows",
+      description: "Up to 3 daily windows where grid charges the battery. Times are HHMM (e.g. 2300 = 11:00 PM).",
+      fields: ([1, 2, 3] as const).flatMap<FlatField>((n) => [
+        {
+          key: `charge_frequency_${n}`,
+          label: `Window ${n} — Repeat`,
+          type: "select",
+          options: ["Once", "Everyday"],
+        },
+        {
+          key: `charge_start_time_${n}`,
+          label: `Window ${n} — Start (HHMM)`,
+          type: "number",
+          step: 1,
+          unit: "HHMM",
+        },
+        {
+          key: `charge_end_time_${n}`,
+          label: `Window ${n} — End (HHMM)`,
+          type: "number",
+          step: 1,
+          unit: "HHMM",
+        },
+        {
+          key: `charge_power_${n}`,
+          label: `Window ${n} — Charge power`,
+          type: "number",
+          step: 100,
+          unit: "W",
+        },
+        {
+          key: `charger_end_soc_${n}`,
+          label: `Window ${n} — Stop at SOC`,
+          type: "number",
+          step: 1,
+          unit: "%",
+        },
+      ]),
+    },
+
+    dischargeSchedule: {
+      kind: "fields",
+      tier: "default",
+      icon: createElement(ArrowUpCircle, { className: "w-5 h-5" }),
+      title: "TOU discharge windows",
+      description: "Up to 3 daily windows where the inverter discharges the battery to loads or grid.",
+      fields: ([1, 2, 3] as const).flatMap<FlatField>((n) => [
+        {
+          key: `discharge_frequency_${n}`,
+          label: `Window ${n} — Repeat`,
+          type: "select",
+          options: ["Once", "Everyday"],
+        },
+        {
+          key: `discharge_start_time_${n}`,
+          label: `Window ${n} — Start (HHMM)`,
+          type: "number",
+          step: 1,
+          unit: "HHMM",
+        },
+        {
+          key: `discharge_end_time_${n}`,
+          label: `Window ${n} — End (HHMM)`,
+          type: "number",
+          step: 1,
+          unit: "HHMM",
+        },
+        {
+          key: `discharge_power_${n}`,
+          label: `Window ${n} — Discharge power`,
+          type: "number",
+          step: 100,
+          unit: "W",
+        },
+        {
+          key: `discharge_end_soc_${n}`,
+          label: `Window ${n} — Stop at SOC`,
+          type: "number",
+          step: 1,
+          unit: "%",
+        },
+      ]),
+    },
+
     installer: {
       kind: "fields",
       tier: "installer",
@@ -282,7 +388,15 @@ export const senergyProfile: DeviceProfile = {
   },
 
   homeCardIds: ["strategy", "reserve", "gridCharging", "gridExport"],
-  hubGroupIds: ["identity", "currentLimits", "voltageThresholds", "protection", "installer"],
+  hubGroupIds: [
+    "identity",
+    "currentLimits",
+    "voltageThresholds",
+    "protection",
+    "chargeSchedule",
+    "dischargeSchedule",
+    "installer",
+  ],
 
   // Reasonable safe defaults so the UI has something to render before the
   // first fetch completes.  Overwritten by real device values on load.
@@ -313,6 +427,24 @@ export const senergyProfile: DeviceProfile = {
       battery_restart_voltage_v: 48.0,
     },
     protection: { over_load_restart: true, over_temp_restart: true, backflow_protect: true },
+    chargeSchedule: Object.fromEntries(
+      ([1, 2, 3] as const).flatMap((n) => [
+        [`charge_frequency_${n}`, "Everyday"],
+        [`charge_start_time_${n}`, 2300 + (n - 1) * 100],
+        [`charge_end_time_${n}`, 600 + (n - 1) * 100],
+        [`charge_power_${n}`, 2500],
+        [`charger_end_soc_${n}`, 95],
+      ]),
+    ),
+    dischargeSchedule: Object.fromEntries(
+      ([1, 2, 3] as const).flatMap((n) => [
+        [`discharge_frequency_${n}`, "Everyday"],
+        [`discharge_start_time_${n}`, 1700 + (n - 1) * 100],
+        [`discharge_end_time_${n}`, 2100 + (n - 1) * 100],
+        [`discharge_power_${n}`, 2500],
+        [`discharge_end_soc_${n}`, 20],
+      ]),
+    ),
     installer: {
       grid_standard: "AS4777 (AU)",
       grid_frequency_set: "50",
