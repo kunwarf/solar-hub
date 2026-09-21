@@ -18,7 +18,7 @@ import hashlib
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from system_b.app.infrastructure.database.session import get_db_context
+from system_b.app.infrastructure.database.timescale_connection import get_db_session
 from system_b.app.infrastructure.database.models.firmware import (
     FirmwareVersion, FirmwareFile, DeviceFirmwareStatus, FirmwareUpdateCampaign
 )
@@ -27,7 +27,7 @@ from sqlalchemy import select
 
 async def create_firmware_version(version: str, description: str = None):
     """Create a new firmware version."""
-    async with get_db_context() as db:
+    async with get_db_session() as db:
         # Check if exists
         result = await db.execute(
             select(FirmwareVersion).where(FirmwareVersion.version == version)
@@ -52,7 +52,7 @@ async def create_firmware_version(version: str, description: str = None):
 
 async def upload_files(version_id: str, file_paths: List[str]):
     """Upload files to firmware version."""
-    async with get_db_context() as db:
+    async with get_db_session() as db:
         # Verify version exists
         result = await db.execute(
             select(FirmwareVersion).where(FirmwareVersion.id == version_id)
@@ -103,7 +103,7 @@ async def upload_files(version_id: str, file_paths: List[str]):
 
 async def create_campaign(name: str, version: str, devices: List[str] = None, rollout_percentage: int = 100):
     """Create an update campaign."""
-    async with get_db_context() as db:
+    async with get_db_session() as db:
         # Find firmware version
         result = await db.execute(
             select(FirmwareVersion).where(FirmwareVersion.version == version)
@@ -133,7 +133,7 @@ async def create_campaign(name: str, version: str, devices: List[str] = None, ro
 
 async def activate_campaign(campaign_id: str):
     """Activate a campaign to start rollout."""
-    async with get_db_context() as db:
+    async with get_db_session() as db:
         # Get campaign
         result = await db.execute(
             select(FirmwareUpdateCampaign).where(FirmwareUpdateCampaign.id == campaign_id)
@@ -194,7 +194,7 @@ async def activate_campaign(campaign_id: str):
 
 async def show_campaign_status(campaign_id: str):
     """Show campaign status."""
-    async with get_db_context() as db:
+    async with get_db_session() as db:
         # Get campaign
         result = await db.execute(
             select(FirmwareUpdateCampaign).where(FirmwareUpdateCampaign.id == campaign_id)
@@ -243,7 +243,7 @@ async def show_campaign_status(campaign_id: str):
 
 async def list_versions():
     """List all firmware versions."""
-    async with get_db_context() as db:
+    async with get_db_session() as db:
         result = await db.execute(
             select(FirmwareVersion).order_by(FirmwareVersion.created_at.desc())
         )
@@ -261,7 +261,7 @@ async def list_versions():
 
 async def list_devices():
     """List all device firmware statuses."""
-    async with get_db_context() as db:
+    async with get_db_session() as db:
         result = await db.execute(select(DeviceFirmwareStatus))
         devices = result.scalars().all()
 
