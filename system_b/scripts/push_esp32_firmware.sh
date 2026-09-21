@@ -32,20 +32,42 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 DEFAULT_REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO="${SOLARHUB_REPO:-$DEFAULT_REPO}"
 
-# Python: prefer $SOLARHUB_VENV/bin/python, then a venv next to the repo,
-# then a venv inside the repo, then system python3.
+# Python: prefer $SOLARHUB_VENV, then walk up from the repo looking for
+# a venv, then check the known prod location, then system python3.
+# On faisal-home the venv is at /opt/solarhub/venv while the repo lives at
+# /opt/solarhub/app/solar-hub — two levels up from the repo.
+PYTHON=""
 if [ -n "${SOLARHUB_VENV:-}" ] && [ -x "$SOLARHUB_VENV/bin/python" ]; then
     PYTHON="$SOLARHUB_VENV/bin/python"
-elif [ -x "$(dirname "$REPO")/venv/bin/python" ]; then
-    PYTHON="$(dirname "$REPO")/venv/bin/python"
-elif [ -x "$REPO/venv/bin/python" ]; then
-    PYTHON="$REPO/venv/bin/python"
 else
+    for candidate in \
+        "$REPO/venv" \
+        "$(dirname "$REPO")/venv" \
+        "$(dirname "$(dirname "$REPO")")/venv" \
+        "/opt/solarhub/venv" \
+    ; do
+        if [ -x "$candidate/bin/python" ]; then
+            PYTHON="$candidate/bin/python"
+            break
+        fi
+    done
+fi
+if [ -z "$PYTHON" ]; then
     PYTHON="$(command -v python3 || command -v python || true)"
 fi
 if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
     echo "✗ Could not find a Python interpreter." >&2
     echo "  Set SOLARHUB_VENV=/path/to/venv (containing bin/python)." >&2
+    exit 1
+fi
+
+# Sanity-check that the chosen Python has the project's deps (sqlalchemy
+# is a good canary — every backend script needs it).  Fail early with a
+# clear message rather than a stack trace inside ota_manager.
+if ! "$PYTHON" -c 'import sqlalchemy' >/dev/null 2>&1; then
+    echo "✗ Python at $PYTHON is missing project dependencies (sqlalchemy)." >&2
+    echo "  Set SOLARHUB_VENV to the prod venv, e.g.:" >&2
+    echo "    SOLARHUB_VENV=/opt/solarhub/venv $0 $*" >&2
     exit 1
 fi
 
