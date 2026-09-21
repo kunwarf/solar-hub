@@ -176,16 +176,31 @@ const DeviceSettingsPageHybrid = () => {
     proto.startsWith("voltronic") ||
     mfr.includes("voltronic");
   if (usesV2) {
-    // Normalize protocol string for profile lookup — voltronic has
-    // multiple variants (pi30, pi18, ...) that all share one profile.
-    const profileProto = proto.startsWith("voltronic")
-      ? proto  // registry has entries per variant
-      : (proto ||
-          (mfr.includes("senergy")
-            ? "senergy"
-            : mfr.includes("powdrive") || mfr.includes("deye")
-              ? "powdrive"
-              : "voltronic_pi30"));
+    // Resolve to a canonical profile id.  Older devices sometimes have
+    // protocol="mqtt" or an empty string in the DB while their
+    // manufacturer field still says "Powdrive" — those shouldn't dead-end
+    // at "no profile for protocol mqtt".  Prefer the family hint (mfr or
+    // proto family prefix) over the raw protocol string.
+    let profileProto: string;
+    if (proto.startsWith("voltronic")) {
+      profileProto = proto; // registry has an entry per PI variant
+    } else if (mfr.includes("voltronic")) {
+      profileProto = "voltronic_pi30";
+    } else if (mfr.includes("senergy") || proto === "senergy") {
+      profileProto = "senergy";
+    } else if (
+      mfr.includes("powdrive") ||
+      mfr.includes("deye") ||
+      proto === "powdrive" ||
+      proto === "deye"
+    ) {
+      profileProto = "powdrive";
+    } else {
+      // Shouldn't reach here because usesV2 gated on the same conditions,
+      // but if it does, fall back to whatever proto says (may still fail
+      // gracefully at the profile lookup with a clear message).
+      profileProto = proto || "unknown";
+    }
     return (
       <AppLayout>
         <div className="mb-2">

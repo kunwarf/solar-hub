@@ -150,7 +150,10 @@ export function HomeScreen({
                 >
                   <StrategyRadioGroup
                     options={profile.strategies}
-                    value={draft[strategyKey] ?? profile.defaults.strategy}
+                    /* Coerce to string — backend returns enum registers
+                       as numeric (e.g. hybrid_work_mode: 1), profile
+                       strategy ids are strings ("0", "1", ...).  */
+                    value={String(draft[strategyKey] ?? profile.defaults.strategy)}
                     onChange={(v) => patch({ [strategyKey]: v })}
                     disabled={readOnly}
                   />

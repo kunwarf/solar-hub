@@ -70,22 +70,22 @@ export interface SettingsScreenProps {
   readOnlyReason?: string;
 }
 
-/** Which schema field key is the "energy strategy" for this profile.
- *  Matches the corresponding backend key so writes hit the right register/
- *  command:
- *   - senergy   → work_mode         (Modbus)
- *   - powdrive  → solar_priority    (Modbus, "Battery First" vs "Load First")
+/** Which register id is the "energy strategy" for this profile.
+ *  Must match the exact register-map id so writes/reads land on the
+ *  right register:
+ *   - senergy   → hybrid_work_mode  (reg 8448, 5-value enum)
+ *   - powdrive  → solar_priority    (Battery First / Load First)
  *   - voltronic → set_output_priority (serial command POPxx) */
 function strategyKeyForProfile(profile: DeviceProfile): string {
   switch (profile.id) {
     case "senergy":
-      return "work_mode";
+      return "hybrid_work_mode";
     case "powdrive":
       return "solar_priority";
     case "voltronic":
       return "set_output_priority";
     default:
-      return "work_mode";
+      return "hybrid_work_mode";
   }
 }
 
