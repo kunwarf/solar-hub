@@ -87,7 +87,15 @@ protocols:
 
     modbus:
       unit_id: 1
-      timeout: 5.0
+      # Bumped from 5.0 → 8.0 on 2026-09-20 after prod diagnostic showed
+      # recurring TxID -1 desync on Senergy-653 Geyser (device 2415-53560653PH)
+      # concentrated at midnight when RTU responses are slowest.  A response
+      # arriving at 5.5s becomes a ghost for the next request; 8s gives the
+      # slow-night response a chance to be captured correctly.  Kept under
+      # 10s because worst-case is 3 bulk chunks × timeout, which must stay
+      # below the global poll_timeout=30s wallclock (3×8=24s leaves 6s
+      # headroom; 3×10=30s leaves none).
+      timeout: 8.0
       retries: 3
 
     telemetry:
